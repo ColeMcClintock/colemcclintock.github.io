@@ -23,43 +23,9 @@ from datetime import date, timedelta
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "dashboards", "readiness", "data")
 
-# Real Iowa cities (public geography) -> approximate lat/lon. Armories are fictional.
-CITIES = {
-    "Des Moines": (41.59, -93.62), "Cedar Rapids": (41.98, -91.67), "Davenport": (41.52, -90.58),
-    "Sioux City": (42.50, -96.40), "Iowa City": (41.66, -91.53), "Waterloo": (42.49, -92.34),
-    "Ames": (42.03, -93.62), "Council Bluffs": (41.26, -95.86), "Dubuque": (42.50, -90.66),
-    "Ottumwa": (41.02, -92.41), "Mason City": (43.15, -93.20), "Fort Dodge": (42.50, -94.17),
-    "Burlington": (40.81, -91.11), "Marshalltown": (42.05, -92.91), "Muscatine": (41.42, -91.04),
-    "Carroll": (42.07, -94.87), "Spencer": (43.14, -95.14), "Creston": (41.06, -94.36),
-    "Decorah": (43.30, -91.79), "Boone": (42.06, -93.88), "Oskaloosa": (41.30, -92.64),
-    "Storm Lake": (42.64, -95.21), "Red Oak": (41.01, -95.23), "Clinton": (41.84, -90.19),
-}
-
-# Fictional force structure (9xx numbering chosen to be clearly notional)
-STRUCTURE = [
-    ("Prairie Infantry Brigade", [
-        ("1-901st Notional Infantry Bn", "INF", ["HHC", "A Co", "B Co", "C Co", "D Co (Wpns)"],
-         ["Des Moines", "Boone", "Ames", "Marshalltown", "Carroll"]),
-        ("2-901st Notional Infantry Bn", "INF", ["HHC", "A Co", "B Co", "C Co"],
-         ["Sioux City", "Storm Lake", "Spencer", "Fort Dodge"]),
-        ("902nd Notional Field Artillery Bn", "FA", ["HHB", "A Btry", "B Btry", "G FSC"],
-         ["Council Bluffs", "Red Oak", "Creston", "Council Bluffs"]),
-        ("903rd Notional Brigade Support Bn", "BSB", ["HHC", "A Co (Dist)", "B Co (Maint)", "C Co (Med)"],
-         ["Des Moines", "Ottumwa", "Oskaloosa", "Iowa City"]),
-    ]),
-    ("Riverlands Sustainment Brigade", [
-        ("904th Notional Engineer Bn", "EN", ["HSC", "A Co (Sapper)", "B Co (Vert)", "C Co (Horiz)"],
-         ["Cedar Rapids", "Waterloo", "Decorah", "Mason City"]),
-        ("905th Notional Transportation Bn", "TC", ["HHD", "A Co (Truck)", "B Co (Truck)", "C Co (HET)"],
-         ["Davenport", "Muscatine", "Clinton", "Burlington"]),
-    ]),
-    ("Heartland Support Group", [
-        ("906th Notional Aviation Bn", "AV", ["HHC", "A Co (Lift)", "B Co (AVIM)"],
-         ["Des Moines", "Waterloo", "Des Moines"]),
-        ("907th Notional Signal Bn", "SC", ["HHD", "A Co", "B Co"],
-         ["Dubuque", "Iowa City", "Cedar Rapids"]),
-    ]),
-]
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from units_roster import main as build_roster  # shared roster -> data/units.json
 
 START = date(2025, 5, 1)
 N_MONTHS = 18  # May 2025 - Oct 2026
@@ -95,21 +61,11 @@ def main():
     month_list = list(months())
     rows, units = [], []
 
-    for bde, bns in STRUCTURE:
-        for bn, branch, cos, locs in bns:
-            bn_short = bn.split(" Notional")[0]
-            for co, city in zip(cos, locs):
-                uid = f"{bn_short}-{co.split(' ')[0]}".replace(" ", "")
-                lat, lon = CITIES[city]
-                units.append(dict(
-                    unit_id=uid, unit_name=f"{co}, {bn_short}", battalion=bn, brigade=bde,
-                    branch=branch, location=city, armory=f"{city} Readiness Center",
-                    lat=round(lat + rng.uniform(-0.04, 0.04), 3), lon=round(lon + rng.uniform(-0.04, 0.04), 3),
-                    authorized=rng.choice([95, 110, 120, 128, 135, 140, 150, 165]) if not co.startswith("HH") else rng.choice([140, 155, 170, 185]),
-                    # latent unit "health" traits drive realistic persistence
-                    base_q=rng.gauss(0, 1), trend=rng.gauss(0, 0.35), equip_q=rng.gauss(0, 1), train_q=rng.gauss(0, 1),
-                    shock_month=rng.randrange(4, N_MONTHS) if rng.random() < 0.35 else None,
-                ))
+    for base in build_roster():
+        units.append(dict(base,
+            # latent unit "health" traits drive realistic persistence
+            base_q=rng.gauss(0, 1), trend=rng.gauss(0, 0.35), equip_q=rng.gauss(0, 1), train_q=rng.gauss(0, 1),
+            shock_month=rng.randrange(4, N_MONTHS) if rng.random() < 0.35 else None))
 
     for u in units:
         assigned = u["authorized"] * clamp(0.97 + 0.05 * u["base_q"], 0.74, 1.06)
@@ -154,7 +110,10 @@ def main():
     # Upcoming events (fictional schedule) from Nov 2026 forward
     events = []
     drill_start = date(2026, 11, 7)
-    bns_all = [(bde, bn, locs[0]) for bde, bns in STRUCTURE for bn, _, _, locs in bns]
+    seen = {}
+    for u in units:
+        seen.setdefault(u["battalion"], (u["brigade"], u["battalion"], u["location"]))
+    bns_all = list(seen.values())
     for k in range(6):  # monthly battle-assembly weekends
         d = drill_start + timedelta(weeks=4 * k + (1 if k % 2 else 0))
         d = d - timedelta(days=(d.weekday() - 5) % 7)  # snap to Saturday

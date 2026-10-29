@@ -19,7 +19,7 @@ a{color:var(--olive2)} a:hover{color:var(--sand)}
 .topnav nav a{color:var(--muted);text-decoration:none;margin-left:18px;font-size:.95rem}
 .topnav nav a:hover{color:var(--text)}
 header.site{border-bottom:1px solid var(--line);background:rgba(10,20,36,.92);position:sticky;top:0;z-index:20;backdrop-filter:blur(6px)}
-.hero{padding:64px 0 40px;background:radial-gradient(1200px 400px at 20% -10%,rgba(138,154,91,.18),transparent),radial-gradient(900px 400px at 100% 0,rgba(90,166,230,.10),transparent)}
+.hero{padding:48px 0 8px;background:radial-gradient(1200px 400px at 20% -10%,rgba(138,154,91,.18),transparent),radial-gradient(900px 400px at 100% 0,rgba(90,166,230,.10),transparent)}
 .eyebrow{color:var(--olive2);text-transform:uppercase;letter-spacing:2px;font-size:.78rem;font-weight:700}
 .hero h1{font-size:clamp(2rem,4.5vw,3.2rem);margin:.2em 0 .25em;line-height:1.1}
 .hero p.lead{font-size:clamp(1.02rem,1.6vw,1.2rem);color:#c7d3e3;max-width:820px}

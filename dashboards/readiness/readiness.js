@@ -315,7 +315,7 @@
     upsert("cBn", {
       type: "bar", options: opts,
       data: {
-        labels: rows.map(function (r) { return r.b.replace(" Notional", "").replace(" Bn", ""); }),
+        labels: rows.map(function (r) { return r.b.replace(" Bn", ""); }),
         datasets: [{ label: "Readiness index", data: rows.map(function (r) { return +r.idx.toFixed(2); }), backgroundColor: rows.map(function (r) { return r.idx >= 88 ? "#5fbf7f" : r.idx >= 84 ? "#a9c16a" : r.idx >= 80 ? "#e3b34c" : "#e0645c"; }), borderRadius: 4 }]
       }
     });
