@@ -58,6 +58,6 @@ Follow `docs\report-layout.md` page by page. Use View > Sync slicers so brigade/
 Compare a few numbers with the live dashboards (same fictional data), for example statewide Strength % for Oct 2026, total accidents and overdue investigations on the Safety dashboard (note: the web demo counts to 29 Oct 2026, Power BI counts to today), and FY26 obligation rate as of Sep 2026. Differences usually mean a relationship or the date-table marking is missing.
 
 ## Using real data at work
-Safety: set `ASMISFile` to the ASMIS export saved in an approved location. The query cleans header spelling, renames Tech to MSC, parses DD-Mon-YY dates and $ amounts, and drops rows with no readable Accident Date. Compare the row count with the export after refresh.
+Safety: set `ASMISFile` to the ASMIS export saved in an approved location. The query cleans header spelling, renames Tech to MSC, parses DD-Mon-YY dates and $ amounts ("$ -" = 0; "(blank)"/N/A = blank), maps Accident Class (E - grnd = E, R - NG = R, blank = Unclassified), keeps optional Assigned To / Comments / Documentation / SUB DATE REPORTED, ignores blank formula rows, and drops rows with no readable Accident Date. Compare the row count with the export after refresh.
 
 Point `DataFolder` at an approved location holding extracts with the same column names (see the CSV headers). Follow your organization's data-handling and publishing policies; keep the report in your approved workspace.

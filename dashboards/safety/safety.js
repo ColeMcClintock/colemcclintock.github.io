@@ -2,8 +2,14 @@
 (function () {
   "use strict";
   var K = window.DashKit, A = window.ASMIS, $ = K.$, esc = K.esc;
-  var CLASSES = ["A", "B", "C", "D"];
-  var CLS_COLOR = { A: "#e0645c", B: "#e88a4c", C: "#e3b34c", D: "#a9c16a", Other: "#8b9bb0" };
+  var CLASSES = A.CLASS_ORDER;   // A, B, C, D, E (Ground), R (NG), Unclassified
+  var CLS_COLOR = { A: "#e0645c", B: "#e88a4c", C: "#e3b34c", D: "#a9c16a", E: "#7fb3d5", R: "#b59ad8", Unclassified: "#4a5a70" };
+  var CLS_SUB = { A: "$2.5M+ or fatality / PTD", B: "$600K+ or PPD / 3+ hospitalized", C: "$60K+ or lost-time injury", D: "$25K+ or restricted-duty injury", E: "Ground", R: "National Guard", Unclassified: "No class assigned yet" };
+  function clsColor(c) { return CLS_COLOR[c] || "#c9a27e"; }
+  function clsList() { // classes present in the loaded data, in standard order, then unrecognized raw values
+    var have = K.uniq(S.recs.map(function (r) { return r.cls; }).filter(function (c) { return c != null; }));
+    return CLASSES.filter(function (c) { return have.indexOf(c) >= 0; }).concat(have.filter(function (c) { return CLASSES.indexOf(c) < 0; }).sort());
+  }
   var STATUSES = ["Investigation Ongoing", "In Review NGB", "Final"];
   var DOW = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   var TBANDS = [["0000-0359", 0], ["0400-0759", 4], ["0800-1159", 8], ["1200-1559", 12], ["1600-1959", 16], ["2000-2359", 20]];
@@ -19,7 +25,11 @@
   function n(v) { return v || 0; }
   function cnt(a, f) { var m = {}; a.forEach(function (r) { var k = f(r); if (k == null || k === "") return; m[k] = (m[k] || 0) + 1; }); return m; }
   function sortKeys(m) { return Object.keys(m).sort(function (a, b) { return m[b] - m[a] || (a < b ? -1 : 1); }); }
-  function pill(c) { return c ? '<span class="pill ' + (CLASSES.indexOf(c) >= 0 ? c : "NM") + '">' + esc(c) + "</span>" : ""; }
+  function pill(c) {
+    if (c == null) return "";
+    var known = CLASSES.indexOf(c) >= 0, cls = c === "Unclassified" ? "U" : known ? c : "NM";
+    return '<span class="pill ' + cls + '" title="' + esc(A.classLabel(c)) + '">' + esc(c === "Unclassified" ? "Unclass." : c) + "</span>";
+  }
   function rag(r) { return r.isOverdue ? "red" : (r.daysToDue <= 30 ? "amber" : "green"); }
   function ragLabel(r) { return { red: "Overdue", amber: "Due within 30 days", green: "On time" }[rag(r)]; }
 
@@ -37,29 +47,66 @@
   function loadDemo() {
     var D = window.ASMIS_DATA, p = D.exportDate.split("-");
     loadAoa(A.objectsToAoa(D.headers, D.rows), new Date(+p[0], +p[1] - 1, +p[2], 12), D.strength.map(function (s) { return { msc: s.MSC, battalion: s.Battalion, assigned: s.Assigned }; }), "demo", "", "");
-    $("loadReport").innerHTML = "";
   }
+  function codes(list) { return list.map(function (m) { return "<code>" + esc(m) + "</code>"; }).join(", "); }
+  // Builds the detailed load report and the compact status bar.
   function report(rep, source, fileName, sheetName, strength) {
-    var el = $("loadReport");
-    if (source === "demo") return;
-    var h = [];
-    if (rep.fatal) { el.innerHTML = '<p class="err"><strong>Could not load ' + esc(fileName) + ".</strong> " + esc(rep.fatal) + "</p>" + colList(rep); return; }
-    var ok = rep.matched.length === rep.totalColumns;
-    h.push("<p class=\"" + (rep.rowsLoaded ? "ok" : "err") + "\"><strong>Loaded " + K.fmt(rep.rowsLoaded) + " of " + K.fmt(rep.rowsRead) + " rows</strong> from " + esc(fileName) + (sheetName && sheetName !== fileName ? " (sheet &ldquo;" + esc(sheetName) + "&rdquo;, header row " + rep.headerRow + ")" : "") + ".</p>");
-    h.push("<p class=\"" + (ok ? "ok" : "warn") + "\"><strong>" + rep.matched.length + " of " + rep.totalColumns + " columns matched.</strong>" + (ok ? "" : " Visuals that need a missing column are hidden.") + "</p>");
-    if (rep.missing.length) h.push('<p class="warn">Missing: ' + rep.missing.map(function (m) { return "<code>" + esc(m) + "</code>"; }).join(", ") + "</p>");
-    if (rep.extra.length) h.push('<p class="muted">Extra columns ignored: ' + rep.extra.map(function (m) { return "<code>" + esc(m) + "</code>"; }).join(", ") + "</p>");
-    if (rep.dupes.length) h.push('<p class="muted">Duplicate columns ignored: ' + rep.dupes.map(function (m) { return "<code>" + esc(m) + "</code>"; }).join(", ") + "</p>");
-    if (rep.badDate.length) h.push('<p class="err">' + rep.badDate.length + " row(s) skipped because Accident Date could not be read (" + (rep.badDate.length === 1 ? "row " : "rows ") + rep.badDate.slice(0, 8).map(function (b) { return b.row + (b.value ? " &ldquo;" + esc(b.value) + "&rdquo;" : " blank"); }).join(", ") + (rep.badDate.length > 8 ? ", &hellip;" : "") + ").</p>");
-    else h.push('<p class="ok">All accident dates parsed.</p>');
-    if (rep.badNumber) h.push('<p class="warn">' + rep.badNumber + " number/currency cell(s) could not be read and were treated as blank.</p>");
-    if (rep.otherClass) h.push('<p class="warn">' + rep.otherClass + " row(s) have an Accident Class other than A to D.</p>");
+    var el = $("loadReport"), h = [], warns = 0;
+    if (source === "demo") {
+      el.innerHTML = '<p class="muted">Showing the built-in fictional demo data (' + K.fmt(rep.rowsLoaded) + " records in the ASMIS export layout).</p>";
+      setBar("ok", "Demo data (fictional) \u00b7 " + K.fmt(rep.rowsLoaded) + " accidents \u00b7 " + rep.requiredMatched + "/" + rep.totalColumns + " columns", 0);
+      return;
+    }
+    if (rep.fatal) {
+      el.innerHTML = '<p class="err"><strong>Could not load ' + esc(fileName) + ".</strong> " + esc(rep.fatal) + "</p>" + (rep.missing.length ? '<p class="muted">Missing: ' + codes(rep.missing) + "</p>" : "");
+      setBar("err", "Could not load " + fileName + " \u00b7 still showing the previous data", 1); setExpanded(true, false); return;
+    }
+    var ok = rep.requiredMatched === rep.totalColumns;
+    h.push("<p class=\"" + (rep.rowsLoaded ? "ok" : "err") + "\"><strong>Loaded " + K.fmt(rep.rowsLoaded) + " of " + K.fmt(rep.rowsRead) + " rows</strong> from " + esc(fileName) + (sheetName && sheetName !== fileName ? " (sheet &ldquo;" + esc(sheetName) + "&rdquo;, header row " + rep.headerRow + ")" : "") + "." + (rep.blankRows ? ' <span class="muted">' + K.fmt(rep.blankRows) + " blank row(s) ignored.</span>" : "") + "</p>");
+    h.push("<p class=\"" + (ok ? "ok" : "warn") + "\"><strong>" + rep.requiredMatched + " of " + rep.totalColumns + " columns matched.</strong>" + (ok ? "" : " Visuals that need a missing column are hidden.") + "</p>");
+    if (!ok) warns++;
+    if (rep.missing.length) h.push('<p class="warn">Missing: ' + codes(rep.missing) + "</p>");
+    if (rep.optional.length) h.push('<p class="ok">Optional columns used: ' + codes(rep.optional) + "</p>");
+    if (rep.extra.length) h.push('<p class="muted">Extra columns ignored: ' + codes(rep.extra) + "</p>");
+    if (rep.dupes.length) h.push('<p class="muted">Duplicate columns ignored: ' + codes(rep.dupes) + "</p>");
+    if (rep.badDate.length) {
+      warns++;
+      h.push('<p class="err">' + rep.badDate.length + " row(s) with data were skipped because Accident Date is blank or unreadable (" + (rep.badDate.length === 1 ? "row " : "rows ") + rep.badDate.slice(0, 8).map(function (b) { return b.row + (b.value ? " &ldquo;" + esc(b.value) + "&rdquo;" : " blank"); }).join(", ") + (rep.badDate.length > 8 ? ", &hellip;" : "") + ").</p>");
+    } else h.push('<p class="ok">All accident dates parsed.</p>');
+    if (rep.badNumber) {
+      warns++;
+      h.push('<p class="warn">' + rep.badNumber + " number/currency cell(s) contain text that could not be read and were treated as blank. Examples: " +
+        rep.badNumberExamples.map(function (x) { return "row " + x.row + " <code>" + esc(x.column) + "</code> = &ldquo;" + esc(x.value) + "&rdquo;"; }).join("; ") + ".</p>");
+    }
+    if (rep.otherClass) { warns++; h.push('<p class="warn">' + rep.otherClass + " row(s) have an unrecognized Accident Class, shown as-is: " + codes(rep.otherClassValues.slice(0, 8)) + ".</p>"); }
+    if (rep.unclassified) h.push('<p class="muted">' + rep.unclassified + " record(s) have no Accident Class yet; shown as Unclassified.</p>");
     if (rep.computedOverdue) h.push('<p class="muted">Days Overdue was blank for ' + rep.computedOverdue + " open record(s); computed from the due date and today.</p>");
     if (rep.computedDue) h.push('<p class="muted">Due Date was blank for ' + rep.computedDue + " record(s); set to accident date + 90 days.</p>");
     h.push('<p class="muted">' + (strength ? "Strength sheet found: " + strength.length + " battalion(s); rates per 1,000 shown." : "No Strength sheet: rates per 1,000 are not shown.") + "</p>");
     el.innerHTML = h.join("");
+    setBar(rep.rowsLoaded ? (warns ? "warn" : "ok") : "err", fileName + " \u00b7 " + K.fmt(rep.rowsLoaded) + " accidents \u00b7 " + rep.requiredMatched + "/" + rep.totalColumns + " columns", warns);
   }
-  function colList(rep) { return rep.missing.length ? '<p class="muted">Missing: ' + rep.missing.map(function (m) { return "<code>" + esc(m) + "</code>"; }).join(", ") + "</p>" : ""; }
+  function setBar(state, textLine, warns) {
+    var bar = $("loadBar");
+    bar.className = "loadbar no-print chrome" + (state === "ok" ? "" : " " + state);
+    $("lbIcon").innerHTML = state === "ok" ? "&#10003;" : state === "warn" ? "&#9888;" : "&#10005;";
+    $("lbText").textContent = textLine;
+    var bd = $("lbBadge"); bd.hidden = !warns || state === "err"; bd.textContent = warns + " warning" + (warns === 1 ? "" : "s");
+  }
+  var LS_KEY = "safetyDash.loadPanelExpanded";
+  function lsGet() { try { return localStorage.getItem(LS_KEY) === "1"; } catch (e) { return false; } }
+  function setExpanded(open, persist) {
+    $("loadPanel").hidden = !open;
+    $("btnDetails").textContent = open ? "Hide details" : "Show details";
+    $("btnDetails").setAttribute("aria-expanded", String(open));
+    if (persist !== false) { try { localStorage.setItem(LS_KEY, open ? "1" : "0"); } catch (e) { /* storage unavailable (file://, private mode) */ } }
+  }
+  function setPresent(on) {
+    document.body.classList.toggle("present", on);
+    $("btnPresent").setAttribute("aria-pressed", String(on));
+    $("btnPresent").textContent = on ? "Exit presentation" : "Presentation mode";
+    setTimeout(function () { Object.keys(K.charts).forEach(function (k) { K.charts[k].resize(); }); }, 50);
+  }
 
   function applyVisibility() {
     document.querySelectorAll("[data-req]").forEach(function (el) {
@@ -85,7 +132,7 @@
     var fsel = $("fFy"); fsel.innerHTML = '<option value="">All years</option>' + fys.map(function (y) { return '<option value="' + y + '">FY' + String(y).slice(2) + "</option>"; }).join("");
     if (reset) { $("fFrom").value = ""; $("fTo").value = ""; }
     cascade(reset);
-    K.fillSelect($("fClass"), opts("cls", CLASSES.concat(["Other"])), "All classes", !reset, null);
+    var cl = clsList(); K.fillSelect($("fClass"), cl, "All classes", !reset, cl.map(A.classLabel));
     K.fillSelect($("fStatus"), opts("status", STATUSES), "All statuses", !reset);
     K.fillSelect($("fDuty"), opts("duty_status", ["MDAY", "AGR", "ADOS", "AT"]), "All", !reset);
     $("fOn").innerHTML = '<option value="">All</option><option value="Y">On duty</option><option value="N">Off duty</option>';
@@ -159,7 +206,9 @@
     var ecodN = rows.filter(function (r) { return r.hasEcod; }).length, inj = rows.filter(function (r) { return r.injury; }).length;
     var h = [];
     h.push(kpi("Total accidents", K.fmt(rows.length), rate != null ? K.fmt(rate, 2) + " per 1,000 / yr (" + K.fmt(str) + " assigned)" : (S.have.injury ? K.fmt(inj) + " with injury" : "")));
-    CLASSES.forEach(function (k) { if (S.have.cls) h.push(kpi("Class " + k, K.fmt(c[k] || 0), k === "A" ? "$2.5M+ or fatality / PTD" : k === "B" ? "$600K+ or PPD / 3+ hospitalized" : k === "C" ? "$60K+ or lost-time injury" : "$25K+ or restricted-duty injury", (k === "A" || k === "B") && c[k] ? "bad" : "")); });
+    CLASSES.forEach(function (k) { if (S.have.cls) h.push(kpi(A.classLabel(k), K.fmt(c[k] || 0), CLS_SUB[k], (k === "A" || k === "B") && c[k] ? "bad" : "")); });
+    var oth = Object.keys(c).filter(function (k) { return CLASSES.indexOf(k) < 0; });
+    if (oth.length) h.push(kpi("Other class values", K.fmt(K.sum(oth, function (k) { return c[k]; })), oth.slice(0, 3).join(", ")));
     if (S.have.c_total) h.push(kpi("Total accident cost", K.money(K.sum(rows, function (r) { return n(r.c_total); })), "injury + material"));
     if (S.have.c_injury) h.push(kpi("Injury cost", K.money(K.sum(rows, function (r) { return n(r.c_injury); })), K.fmt(inj) + " injury record" + (inj === 1 ? "" : "s")));
     if (S.have.ecod || S.have.prop) h.push(kpi("Material ECOD", K.money(K.sum(rows, function (r) { return n(r.ecod); })), K.fmt(ecodN) + " with material damage; blank = none"));
@@ -175,7 +224,7 @@
   function summary(rows, all, f, range) {
     if (!rows.length) { $("summary").textContent = "No accidents match the current filters."; return; }
     var c = cnt(rows, function (r) { return r.cls; }), s = [];
-    s.push(K.fmt(rows.length) + " accident" + (rows.length === 1 ? "" : "s") + " reported " + (range ? "from " + fd(range[0]) + " to " + fd(range[1]) : "") + (S.have.cls ? " (Class A " + (c.A || 0) + ", B " + (c.B || 0) + ", C " + (c.C || 0) + ", D " + (c.D || 0) + ")" : "") + ".");
+    s.push(K.fmt(rows.length) + " accident" + (rows.length === 1 ? "" : "s") + " reported " + (range ? "from " + fd(range[0]) + " to " + fd(range[1]) : "") + (S.have.cls ? " (" + clsList().filter(function (k) { return c[k]; }).map(function (k) { return (k === "Unclassified" ? "unclassified " : k.length === 1 ? "Class " + k + " " : k + " ") + c[k]; }).join(", ").replace(/, Class /g, ", ") + ")" : "") + ".");
     if (S.have.c_total) { var tc = K.sum(rows, function (r) { return n(r.c_total); }), ic = K.sum(rows, function (r) { return n(r.c_injury); }), ec = K.sum(rows, function (r) { return n(r.ecod); });
       s.push("Total cost " + K.money(tc) + (S.have.c_injury ? ": " + K.money(ic) + " injury and " + K.money(ec) + " material damage" : "") + "."); }
     var ts = S.have.subtype && top(cnt(rows, function (r) { return r.subtype; })), tcz = S.have.cause && top(cnt(rows, function (r) { return r.cause; }));
@@ -199,11 +248,13 @@
   // ---------- tracker ----------
   function trackRows(rows) { return rows.filter(function (r) { return r.open; }).sort(function (a, b) { return b.overdue - a.overdue || a.due - b.due; }); }
   function tracker(rows) {
-    var o = trackRows(rows);
+    var o = trackRows(rows), xa = S.have.assigned_to, xc = S.have.comments, ncol = 10 + (xa ? 1 : 0) + (xc ? 1 : 0);
+    $("tTrack").tHead.innerHTML = '<tr><th>RAG</th><th>CCIR #</th><th class="hide-sm">ASMIS #</th><th>MSC</th><th class="hide-sm">Battalion</th><th>Class</th><th>Status</th><th>Accident date</th><th class="hide-sm">Due date</th><th>Days overdue</th>' + (xa ? "<th>Assigned to</th>" : "") + (xc ? '<th class="hide-sm">Comments</th>' : "") + "</tr>";
     var tb = $("tTrack").tBodies[0];
     tb.innerHTML = o.length ? o.map(function (r) {
-      return '<tr data-i="' + S.recs.indexOf(r) + '"><td><span class="rag ' + rag(r) + '" title="' + ragLabel(r) + '"></span></td><td>' + esc(r.ccir || "") + '</td><td class="hide-sm">' + esc(r.asmis || "") + "</td><td>" + esc(r.msc || "") + '</td><td class="hide-sm">' + esc(r.battalion || "") + "</td><td>" + pill(r.cls) + "</td><td>" + esc(r.status || "") + "</td><td>" + fd(r.date) + '</td><td class="hide-sm">' + fd(r.due) + '</td><td class="' + (r.isOverdue ? "cf-bad" : r.daysToDue <= 30 ? "cf-warn" : "") + '">' + (r.isOverdue ? r.overdue : "\u2014") + "</td></tr>";
-    }).join("") : '<tr><td colspan="10" class="muted">No open investigations in the current selection.</td></tr>';
+      return '<tr data-i="' + S.recs.indexOf(r) + '"><td><span class="rag ' + rag(r) + '" title="' + ragLabel(r) + '"></span></td><td>' + esc(r.ccir || "") + '</td><td class="hide-sm">' + esc(r.asmis || "") + "</td><td>" + esc(r.msc || "") + '</td><td class="hide-sm">' + esc(r.battalion || "") + "</td><td>" + pill(r.cls) + "</td><td>" + esc(r.status || "") + "</td><td>" + fd(r.date) + '</td><td class="hide-sm">' + fd(r.due) + '</td><td class="' + (r.isOverdue ? "cf-bad" : r.daysToDue <= 30 ? "cf-warn" : "") + '">' + (r.isOverdue ? r.overdue : "\u2014") + "</td>" +
+        (xa ? '<td class="comment">' + esc(r.assigned_to || "") + "</td>" : "") + (xc ? '<td class="comment hide-sm">' + esc(r.comments || "") + "</td>" : "") + "</tr>";
+    }).join("") : '<tr><td colspan="' + ncol + '" class="muted">No open investigations in the current selection.</td></tr>';
     var sc = cnt(rows, function (r) { return r.status; }), labels = STATUSES.filter(function (s) { return sc[s]; }).concat(sortKeys(sc).filter(function (s) { return STATUSES.indexOf(s) < 0; }));
     K.upsert("cPipe", { type: "bar", data: { labels: labels, datasets: [{ label: "Accidents", data: labels.map(function (l) { return sc[l]; }), backgroundColor: labels.map(function (l) { return { "Investigation Ongoing": "#e3b34c", "In Review NGB": "#5aa6e6", "Final": "#5fbf7f" }[l] || "#8b9bb0"; }) }] },
       options: Object.assign(K.chartBase(), { indexAxis: "y", plugins: { legend: { display: false } } }) });
@@ -220,9 +271,9 @@
     if (!range) { K.upsert("cMonthly", { type: "bar", data: { labels: [], datasets: [] }, options: stacked() }); return; }
     var m0 = A.iso(range[0]).slice(0, 7), m1 = A.iso(range[1]).slice(0, 7), months = [];
     for (var m = m0; m <= m1 && months.length < 120; m = K.addMonths(m, 1)) months.push(m);
-    var cls = S.have.cls ? CLASSES.concat(rows.some(function (r) { return r.cls === "Other"; }) ? ["Other"] : []) : [null];
+    var cls = S.have.cls ? clsList() : [null];
     K.upsert("cMonthly", { type: "bar", data: { labels: months.map(K.monthShort), datasets: cls.map(function (c) {
-      return { label: c ? "Class " + c : "Accidents", data: months.map(function (mm) { return rows.filter(function (r) { return r.month === mm && (!c || r.cls === c); }).length; }), backgroundColor: CLS_COLOR[c] || "#5aa6e6" }; }) },
+      return { label: c ? A.classLabel(c) : "Accidents", data: months.map(function (mm) { return rows.filter(function (r) { return r.month === mm && (!c || r.cls === c); }).length; }), backgroundColor: c ? clsColor(c) : "#5aa6e6" }; }) },
       options: stacked() });
   }
   function fyChart(all, f) {
@@ -239,9 +290,9 @@
   function byClassBar(id, rows, key, order, horiz, limit) {
     var m = cnt(rows, function (r) { return r[key]; }), labels = order ? order.filter(function (k) { return m[k]; }).concat(sortKeys(m).filter(function (k) { return order.indexOf(k) < 0; })) : sortKeys(m);
     if (limit) labels = labels.slice(0, limit);
-    var cls = S.have.cls ? CLASSES.concat(rows.some(function (r) { return r.cls === "Other"; }) ? ["Other"] : []) : [null];
+    var cls = S.have.cls ? clsList() : [null];
     K.upsert(id, { type: "bar", data: { labels: labels, datasets: cls.map(function (c) {
-      return { label: c ? "Class " + c : "Accidents", data: labels.map(function (l) { return rows.filter(function (r) { return r[key] === l && (!c || r.cls === c); }).length; }), backgroundColor: CLS_COLOR[c] || "#5aa6e6" }; }) },
+      return { label: c ? A.classLabel(c) : "Accidents", data: labels.map(function (l) { return rows.filter(function (r) { return r[key] === l && (!c || r.cls === c); }).length; }), backgroundColor: c ? clsColor(c) : "#5aa6e6" }; }) },
       options: stacked(horiz) });
     return labels;
   }
@@ -339,11 +390,13 @@
   }
   function openDrawer(r) {
     $("dTitle").innerHTML = (r.ccir ? "CCIR " + esc(r.ccir) : "Accident " + esc(r.accident_no || "")) + " " + pill(r.cls);
+    var dEl = $("drawer"); dEl.setAttribute("aria-label", "Accident detail");
     var h = [];
     h.push('<p><span class="rag ' + (r.open ? rag(r) : "green") + '"></span> ' + esc(r.status || "") + (r.open ? " \u00b7 " + ragLabel(r) + (r.isOverdue ? " (" + r.overdue + " days)" : "") : "") + "</p>");
     if (S.have.summary) h.push('<div class="narr">' + esc(r.summary || "No summary provided.") + "</div>");
     h.push("<dl>" + A.COLUMNS.filter(function (c) { return c[0] !== "summary" && DEMO_KEYS.indexOf(c[0]) < 0 && (c[0] in r) && r[c[0]] !== undefined && S.have.hasOwnProperty(c[0]); }).map(function (c) {
       var k = c[0], v = r["_t_" + k];
+      if (k === "cls") v = (v ? v + " \u2192 " : "") + A.classLabel(r.cls);
       if (k === "due" && r._dueComputed) v = fd(r.due) + " (computed)";
       if (k === "overdue" && (v === "" || v == null)) v = r.open ? String(r.overdue) + " (computed)" : "";
       return "<dt>" + (k === "msc" ? "MSC" : esc(c[1])) + "</dt><dd>" + (v === "" || v == null ? '<span class="muted">blank</span>' : esc(v)) + "</dd>";
@@ -356,23 +409,28 @@
 
   function exportCsv() {
     var o = trackRows(currentRows());
-    K.downloadCsv("investigation_tracker_" + iso(new Date()) + ".csv", ["RAG", "CCIR #", "ASMIS #", "MSC", "Battalion", "Unit UIC", "Accident Class", "Status", "Accident Date", "Due Date", "Days Overdue", "Accident Age"],
-      o.map(function (r) { return [ragLabel(r), r.ccir || "", r.asmis || "", r.msc || "", r.battalion || "", r.uic || "", r.cls || "", r.status || "", fd(r.date), fd(r.due), r.isOverdue ? r.overdue : 0, r.acc_age]; }));
+    var xa = S.have.assigned_to, xc = S.have.comments;
+    K.downloadCsv("investigation_tracker_" + iso(new Date()) + ".csv", ["RAG", "CCIR #", "ASMIS #", "MSC", "Battalion", "Unit UIC", "Accident Class", "Status", "Accident Date", "Due Date", "Days Overdue", "Accident Age"].concat(xa ? ["Assigned To"] : [], xc ? ["Comments"] : []),
+      o.map(function (r) { return [ragLabel(r), r.ccir || "", r.asmis || "", r.msc || "", r.battalion || "", r.uic || "", A.classLabel(r.cls), r.status || "", fd(r.date), fd(r.due), r.isOverdue ? r.overdue : 0, r.acc_age].concat(xa ? [r.assigned_to || ""] : [], xc ? [r.comments || ""] : []); }));
   }
 
   // ---------- wiring ----------
   function init() {
     K.initCharts();
     $("dictBody").innerHTML = A.COLUMNS.map(function (c, i) { return "<tr><td>" + (i + 1) + "</td><td><code>" + esc(c[1]) + "</code>" + (c[0] === "msc" ? " <span class=\"muted\">(shown as MSC; a column named MSC also works)</span>" : "") + "</td><td>" + esc(c[4]) + "</td></tr>"; }).join("");
-    $("btnLoad").addEventListener("click", function () { var p = $("loadPanel"); p.hidden = !p.hidden; if (!p.hidden) p.scrollIntoView({ behavior: "smooth", block: "nearest" }); });
+    $("btnLoad").addEventListener("click", function () { $("fileInput").click(); });
+    $("btnDetails").addEventListener("click", function () { setExpanded($("loadPanel").hidden); });
+    $("btnPresent").addEventListener("click", function () { setPresent(!document.body.classList.contains("present")); });
+    setExpanded(lsGet(), false);
     $("btnPrint").addEventListener("click", function () { window.print(); });
     $("btnDemo").addEventListener("click", function () { $("fileInput").value = ""; loadDemo(); });
     $("fileInput").addEventListener("change", function (e) {
       var file = e.target.files[0]; if (!file) return;
       $("loadReport").innerHTML = "<p>Reading " + esc(file.name) + "&hellip;</p>";
       A.readFile(file, function (err, res) {
-        if (err) { $("loadReport").innerHTML = '<p class="err"><strong>Could not read ' + esc(file.name) + ".</strong> " + esc(err.message || err) + "</p>"; return; }
-        var now = new Date(); loadAoa(res.aoa, new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12), res.strength, "file", file.name, res.sheetName);
+        if (err) { $("loadReport").innerHTML = '<p class="err"><strong>Could not read ' + esc(file.name) + ".</strong> " + esc(err.message || err) + "</p>"; setBar("err", "Could not read " + file.name, 1); setExpanded(true, false); return; }
+        var now = new Date(), okLoad = loadAoa(res.aoa, new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12), res.strength, "file", file.name, res.sheetName);
+        if (okLoad) setExpanded(false);
       });
     });
     $("fFy").addEventListener("change", function () { var y = +this.value; if (y) { $("fFrom").value = (y - 1) + "-10-01"; $("fTo").value = y + "-09-30"; } else { $("fFrom").value = ""; $("fTo").value = ""; } S.hf = []; render(); });
@@ -386,7 +444,11 @@
     ["tTrack", "tAll"].forEach(function (id) { $(id).addEventListener("click", function (e) { var tr = e.target.closest("tr[data-i]"); if (tr) openDrawer(S.recs[+tr.getAttribute("data-i")]); }); });
     $("hfCrumbs").addEventListener("click", function (e) { var b = e.target.closest("button[data-d]"); if (!b) return; S.hf = S.hf.slice(0, +b.getAttribute("data-d")); hfacs(currentRows()); });
     $("dClose").addEventListener("click", closeDrawer); $("scrim").addEventListener("click", closeDrawer);
-    document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeDrawer(); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
+      if ($("drawer").classList.contains("open")) closeDrawer();
+      else if (document.body.classList.contains("present")) setPresent(false);
+    });
     loadDemo();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();

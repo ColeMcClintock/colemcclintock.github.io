@@ -22,16 +22,16 @@ Drill-through field: DimUnit[unit_name]. Cards for all readiness measures, a 18-
 |---|---|---|---|
 | Title | `[Title Safety]` | 16, 8, 900, 40 | |
 | Slicers | DimBattalion[MSC], DimBattalion[Battalion], FactAccident[Unit UIC], [Accident Class], [Status], [Duty Status], [On Duty], [Accident Subtype], [Cause Subtype], 'Date'[Fiscal Year] | 16, 52, 1248, 40 | Between date slicer on 'Date'[Date] for custom ranges |
-| 6 cards | Accidents, Class A-D (4 cards or one multi-row card), Total Accident Cost, Open Investigations, Overdue Investigations, Days Since Last Class A/B | 16, 100, 1248, 110 | Overdue card: red font when > 0 |
-| Stacked column | X: 'Date'[Month]; Y: Accidents; Legend: Accident Class | 16, 220, 760, 250 | Class colors A #E0645C, B #E88A4C, C #E3B34C, D #A9C16A |
+| 6 cards | Accidents, classes (multi-row card: Class A-D, Class E (Ground), Class R (NG), Unclassified), Total Accident Cost, Open Investigations, Overdue Investigations, Days Since Last Class A/B | 16, 100, 1248, 110 | Overdue card: red font when > 0 |
+| Stacked column | X: 'Date'[Month]; Y: Accidents; Legend: Class Label | 16, 220, 760, 250 | Class colors A #E0645C, B #E88A4C, C #E3B34C, D #A9C16A, E #7FB3D5, R #B59AD8, Unclassified #4A5A70 |
 | Line | X: 'Date'[Fiscal Month]; Y: Accidents (running total in Fiscal Year); Legend: 'Date'[Fiscal Year] | 784, 220, 480, 250 | Quick measure: Running total by Fiscal Month |
-| Stacked bar x2 | Y: Accident Subtype / Cause Subtype; X: Accidents; Legend: Accident Class | 16, 480, 620, 224 | |
+| Stacked bar x2 | Y: Accident Subtype / Cause Subtype; X: Accidents; Legend: Class Label | 16, 480, 620, 224 | |
 | Matrix heat map | Rows: Day of Week; Columns: Hour (bin 4); Values: Accidents | 644, 480, 620, 224 | Conditional background, gradient #16294A to #E0645C |
 
 ## Page 4: Investigations and Cost
 | Visual | Fields / measures | Position | Notes |
 |---|---|---|---|
-| Table (tracker) | Investigation RAG, CCIR #, ASMIS #, MSC, Battalion, Accident Class, Status, Accident Date, Due Date (Calc), Days Overdue (Calc) | 16, 52, 820, 360 | Filter: Is Open = True; sort by Days Overdue (Calc) desc; RAG icon via conditional formatting > Field value = [Investigation RAG Color] |
+| Table (tracker) | Investigation RAG, CCIR #, ASMIS #, MSC, Battalion, Class Label, Status, Accident Date, Due Date (Calc), Days Overdue (Calc), Assigned To and Comments (if in the export) | 16, 52, 820, 360 | Filter: Is Open = True; sort by Days Overdue (Calc) desc; RAG icon via conditional formatting > Field value = [Investigation RAG Color] |
 | Funnel | Category: Status (Investigation Ongoing, In Review NGB, Final); Values: Accidents | 844, 52, 420, 170 | Status pipeline |
 | Column | X: aging bucket (group Accident Age: 0-30, 31-60, 61-90, 90+); Y: Open Investigations | 844, 230, 420, 182 | |
 | Stacked bar | Y: 'Date'[Fiscal Year]; X: Days Away Cost, Days Hospitalized Cost, PPD Cost, PTD Cost, Fatality Cost, Material ECOD | 16, 420, 620, 280 | Cost composition |

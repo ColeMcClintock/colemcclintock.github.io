@@ -19,7 +19,13 @@ let
         (r) => List.AnyTrue(List.Transform(r, (v) => Text.Lower(Text.Trim(Text.From(v ?? ""))) = "accident date"))),
     HeaderPos = List.PositionOf(RowHasHeader, true),
     Promoted  = Table.PromoteHeaders(Table.Skip(RawGrid, if HeaderPos < 0 then 0 else HeaderPos), [PromoteAllScalars = true]),
-    NonBlank  = Table.SelectRows(Promoted, each List.NonNullCount(List.Select(Record.FieldValues(_), (v) => v <> "")) > 0),
+    // blank-like values: empty, "-", "$ -", "(blank)", "N/A"
+    IsBlankish = (v) as logical =>
+        v = null or (Value.Is(v, type text) and
+            (let t = Text.Lower(Text.Trim(Text.Replace(v, "#(00A0)", " "))) in
+                t = "" or t = "(blank)" or t = "blank" or t = "n/a" or t = "#n/a" or t = "none"
+                or Text.Remove(t, {"$", " ", "-", "#(2013)", "#(2014)"}) = "" )),
+    NonBlank  = Table.SelectRows(Promoted, each List.NonNullCount(List.Select(Record.FieldValues(_), (v) => not IsBlankish(v))) > 0),
 
     // ---- 2. header cleanup: strip *, non-breaking spaces, repeated spaces ----
     CleanName = (h as text) as text =>
@@ -35,6 +41,7 @@ let
         "Fatality Cost", "Injury Cost", "Property Damage Y/N", "Material ECOD", "Total Accident Cost", "Accident Subtype",
         "Cause Subtype", "Mistake Type", "HFACS Category", "HFACS Failure", "HFACS Subfailure", "Summary"},
     Variants = {
+        {"sub date reported", "SUB DATE REPORTED"}, {"assigned to", "Assigned To"}, {"comments", "Comments"}, {"documentation", "Documentation"},
         {"tech", "MSC"}, {"accident number", "Accident #"}, {"ccir", "CCIR #"}, {"ccir number", "CCIR #"},
         {"asmis", "ASMIS #"}, {"asmis number", "ASMIS #"}, {"uic", "Unit UIC"}, {"class", "Accident Class"},
         {"compl date", "Compl. Date"}, {"completion date", "Compl. Date"}, {"completed date", "Compl. Date"},
@@ -50,7 +57,10 @@ let
             let hit = List.First(List.Select(Lookup, (p) => p{0} = Text.Lower(c)), null)
             in if hit = null then null else {c, hit{1}}),
         (p) => p <> null and p{0} <> p{1}),
-    Renamed = Table.RenameColumns(DropTech, Renames, MissingField.Ignore),
+    Renamed0 = Table.RenameColumns(DropTech, Renames, MissingField.Ignore),
+    KeyCols  = List.Intersect({{"Accident #", "CCIR #", "ASMIS #", "Unit UIC", "MSC", "Battalion", "Accident Date", "Status", "Summary",
+                                "Accident Subtype", "Cause Subtype"}, Table.ColumnNames(Renamed0)}),
+    Renamed  = Table.SelectRows(Renamed0, (r) => List.AnyTrue(List.Transform(KeyCols, (c) => not IsBlankish(Record.Field(r, c))))),   // formula rows below the data
 
     // ---- 4. typing helpers ----
     MonthNo = [jan = 1, feb = 2, mar = 3, apr = 4, may = 5, jun = 6, jul = 7, aug = 8, sep = 9, oct = 10, nov = 11, dec = 12],
@@ -71,35 +81,58 @@ let
                 if ddMonYY <> null then ddMonYY
                 else try Date.From(Date.FromText(t, [Culture = "en-US"])) otherwise null,
     fnMoney = (v) as nullable number =>
-        if v = null or v = "" then null
+        if v = null then null
         else if Value.Is(v, type number) then v
         else
-            let t = Text.Trim(Text.From(v)),
-                neg = Text.StartsWith(t, "(") or Text.StartsWith(t, "-"),
-                n = try Number.FromText(Text.Remove(t, {"$", ",", " ", "(", ")", "-"}), "en-US") otherwise null
-            in if n = null then null else (if neg then -n else n),
+            let t = Text.Remove(Text.Trim(Text.From(v)), {"$", ",", " ", "#(00A0)"}),
+                lower = Text.Lower(t)
+            in
+                if t = "" or lower = "(blank)" or lower = "n/a" or lower = "#n/a" or lower = "none" then null
+                else if Text.Remove(t, {"-", "#(2013)", "#(2014)"}) = "" then 0                  // accounting zero "$ -"
+                else
+                    let neg = Text.StartsWith(t, "(") or Text.StartsWith(t, "-"),
+                        n = try Number.FromText(Text.Remove(t, {"(", ")", "-"}), "en-US") otherwise null   // real text -> null
+                    in if n = null then null else (if neg then -n else n),
     fnYN = (v) as nullable text =>
         let t = Text.Upper(Text.Trim(Text.From(v ?? ""))) in
         if List.Contains({"Y", "YES", "TRUE", "1"}, t) then "Y" else if List.Contains({"N", "NO", "FALSE", "0"}, t) then "N" else null,
-    fnClass = (v) as nullable text =>
-        let t = Text.Trim(Text.Replace(Text.Upper(Text.From(v ?? "")), "CLASS", "")) in if t = "" then null else Text.Start(t, 1),
+    // Accident Class: A-D, "E - grnd" -> E, "R - NG" -> R, blank -> Unclassified, anything else kept as-is
+    fnClass = (v) as text =>
+        let raw = Text.Trim(Text.From(v ?? "")),
+            t = Text.Remove(Text.Trim(Text.Replace(Text.Upper(raw), "CLASS", "")), {" ", "-", "(", ")"})
+        in
+            if IsBlankish(raw) then "Unclassified"
+            else if List.Contains({"A", "B", "C", "D"}, t) then t
+            else if List.Contains({"E", "EGRND", "EGROUND", "EGRD"}, t) then "E"
+            else if List.Contains({"R", "RNG"}, t) then "R"
+            else if t = "UNCLASSIFIED" then "Unclassified"
+            else raw,
 
     Present   = (cols as list) => List.Intersect({cols, Table.ColumnNames(Renamed)}),
-    DateCols  = Present({"Accident Date", "Due Date", "Compl. Date"}),
+    DateCols  = Present({"Accident Date", "Due Date", "Compl. Date", "SUB DATE REPORTED"}),
     MoneyCols = Present({"Days Away from Work Cost", "Days Hospitalized Cost", "Perm. Partial Disability Cost",
                          "Perm. Total Disability Cost", "Fatality Cost", "Injury Cost", "Material ECOD", "Total Accident Cost"}),
     IntCols   = Present({"Accident Age", "Days Overdue", "Years of Service", "Age", "Days Away from Work", "Days Hospitalized",
                          "Days Restricted", "Days Lost"}),
     YNCols    = Present({"On Duty", "Injury Y/N", "No Lost Time Injury", "Property Damage Y/N"}),
     TextCols  = Present({"Accident #", "CCIR #", "ASMIS #", "Unit UIC", "MSC", "Battalion", "Status",
-                         "Duty Status", "Accident Subtype", "Cause Subtype", "HFACS Category", "HFACS Failure", "HFACS Subfailure"}),
+                         "Duty Status", "Accident Subtype", "Cause Subtype", "HFACS Category", "HFACS Failure", "HFACS Subfailure",
+                         "Assigned To", "Comments", "Documentation"}),          // last three are optional trailing columns
 
     T1 = Table.TransformColumns(Renamed, List.Transform(DateCols,  (c) => {c, fnDate, type nullable date})),
     T2 = Table.TransformColumns(T1, List.Transform(MoneyCols, (c) => {c, fnMoney, Currency.Type})),
     T3 = Table.TransformColumns(T2, List.Transform(IntCols,   (c) => {c, (v) => let n = fnMoney(v) in if n = null then null else Number.Round(n), Int64.Type})),
     T4 = Table.TransformColumns(T3, List.Transform(YNCols,    (c) => {c, fnYN, type nullable text})),
-    T5 = Table.TransformColumns(T4, List.Transform(TextCols,  (c) => {c, (v) => if v = null then null else Text.Trim(Text.From(v)), type nullable text})),
-    T6 = if List.Contains(Table.ColumnNames(T5), "Accident Class") then Table.TransformColumns(T5, {{"Accident Class", fnClass, type nullable text}}) else T5,
+    T5 = Table.TransformColumns(T4, List.Transform(TextCols,  (c) => {c, (v) => if IsBlankish(v) then null else Text.Trim(Text.From(v)), type nullable text})),
+    T6a = if List.Contains(Table.ColumnNames(T5), "Accident Class") then Table.TransformColumns(T5, {{"Accident Class", fnClass, type text}}) else T5,
+    T6 = if List.Contains(Table.ColumnNames(T6a), "Accident Class") then
+            Table.AddColumn(T6a, "Class Label", each
+                if List.Contains({"A", "B", "C", "D"}, [Accident Class]) then "Class " & [Accident Class]
+                else if [Accident Class] = "E" then "Class E (Ground)"
+                else if [Accident Class] = "R" then "Class R (NG)"
+                else [Accident Class], type text)
+         else T6a,
+    // Class Label sort: add a "Class Sort" column (A=1 ... R=6, Unclassified=7, other=8) and use Column tools > Sort by column if wanted
     ValidDate = Table.SelectRows(T6, each [Accident Date] <> null),            // rows with unreadable dates are dropped
 
     // ---- 5. derived columns (refresh date = today) ----

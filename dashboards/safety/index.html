@@ -25,12 +25,22 @@
       <div class="asof"><strong id="asofLabel">&mdash;</strong> &middot; <span id="scopeLabel">All accidents</span><span id="sourceLabel"></span></div>
     </div>
     <div class="actions no-print">
-      <button class="btn" id="btnLoad" type="button">Load ASMIS export</button>
+      <button class="btn ghost" id="btnPresent" type="button" aria-pressed="false" title="Hide loading and help panels (Esc exits)">Presentation mode</button>
       <button class="btn ghost" id="btnPrint" type="button">Print / PDF</button>
     </div>
   </div>
 
-  <div class="loadpanel no-print" id="loadPanel" hidden>
+  <div class="loadbar no-print chrome" id="loadBar" role="status">
+    <span class="lb-icon" id="lbIcon" aria-hidden="true">&#10003;</span>
+    <span class="lb-text" id="lbText">Demo data</span>
+    <span class="lb-badge" id="lbBadge" hidden></span>
+    <span class="lb-actions">
+      <button class="btn ghost sm" id="btnDetails" type="button" aria-expanded="false" aria-controls="loadPanel">Show details</button>
+      <button class="btn sm" id="btnLoad" type="button">Load ASMIS export</button>
+    </span>
+  </div>
+
+  <div class="loadpanel no-print chrome" id="loadPanel" hidden>
     <div>
       <h3>Load an ASMIS export (stays on this device)</h3>
       <p>Choose the Excel (<strong>.xlsx</strong>) or <strong>.csv</strong> accident export. The file is read by this browser tab only; nothing is uploaded, stored, or sent anywhere. Close or reload the tab to clear it.</p>
@@ -44,7 +54,7 @@
       <div id="loadReport" class="loadreport" role="status"></div>
     </div>
     <details>
-      <summary>Column guide (45 columns, export order)</summary>
+      <summary>Column guide (45 columns in export order, plus 4 optional)</summary>
       <div class="tablewrap"><table class="dict"><thead><tr><th>#</th><th>Column</th><th>Used for</th></tr></thead><tbody id="dictBody"></tbody></table></div>
     </details>
   </div>
@@ -65,7 +75,7 @@
     <button class="btn ghost" id="btnReset" type="button">Reset</button>
   </div>
 
-  <section class="kpis k6" id="kpis" aria-label="Key indicators"></section>
+  <section class="kpis k5" id="kpis" aria-label="Key indicators"></section>
 
   <section class="panel summary">
     <h2>Safety Officer summary</h2>
@@ -143,7 +153,7 @@
     <div class="tablewrap"><table class="units clickable" id="tAll"><thead><tr><th>Accident date</th><th>CCIR #</th><th>MSC</th><th class="hide-sm">Battalion</th><th>Class</th><th class="hide-sm">Subtype</th><th class="hide-sm">Cause</th><th class="hide-sm">Status</th><th>Total cost</th></tr></thead><tbody></tbody></table></div>
   </section>
 
-  <details class="panel method">
+  <details class="panel method chrome">
     <summary><h2>How the numbers are calculated</h2></summary>
     <ul>
       <li><strong>Tech</strong> in the export is shown as <strong>MSC</strong> (major subordinate command, the level above battalion). A column named MSC is also accepted.</li>

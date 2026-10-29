@@ -36,6 +36,8 @@ HEADERS = ["Accident #", "CCIR #", "ASMIS #", "ASMIS Investigation Created By", 
            "Perm. Partial Disability Cost", "Perm. Total Disability Cost", "Fatality Cost", "Injury Cost", "Property Damage Y/N",
            "Material ECOD", "Total Accident Cost", "Accident Subtype", "Cause Subtype", "Mistake Type", "HFACS Category", "HFACS Failure",
            "HFACS Subfailure", "Summary"]
+OPTIONAL_HEADERS = ["SUB DATE REPORTED", "Documentation", "Comments", "Assigned To"]  # optional trailing columns
+ALL_HEADERS = HEADERS + OPTIONAL_HEADERS
 MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 DOW = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 CREATORS = ["State Safety Office", "State Safety Specialist", "Brigade Safety Officer", "Battalion Additional Duty Safety Officer",
@@ -218,6 +220,25 @@ def main():
             "HFACS Category": hf_cat, "HFACS Failure": hf_fail, "HFACS Subfailure": hf_sub,
             "Summary": summary + " (Fictional record for demonstration.)",
         })
+    # ---- extra class codes seen in real exports: E - grnd, R - NG, blank (not yet classified) ----
+    r2 = random.Random(a.seed + 1)
+    d_final = [r for r in out if r["Accident Class"] == "D" and r["Status"] == "Final"]
+    for r in r2.sample(d_final, 10):
+        r["Accident Class"] = "E - grnd"
+        if r["Material ECOD"]: r["Material ECOD"] = r2.randint(1_500, 22_000)
+        r["Total Accident Cost"] = r["Injury Cost"] + (r["Material ECOD"] or 0)
+    d_left = [r for r in out if r["Accident Class"] == "D"]
+    for r in r2.sample(d_left, 5): r["Accident Class"] = "R - NG"
+    recent_open = [r for r in out if r["Status"] != "Final" and r["Accident Age"] <= 75]
+    for r in r2.sample(recent_open, min(7, len(recent_open))): r["Accident Class"] = ""
+    # ---- optional trailing columns present in some exports ----
+    for r in out:
+        d = r["Accident Date"]; is_open = r["Status"] != "Final"
+        r["SUB DATE REPORTED"] = d + timedelta(days=r2.choice([0, 0, 1, 1, 2, 3, 5]))
+        r["Documentation"] = r2.choice(["Witness statements pending", "Draft report in progress", "Awaiting command endorsement", ""]) if is_open else r2.choice(["Final report on file", "Abbreviated report on file", "Final report on file"])
+        r["Comments"] = r2.choice(["Unit requested extension", "Pending medical update", "Returned for corrections", "Awaiting cost data", "", ""]) if is_open else ""
+        r["Assigned To"] = r2.choice(["Unit Safety Officer", "Battalion Safety NCO", "State Safety Specialist", "Occupational Health Technician"]) if is_open else r2.choice(["State Safety Specialist", "Battalion Safety NCO"])
+    HEADERS = ALL_HEADERS
     os.makedirs(OUT, exist_ok=True)
     def textrow(r):
         o = {}
@@ -248,7 +269,7 @@ def main():
         from datetime import datetime
         cur = '"$"#,##0.00'
         money_cols = {h for h in HEADERS if h.endswith("Cost") or h == "Material ECOD"}
-        date_cols = {"Accident Date", "Due Date", "Compl. Date"}
+        date_cols = {"Accident Date", "Due Date", "Compl. Date", "SUB DATE REPORTED"}
         wb = Workbook(); ws = wb.active; ws.title = "ASMIS Export"
         ws.append(HEADERS)
         for c in ws[1]: c.font = Font(bold=True)

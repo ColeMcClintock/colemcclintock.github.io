@@ -50,8 +50,27 @@
     ["hf_cat", "HFACS Category", "text", ["hfacs category", "hfacs cat"], "HFACS drill-down"],
     ["hf_fail", "HFACS Failure", "text", ["hfacs failure"], "HFACS drill-down"],
     ["hf_sub", "HFACS Subfailure", "text", ["hfacs subfailure", "hfacs sub failure", "hfacs sub-failure"], "HFACS drill-down"],
-    ["summary", "Summary", "text", ["summary", "narrative", "accident summary"], "Detail view (never in the auto summary)"]
+    ["summary", "Summary", "text", ["summary", "narrative", "accident summary"], "Detail view (never in the auto summary)"],
+    // optional trailing columns (not counted in the 45)
+    ["sub_date", "SUB DATE REPORTED", "date", ["sub date reported", "submitted date reported", "date reported", "sub date"], "Optional: detail view", true],
+    ["documentation", "Documentation", "text", ["documentation", "docs", "documents"], "Optional: detail view", true],
+    ["comments", "Comments", "text", ["comments", "comment", "remarks", "notes"], "Optional: tracker and detail view", true],
+    ["assigned_to", "Assigned To", "text", ["assigned to", "assignee", "assigned"], "Optional: tracker and detail view", true]
   ];
+  var REQUIRED = COLUMNS.filter(function (c) { return !c[5]; });
+  var CLASS_LABELS = { A: "Class A", B: "Class B", C: "Class C", D: "Class D", E: "Class E (Ground)", R: "Class R (NG)", Unclassified: "Unclassified" };
+  var CLASS_ORDER = ["A", "B", "C", "D", "E", "R", "Unclassified"];
+  function classLabel(c) { return CLASS_LABELS[c] || (c == null ? "" : String(c)); }
+  // blank-like cell values: empty, dashes (incl. accounting "$ -"), (blank), N/A
+  function blankish(v) {
+    if (v == null) return true;
+    if (typeof v === "number") return false;
+    var s = String(v).replace(/\u00a0/g, " ").trim();
+    if (!s) return true;
+    if (/^\(?\s*blank\s*\)?$/i.test(s) || /^(n\/?a|#n\/a|none|null)$/i.test(s)) return true;
+    return /^\$?\s*[-\u2013\u2014]+\s*\$?$/.test(s);
+  }
+  function dashZero(v) { return typeof v === "string" && /^\$?\s*[-\u2013\u2014]+\s*\$?$/.test(v.replace(/\u00a0/g, " ").trim()); }
   var BYKEY = {}; COLUMNS.forEach(function (c) { BYKEY[c[0]] = c; });
 
   function norm(h) {
@@ -80,11 +99,12 @@
     return null;
   }
   function parseNum(v) {
-    if (v == null || v === "") return null;
     if (typeof v === "number") return isFinite(v) ? v : null;
-    var s = String(v).trim(); if (!s || /^(n\/?a|-+|none)$/i.test(s)) return null;
-    var neg = /^\(.*\)$/.test(s) || /^-/.test(s);
-    s = s.replace(/[$,\s()]/g, "").replace(/^-/, "");
+    if (dashZero(v)) return 0;                                  // accounting zero: "-", "$ -", "$-"
+    if (blankish(v)) return null;
+    var s = String(v).replace(/[\u00a0\s$,]/g, "");
+    var neg = /^\(.*\)$/.test(s) || /^-/.test(s) || /^\(-/.test(s);
+    s = s.replace(/[()]/g, "").replace(/^-/, "");
     if (!/^\d*\.?\d+$/.test(s)) return NaN;
     return (neg ? -1 : 1) * parseFloat(s);
   }
@@ -96,9 +116,14 @@
     if (/^(n|no|false|0)$/.test(s)) return false;
     return null;
   }
-  function parseClass(v) {
-    var s = String(v == null ? "" : v).trim().toUpperCase().replace(/^CLASS\s*/, "");
-    var m = s.match(/^([ABCD])\b/); return m ? m[1] : (s ? "Other" : null);
+  function parseClass(v) { // A-D, E (Ground), R (NG), Unclassified (blank), else raw value
+    if (blankish(v)) return "Unclassified";
+    var raw = String(v).replace(/\u00a0/g, " ").trim(), t = raw.toUpperCase().replace(/^CLASS\s*/, "").replace(/\s+/g, " ").trim();
+    if (/^[ABCD]$/.test(t) || /^[ABCD]\s*[-(]/.test(t)) return t[0];
+    if (/^E(\s*-?\s*(GRND|GROUND|GRD)|\s*\(\s*GROUND\s*\))?$/.test(t)) return "E";
+    if (/^R(\s*-?\s*NG|\s*\(\s*NG\s*\))?$/.test(t)) return "R";
+    if (/^UNCLASSIFIED$/.test(t)) return "Unclassified";
+    return raw;
   }
   function parseStatus(v) {
     var s = String(v == null ? "" : v).trim(); if (!s) return null;
@@ -139,9 +164,11 @@
       map.push(k);
     });
     var matched = COLUMNS.filter(function (c) { return seen[c[0]] != null; }).map(function (c) { return c[0]; });
-    var missing = COLUMNS.filter(function (c) { return seen[c[0]] == null; }).map(function (c) { return c[1] + (c[0] === "msc" ? " / MSC" : ""); });
-    return { map: map, matched: matched, missing: missing, extra: extra, dupes: dupes };
+    var optional = COLUMNS.filter(function (c) { return c[5] && seen[c[0]] != null; }).map(function (c) { return c[1]; });
+    var missing = REQUIRED.filter(function (c) { return seen[c[0]] == null; }).map(function (c) { return c[1] + (c[0] === "msc" ? " / MSC" : ""); });
+    return { map: map, matched: matched, requiredMatched: matched.filter(function (k) { return !BYKEY[k][5]; }).length, optional: optional, missing: missing, extra: extra, dupes: dupes };
   }
+  var KEY_FIELDS = ["accident_no", "ccir", "asmis", "uic", "msc", "battalion", "date", "status", "summary", "subtype", "cause"];
   function scoreRow(r) { return (r || []).reduce(function (n, h) { return n + (ALIAS[norm(h)] ? 1 : 0); }, 0); }
 
   // aoa: array of arrays (first rows may be a title block). asOf: Date used for computed ages.
@@ -150,31 +177,37 @@
     for (var i = 0; i < Math.min(aoa.length, 20); i++) { var s = scoreRow(aoa[i]); if (s > best) { best = s; hi = i; } }
     var headers = (aoa[hi] || []).map(function (h) { return h == null ? "" : h; });
     var hm = mapHeaders(headers);
-    var rep = { headerRow: hi + 1, totalColumns: COLUMNS.length, matched: hm.matched, missing: hm.missing, extra: hm.extra, dupes: hm.dupes,
-      rowsRead: 0, rowsLoaded: 0, blankRows: 0, badDate: [], badNumber: 0, otherClass: 0, computedOverdue: 0, computedDue: 0, fatal: null };
+    var rep = { headerRow: hi + 1, totalColumns: REQUIRED.length, requiredMatched: hm.requiredMatched, optional: hm.optional, matched: hm.matched, missing: hm.missing, extra: hm.extra, dupes: hm.dupes,
+      rowsRead: 0, rowsLoaded: 0, blankRows: 0, badDate: [], badNumber: 0, badNumberExamples: [], otherClass: 0, otherClassValues: [], unclassified: 0, computedOverdue: 0, computedDue: 0, fatal: null };
     if (hm.matched.indexOf("date") < 0) { rep.fatal = "No Accident Date column was found, so the file cannot be charted. Check that the first sheet is the ASMIS export and that its header row is intact."; return { records: [], report: rep }; }
     var records = [], today = asOf || new Date();
     for (var r = hi + 1; r < aoa.length; r++) {
       var row = aoa[r] || [];
-      if (!row.some(function (v) { return v !== "" && v != null; })) { rep.blankRows++; continue; }
-      rep.rowsRead++;
       var raw = {}, rec = { _row: r + 1 };
       hm.map.forEach(function (k, ci) { if (!k) return; raw[k] = row[ci]; });
+      // silently skip blank rows and rows where every key field is empty (e.g. formula rows below the data)
+      if (KEY_FIELDS.every(function (k) { return blankish(raw[k]); })) { rep.blankRows++; continue; }
+      rep.rowsRead++;
       COLUMNS.forEach(function (c) {
         var k = c[0], t = c[2], v = raw[k], out;
         if (!(k in raw)) { rec[k] = null; return; }
         if (t === "date") out = parseDate(v);
-        else if (t === "int" || t === "num" || t === "money") { out = parseNum(v); if (out !== null && isNaN(out)) { rep.badNumber++; out = null; } }
+        else if (t === "int" || t === "num" || t === "money") {
+          out = parseNum(v);
+          if (out !== null && isNaN(out)) { rep.badNumber++; if (rep.badNumberExamples.length < 5) rep.badNumberExamples.push({ row: r + 1, column: headers[hm.map.indexOf(k)], value: text(v) }); out = null; }
+        }
         else if (t === "yn") out = parseYN(v);
         else if (t === "class") out = parseClass(v);
         else if (t === "status") out = parseStatus(v);
         else if (t === "time") out = parseTime(v);
-        else out = text(v) || null;
+        else out = blankish(v) ? null : (text(v) || null);
         rec[k] = out;
         rec["_t_" + k] = (t === "date" && out) ? fmtDate(out) : (t === "money" && out != null) ? "$" + out.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : text(v);
       });
-      if (!rec.date) { rep.badDate.push({ row: r + 1, value: text(raw.date) }); continue; }
-      if (rec.cls === "Other") rep.otherClass++;
+      if (!rec.date) { rep.badDate.push({ row: r + 1, value: blankish(raw.date) ? "" : text(raw.date) }); continue; }
+      if (rec.cls === "Unclassified") rep.unclassified++;
+      else if (rec.cls != null && CLASS_ORDER.indexOf(rec.cls) < 0) { rep.otherClass++; if (rep.otherClassValues.indexOf(rec.cls) < 0) rep.otherClassValues.push(rec.cls); }
+      rec.clsLabel = classLabel(rec.cls);
       if (!rec.due) { rec.due = new Date(rec.date.getTime() + 90 * 864e5); rec._dueComputed = true; rep.computedDue++; }
       rec.open = rec.status ? rec.status !== "Final" : !rec.compl;
       var endRef = rec.open ? today : (rec.compl || today);
@@ -225,6 +258,6 @@
     if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
   }
 
-  w.ASMIS = { COLUMNS: COLUMNS, BYKEY: BYKEY, norm: norm, mapHeaders: mapHeaders, parseTable: parseTable, objectsToAoa: objectsToAoa, readFile: readFile,
+  w.ASMIS = { COLUMNS: COLUMNS, REQUIRED: REQUIRED, CLASS_ORDER: CLASS_ORDER, classLabel: classLabel, blankish: blankish, BYKEY: BYKEY, norm: norm, mapHeaders: mapHeaders, parseTable: parseTable, objectsToAoa: objectsToAoa, readFile: readFile,
     parseDate: parseDate, parseNum: parseNum, parseYN: parseYN, parseClass: parseClass, parseStatus: parseStatus, parseTime: parseTime, fmtDate: fmtDate, iso: iso };
 })(window);

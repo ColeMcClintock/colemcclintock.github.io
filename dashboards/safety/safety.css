@@ -38,3 +38,20 @@ table.clickable tbody tr:hover td{background:rgba(90,166,230,.08)}
 .drawer:not(.open){display:none}
 .dash .row>*{min-width:0}
 table.heat td{min-width:24px}
+
+.loadbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 12px;margin:0 0 12px;font-size:.88rem}
+.loadbar .lb-icon{font-weight:700;color:var(--good)}
+.loadbar.warn .lb-icon{color:var(--warn)} .loadbar.err .lb-icon{color:var(--bad)}
+.loadbar .lb-text{color:#dbe4ef}
+.loadbar .lb-badge{background:rgba(227,179,76,.16);border:1px solid rgba(227,179,76,.5);color:#f0d595;border-radius:999px;padding:1px 9px;font-size:.78rem;font-weight:700}
+.loadbar .lb-actions{margin-left:auto;display:flex;gap:6px}
+.btn.sm{padding:4px 10px;font-size:.82rem}
+.loadpanel{margin-top:-4px}
+body.present .chrome,body.present header.site,body.present #btnPrint{display:none!important}
+body.present #btnPresent{background:var(--olive);color:#0a1424}
+.pill.E{background:#7fb3d5;color:#06121f}.pill.R{background:#b59ad8;color:#120a1f}.pill.U{background:#4a5a70;color:#e7edf5}
+.kpis.k5{grid-template-columns:repeat(5,1fr)}
+@media(max-width:1100px){.kpis.k5{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:640px){.kpis.k5{grid-template-columns:repeat(2,1fr)}}
+td.comment{white-space:normal!important;max-width:240px;font-size:.82rem;color:#c7d3e3}
+@media print{.loadbar,.loadpanel{display:none!important}.kpis.k5{grid-template-columns:repeat(5,1fr)}}

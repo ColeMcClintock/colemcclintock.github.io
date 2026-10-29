@@ -97,6 +97,14 @@ DEFINE
         CALCULATE ( [Accidents], FactAccident[Accident Class] = "C" )
     MEASURE _Measures[Class D Accidents] =
         CALCULATE ( [Accidents], FactAccident[Accident Class] = "D" )
+    MEASURE _Measures[Class E (Ground) Accidents] =
+        CALCULATE ( [Accidents], FactAccident[Accident Class] = "E" )
+    MEASURE _Measures[Class R (NG) Accidents] =
+        CALCULATE ( [Accidents], FactAccident[Accident Class] = "R" )
+    MEASURE _Measures[Unclassified Accidents] =
+        CALCULATE ( [Accidents], FactAccident[Accident Class] = "Unclassified" )   // blank class = not yet classified
+    MEASURE _Measures[Other Class Accidents] =
+        CALCULATE ( [Accidents], NOT FactAccident[Accident Class] IN { "A", "B", "C", "D", "E", "R", "Unclassified" } )
     MEASURE _Measures[Injury Accidents] =
         CALCULATE ( [Accidents], FactAccident[Injury Y/N] = "Y" )
     MEASURE _Measures[Off Duty Accidents] =
@@ -189,8 +197,9 @@ DEFINE
     MEASURE _Measures[Safety Summary] =
         VAR _n = [Accidents]
         VAR _ab = [Class A Accidents] + [Class B Accidents]
+        VAR _u = [Unclassified Accidents]
         RETURN
-            FORMAT ( _n, "0" ) & " accidents (" & FORMAT ( _ab, "0" ) & " Class A/B), total cost "
+            FORMAT ( _n, "0" ) & " accidents (" & FORMAT ( _ab, "0" ) & " Class A/B" & IF ( _u > 0, ", " & FORMAT ( _u, "0" ) & " not yet classified" ) & "), total cost "
                 & FORMAT ( [Total Accident Cost], "$#,0" ) & ". "
                 & FORMAT ( [Open Investigations], "0" ) & " investigations open, "
                 & FORMAT ( [Overdue Investigations], "0" ) & " past the 90-day suspense. "

@@ -1,5 +1,6 @@
 // ===== 03_safety.dax : ASMIS accidents, investigations, costs, rates =====
 // FactAccident[Accident Date] -> 'Date'[Date]; FactAccident[Battalion] -> DimBattalion[Battalion]
+// Accident Class codes after the M query: A, B, C, D, E (Ground), R (NG), Unclassified (blank), or the raw value.
 // Open = Status <> "Final". Overdue = open and past Due Date (Accident Date + 90 days).
 
 Accidents =
@@ -16,6 +17,18 @@ CALCULATE ( [Accidents], FactAccident[Accident Class] = "C" )
 
 Class D Accidents =
 CALCULATE ( [Accidents], FactAccident[Accident Class] = "D" )
+
+Class E (Ground) Accidents =
+CALCULATE ( [Accidents], FactAccident[Accident Class] = "E" )
+
+Class R (NG) Accidents =
+CALCULATE ( [Accidents], FactAccident[Accident Class] = "R" )
+
+Unclassified Accidents =
+CALCULATE ( [Accidents], FactAccident[Accident Class] = "Unclassified" )   // blank class = not yet classified
+
+Other Class Accidents =
+CALCULATE ( [Accidents], NOT FactAccident[Accident Class] IN { "A", "B", "C", "D", "E", "R", "Unclassified" } )
 
 Injury Accidents =
 CALCULATE ( [Accidents], FactAccident[Injury Y/N] = "Y" )
@@ -137,8 +150,9 @@ RETURN IF ( _n >= 3, _n )
 Safety Summary =
 VAR _n = [Accidents]
 VAR _ab = [Class A Accidents] + [Class B Accidents]
+VAR _u = [Unclassified Accidents]
 RETURN
-    FORMAT ( _n, "0" ) & " accidents (" & FORMAT ( _ab, "0" ) & " Class A/B), total cost "
+    FORMAT ( _n, "0" ) & " accidents (" & FORMAT ( _ab, "0" ) & " Class A/B" & IF ( _u > 0, ", " & FORMAT ( _u, "0" ) & " not yet classified" ) & "), total cost "
         & FORMAT ( [Total Accident Cost], "$#,0" ) & ". "
         & FORMAT ( [Open Investigations], "0" ) & " investigations open, "
         & FORMAT ( [Overdue Investigations], "0" ) & " past the 90-day suspense. "
