@@ -32,10 +32,17 @@
     });
     return out;
   }
+  // Footer disclaimer: fictional wording only while the built-in demo data is shown.
+  function setDisclaimer(own) {
+    var d = document.getElementById("dataDisclaimer");
+    if (d) d.textContent = own ? "Showing data loaded from your files on this device. Nothing is uploaded."
+      : "Data shown is fictional for demonstration. Not an official Iowa National Guard product.";
+  }
   function setData(recs, ufr, source) {
     S.recs = normalize(recs);
     S.ufr = (ufr || []).map(function (u0) { var u = K.lowerKeys(u0); u.amount = +u.amount || 0; u.fy = String(u.fy || "").toUpperCase(); return u; });
     $("sourceLabel").textContent = source === "demo" ? "" : " \u00B7 " + source;
+    setDisclaimer(source !== "demo");
     buildFilters(true); render();
   }
 

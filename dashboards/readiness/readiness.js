@@ -108,6 +108,12 @@
     return out;
   }
 
+  // Footer disclaimer: fictional wording only while the built-in demo data is shown.
+  function setDisclaimer(own) {
+    var d = document.getElementById("dataDisclaimer");
+    if (d) d.textContent = own ? "Showing data loaded from your files on this device. Nothing is uploaded."
+      : "Data shown is fictional for demonstration. Not an official Iowa National Guard product.";
+  }
   function setData(records, events, source) {
     state.records = normalize(records);
     state.events = (events || []).map(function (e) {
@@ -117,6 +123,7 @@
     });
     state.months = uniq(state.records.map(function (r) { return r.month; })).sort();
     state.source = source;
+    setDisclaimer(source !== "Demo dataset");
     $("sourceLabel").textContent = source === "Demo dataset" ? "" : " \u00B7 " + source;
     buildFilters(true);
     render();

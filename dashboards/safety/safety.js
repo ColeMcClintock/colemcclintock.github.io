@@ -38,10 +38,16 @@
   function fyLabel(y) { return "FY" + String(y).slice(2); }
   function fyRange(recs) { var f = K.uniq(recs.map(function (r) { return r.fy; })).sort(); return f.length ? (f.length > 1 ? fyLabel(f[0]) + "\u2013" + fyLabel(f[f.length - 1]) : fyLabel(f[0])) : ""; }
 
+  // Footer disclaimer: fictional wording only while the built-in demo data is shown.
+  function setDisclaimer(own) {
+    var d = document.getElementById("dataDisclaimer");
+    if (d) d.textContent = own ? "Showing data loaded from your files on this device. Nothing is uploaded."
+      : "Data shown is fictional for demonstration. Not an official Iowa National Guard product.";
+  }
   // Install a record set and redraw everything.
   function applyData(recs, strength, asOf, source) {
     recs.forEach(function (r, i) { r._i = i; });
-    S.recs = recs; S.asOf = asOf; S.strength = strength; S.source = source;
+    S.recs = recs; S.asOf = asOf; S.strength = strength; S.source = source; setDisclaimer(source === "file");
     S.have = {}; A.COLUMNS.forEach(function (c) { var k = c[0]; S.have[k] = recs.some(function (r) { return r[k] != null && r[k] !== ""; }); });
     S.hf = []; S.showAll = false;
     applyVisibility(); buildFilters(true); render();

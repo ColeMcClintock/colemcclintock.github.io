@@ -89,6 +89,7 @@ def column_guide(page_dir):
 
 README = """HOW TO USE AT WORK - {title} (offline copy)
 Data shown at startup is fictional for demonstration. Not an official Iowa National Guard product.
+When you load your own files, the footer switches to: "Showing data loaded from your files on this device. Nothing is uploaded."
 
 WHAT'S HERE
   {name}.html          Single self-contained file. Double-click to open in Edge or Chrome.

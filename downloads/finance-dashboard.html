@@ -303,7 +303,7 @@ td.cf-bad{background:rgba(224,100,92,.18)} td.cf-warn{background:rgba(227,179,76
 <footer class="site">
   <div class="wrap">
     <div>&copy; 2026 Cole McClintock &middot; <a href="https://colemcclintock.github.io/">Portfolio home</a> &middot; Runs fully offline; no data leaves this device.</div>
-    <div class="disclaimer">Data shown is fictional for demonstration. Not an official Iowa National Guard product.</div>
+    <div class="disclaimer" id="dataDisclaimer">Data shown is fictional for demonstration. Not an official Iowa National Guard product.</div>
   </div>
 </footer>
 
@@ -506,10 +506,17 @@ window.FINANCE_DATA = {"meta":{"seed":2026,"generated_by":"data-generation/gener
     });
     return out;
   }
+  // Footer disclaimer: fictional wording only while the built-in demo data is shown.
+  function setDisclaimer(own) {
+    var d = document.getElementById("dataDisclaimer");
+    if (d) d.textContent = own ? "Showing data loaded from your files on this device. Nothing is uploaded."
+      : "Data shown is fictional for demonstration. Not an official Iowa National Guard product.";
+  }
   function setData(recs, ufr, source) {
     S.recs = normalize(recs);
     S.ufr = (ufr || []).map(function (u0) { var u = K.lowerKeys(u0); u.amount = +u.amount || 0; u.fy = String(u.fy || "").toUpperCase(); return u; });
     $("sourceLabel").textContent = source === "demo" ? "" : " \u00B7 " + source;
+    setDisclaimer(source !== "demo");
     buildFilters(true); render();
   }
 

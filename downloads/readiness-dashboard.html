@@ -272,7 +272,7 @@ details.method{margin-bottom:10px}
 <footer class="site">
   <div class="wrap">
     <div>&copy; 2026 Cole McClintock &middot; <a href="https://colemcclintock.github.io/">Portfolio home</a> &middot; Runs fully offline; no data leaves this device.</div>
-    <div class="disclaimer">Data shown is fictional for demonstration. Not an official Iowa National Guard product.</div>
+    <div class="disclaimer" id="dataDisclaimer">Data shown is fictional for demonstration. Not an official Iowa National Guard product.</div>
   </div>
 </footer>
 
@@ -453,6 +453,12 @@ window.IOWA_OUTLINE = [
     return out;
   }
 
+  // Footer disclaimer: fictional wording only while the built-in demo data is shown.
+  function setDisclaimer(own) {
+    var d = document.getElementById("dataDisclaimer");
+    if (d) d.textContent = own ? "Showing data loaded from your files on this device. Nothing is uploaded."
+      : "Data shown is fictional for demonstration. Not an official Iowa National Guard product.";
+  }
   function setData(records, events, source) {
     state.records = normalize(records);
     state.events = (events || []).map(function (e) {
@@ -462,6 +468,7 @@ window.IOWA_OUTLINE = [
     });
     state.months = uniq(state.records.map(function (r) { return r.month; })).sort();
     state.source = source;
+    setDisclaimer(source !== "Demo dataset");
     $("sourceLabel").textContent = source === "Demo dataset" ? "" : " \u00B7 " + source;
     buildFilters(true);
     render();
