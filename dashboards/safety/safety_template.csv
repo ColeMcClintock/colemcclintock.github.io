@@ -1,0 +1,4 @@
+date,unit_id,unit_name,battalion,brigade,location,event_type,mishap_class,category,duty_status,days_lost,cost,root_cause,unit_strength
+2026-07-14,EX-A,A Co Example,Example Battalion,Example Brigade,Des Moines,Mishap,C,Heat/cold injury,On-duty,3,72000,Work/rest cycle not enforced,120
+2026-08-02,EX-A,A Co Example,Example Battalion,Example Brigade,Des Moines,Near miss,,Tactical vehicle,On-duty,0,0,Inadequate ground guide,120
+2026-01-19,EX-B,B Co Example,Example Battalion,Example Brigade,Ames,Mishap,D,Slips/falls,Off-duty,1,31000,Ice / snow not cleared,95
