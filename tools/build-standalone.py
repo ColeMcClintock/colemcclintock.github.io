@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""
+Build offline copies of the dashboards from source.
+
+For each dashboard this writes:
+  downloads/<name>.html  one self-contained HTML file (CSS, JS, Chart.js, SheetJS, fictional demo data and
+                         template files inlined). Double-click to run; makes no network requests.
+  downloads/<name>.zip   folder version (index.html + assets) + the single file + templates + README
+
+Run from the repo root:  python3 tools/build-standalone.py
+Standard-library Python only.
+"""
+import base64, csv, io, os, re, zipfile
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.path.join(ROOT, "downloads")
+SITE = "https://colemcclintock.github.io/"
+MIME = {".csv": "text/csv;charset=utf-8", ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".svg": "image/svg+xml", ".png": "image/png"}
+
+PAGES = {
+    "safety-dashboard": dict(dir="dashboards/safety", title="Safety & Mishaps Dashboard",
+                             templates=["asmis_template.xlsx", "asmis_template.csv"], guide=True),
+    "readiness-dashboard": dict(dir="dashboards/readiness", title="Readiness Command Dashboard", templates=["readiness_template.csv"]),
+    "finance-dashboard": dict(dir="dashboards/finance", title="Status of Funds Dashboard", templates=["finance_template.csv"]),
+}
+
+def read(p, mode="r"):
+    with open(p, mode, **({} if "b" in mode else {"encoding": "utf-8"})) as f: return f.read()
+
+def data_uri(path):
+    ext = os.path.splitext(path)[1].lower()
+    return "data:" + MIME.get(ext, "application/octet-stream") + ";base64," + base64.b64encode(read(path, "rb")).decode()
+
+def common_rewrites(html):
+    html = re.sub(r'<html lang="en">', '<html lang="en" data-standalone>', html, count=1)
+    html = re.sub(r'href="\.\./\.\./index\.html(#[^"]*)?"', lambda m: f'href="{SITE}{m.group(1) or ""}"', html)
+    html = re.sub(r'href="\.\./\.\./downloads/[^"]+"', 'href="#"', html)
+    return html
+
+def build_single(page_dir, html):
+    def css(m):
+        return "<style>\n" + read(os.path.normpath(os.path.join(page_dir, m.group(1)))) + "\n</style>"
+    def js(m):
+        src = read(os.path.normpath(os.path.join(page_dir, m.group(1))))
+        return "<script>\n" + src.replace("</script", "<\\/script") + "\n</script>"
+    def icon(m):
+        return '<link rel="icon" href="' + data_uri(os.path.normpath(os.path.join(page_dir, m.group(1)))) + '"'
+    html = re.sub(r'<link rel="stylesheet" href="([^"]+)">', css, html)
+    html = re.sub(r'<link rel="icon" href="([^"]+)"', icon, html)
+    html = re.sub(r'<script src="([^"]+)"></script>', js, html)
+    # local template downloads -> embedded data URIs
+    def tmpl(m):
+        p, rest = os.path.join(page_dir, m.group(1)), m.group(2) or ""
+        if not os.path.exists(p): return m.group(0)
+        name = os.path.basename(p)
+        if re.search(r"\bdownload=", rest): dl = ""
+        elif re.search(r"\bdownload\b", rest): rest, dl = re.sub(r"\bdownload\b", f'download="{name}"', rest, count=1), ""
+        else: dl = f' download="{name}"'
+        return f'href="{data_uri(p)}"{dl}{rest}'
+    html = re.sub(r'href="([\w\-]+\.(?:csv|xlsx))"([^>]*)', tmpl, html)
+    html = common_rewrites(html)
+    assert not re.search(r'<(script|link)[^>]+(src|href)="(?!data:|https?://colemcclintock|#)', html), "unresolved local reference"
+    return "<!-- Offline copy built by tools/build-standalone.py from the portfolio source. -->\n" + html
+
+def folder_files(page_dir, html):
+    """Returns (index_html, {zip_path: source_path}) for the folder version."""
+    files = {}
+    def rel(m):
+        attr, path = m.group(1), m.group(2)
+        if path.startswith(("http", "#", "data:", "mailto:")) or path.startswith("../../index.html") or path.startswith("../../downloads"):
+            return m.group(0)
+        src = os.path.normpath(os.path.join(page_dir, path))
+        if not os.path.isfile(src): return m.group(0)
+        z = path[len("../../"):] if path.startswith("../../") else path
+        files[z] = src
+        return f'{attr}="{z}"'
+    html = re.sub(r'(src|href)="([^"]+)"', rel, html)
+    return common_rewrites(html), files
+
+def column_guide(page_dir):
+    js = read(os.path.join(page_dir, "asmis-loader.js"))
+    rows = re.findall(r'^\s*\["(\w+)", "([^"]+)", "(\w+)", \[[^\]]*\], "([^"]+)"(, true)?\]', js, re.M)
+    buf = io.StringIO(); w = csv.writer(buf)
+    w.writerow(["#", "Column (export header)", "Required", "Type", "Used for"])
+    for i, (key, head, typ, used, opt) in enumerate(rows, 1):
+        w.writerow([i, head, "Optional" if opt else "Yes", typ, used + (" (shown as MSC)" if key == "msc" else "")])
+    return buf.getvalue()
+
+README = """HOW TO USE AT WORK - {title} (offline copy)
+Data shown at startup is fictional for demonstration. Not an official Iowa National Guard product.
+
+WHAT'S HERE
+  {name}.html          Single self-contained file. Double-click to open in Edge or Chrome.
+  folder-version/index.html   Same dashboard as a folder of files (use if a single large file is blocked).
+  templates/           Blank templates with the exact column headers.
+{guide_line}
+OPEN IT
+  1. Unzip to your desktop or a SharePoint/OneDrive-synced folder on your computer.
+  2. Double-click {name}.html. It runs entirely in the browser; it makes no network requests
+     and needs no install. (Opening it inside the SharePoint web viewer will not run it; use the synced copy.)
+
+LOAD YOUR DATA
+  - Click "Load files" (or drag files onto the bar) and pick one or more Excel/CSV exports.
+{multi_line}  - Files are read by this browser tab only. Nothing is uploaded, saved, or sent. Close the tab to clear it.
+  - The load report ("Show details") lists rows loaded, columns matched, and anything that could not be read.
+
+PRESENTING / PRINTING
+  - "Presentation mode" hides the loading and help panels (Esc exits). "Print / PDF" prints the dashboard.
+
+DATA HANDLING
+  Follow your organization's policies for the source data. Do not save real exports into a shared copy of this
+  folder. The only thing the page remembers is whether the details panel was open (browser storage).
+"""
+
+def main():
+    os.makedirs(OUT, exist_ok=True)
+    for name, cfg in PAGES.items():
+        page_dir = os.path.join(ROOT, cfg["dir"])
+        html = read(os.path.join(page_dir, "index.html"))
+        single = build_single(page_dir, html)
+        with open(os.path.join(OUT, name + ".html"), "w", encoding="utf-8") as f: f.write(single)
+        idx, files = folder_files(page_dir, html)
+        zpath = os.path.join(OUT, name + ".zip")
+        is_safety = cfg.get("guide")
+        with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr(f"{name}/{name}.html", single)
+            z.writestr(f"{name}/folder-version/index.html", idx)
+            for zp, src in sorted(files.items()):
+                if zp.endswith((".csv", ".xlsx")) and os.path.basename(zp) in cfg["templates"]: continue
+                z.write(src, f"{name}/folder-version/{zp}")
+            for t in cfg["templates"]:
+                z.write(os.path.join(page_dir, t), f"{name}/templates/{t}")
+                z.write(os.path.join(page_dir, t), f"{name}/folder-version/{t}")   # keeps the in-page template links working
+            if is_safety:
+                z.writestr(f"{name}/COLUMN-GUIDE.csv", column_guide(page_dir))
+            z.writestr(f"{name}/README - How to use at work.txt", README.format(
+                title=cfg["title"], name=name,
+                guide_line="  COLUMN-GUIDE.csv     Every column, whether it is required, and what it drives.\n" if is_safety else "",
+                multi_line="  - You can load several files at once (e.g. one tracker per fiscal year plus a roll-up).\n    Rows are combined and duplicate accidents are removed; \"Show duplicates removed\" lists them.\n" if is_safety else ""))
+        print(f"{name}: html {len(single)//1024} KB, zip {os.path.getsize(zpath)//1024} KB, {len(files)} folder files")
+
+if __name__ == "__main__":
+    main()

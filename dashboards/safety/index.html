@@ -13,7 +13,7 @@
 <header class="site">
   <div class="wrap topnav">
     <a class="brand" href="../../index.html"><span class="mark">CM</span><span>Cole McClintock</span></a>
-    <nav><a href="../../index.html#projects">&larr; All projects</a></nav>
+    <nav><a class="dl-only" href="../../downloads/safety-dashboard.html" download="safety-dashboard.html">&#8681; Download dashboard</a> <a href="../../index.html#projects">&larr; All projects</a></nav>
   </div>
 </header>
 
@@ -36,16 +36,20 @@
     <span class="lb-badge" id="lbBadge" hidden></span>
     <span class="lb-actions">
       <button class="btn ghost sm" id="btnDetails" type="button" aria-expanded="false" aria-controls="loadPanel">Show details</button>
-      <button class="btn sm" id="btnLoad" type="button">Load ASMIS export</button>
+      <button class="btn sm" id="btnLoad" type="button" title="Choose one or more ASMIS exports (replaces the current files)">Load files</button>
+      <button class="btn ghost sm" id="btnAdd" type="button" hidden title="Add more exports to the current set">Add more files</button>
+      <button class="btn ghost sm" id="btnClear" type="button" hidden title="Remove loaded files and show the demo data">Clear</button>
+      <a class="btn ghost sm dl-only" id="btnDownload" href="../../downloads/safety-dashboard.html" download="safety-dashboard.html" title="Single HTML file that runs offline">&#8681; Download dashboard</a>
     </span>
   </div>
 
   <div class="loadpanel no-print chrome" id="loadPanel" hidden>
     <div>
-      <h3>Load an ASMIS export (stays on this device)</h3>
-      <p>Choose the Excel (<strong>.xlsx</strong>) or <strong>.csv</strong> accident export. The file is read by this browser tab only; nothing is uploaded, stored, or sent anywhere. Close or reload the tab to clear it.</p>
+      <h3>Load ASMIS exports (stays on this device)</h3>
+      <p>Choose or drag in one or more exports (for example one tracker per fiscal year plus a roll-up). Rows are combined and duplicates are removed. Choose the Excel (<strong>.xlsx</strong>) or <strong>.csv</strong> accident export. The file is read by this browser tab only; nothing is uploaded, stored, or sent anywhere. Close or reload the tab to clear it.</p>
       <p>
-        <label class="btn filebtn">Choose file&hellip;<input type="file" id="fileInput" accept=".xlsx,.xls,.csv"></label>
+        <label class="btn filebtn">Choose files&hellip;<input type="file" id="fileInput" accept=".xlsx,.xls,.csv" multiple></label>
+        <input type="file" id="addInput" accept=".xlsx,.xls,.csv" multiple hidden>
         <a class="btn ghost" href="asmis_template.xlsx" download>&#8681; Blank template (.xlsx)</a>
         <a class="btn ghost" href="asmis_template.csv" download>&#8681; Blank template (.csv)</a>
         <button class="btn ghost" id="btnDemo" type="button">Restore demo data</button>
@@ -100,6 +104,12 @@
     <section class="panel" data-req="date,cls"><h2>Accidents by month and class</h2><div class="chartbox"><canvas id="cMonthly"></canvas></div></section>
     <section class="panel" data-req="date"><h2>Fiscal year comparison (cumulative)</h2><div class="chartbox"><canvas id="cFy"></canvas></div><p class="muted small" id="fyNote"></p></section>
   </div>
+
+  <section class="panel" data-req="date">
+    <h2>Multi-year comparison by fiscal year</h2>
+    <div class="chartbox"><canvas id="cFyMulti"></canvas></div>
+    <p class="muted small" id="fyMultiNote"></p>
+  </section>
 
   <div class="row r3b">
     <section class="panel" data-req="subtype"><h2>Accident subtype</h2><div class="chartbox"><canvas id="cSub"></canvas></div></section>

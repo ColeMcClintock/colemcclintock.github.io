@@ -258,6 +258,57 @@
     if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
   }
 
-  w.ASMIS = { COLUMNS: COLUMNS, REQUIRED: REQUIRED, CLASS_ORDER: CLASS_ORDER, classLabel: classLabel, blankish: blankish, BYKEY: BYKEY, norm: norm, mapHeaders: mapHeaders, parseTable: parseTable, objectsToAoa: objectsToAoa, readFile: readFile,
+  // ---------- de-duplication (across files and within a file) ----------
+  // Normalizes IDs: trim, upper case, no spaces, Excel numbers vs text, leading zeros in numeric segments.
+  function normId(v) {
+    if (v == null) return null;
+    var s = typeof v === "number" ? String(Math.round(v)) : String(v);
+    s = s.replace(/\u00a0/g, " ").trim().toUpperCase().replace(/\s+/g, "");
+    if (!s || blankish(s)) return null;
+    s = s.replace(/^(\d+)\.0+$/, "$1");
+    return s.replace(/(^|[^0-9])0+(?=\d)/g, "$1");
+  }
+  function fingerprint(r) {
+    if (!r.date) return null;
+    return [iso(r.date), r.uic, r.battalion, r.subtype, r.cause].map(function (x) { return String(x == null ? "" : x).trim().toUpperCase(); }).join("|");
+  }
+  var STATUS_RANK = { "Final": 3, "In Review NGB": 2, "Investigation Ongoing": 1 };
+  function filled(r) { var n = 0; for (var i = 0; i < COLUMNS.length; i++) { var v = r[COLUMNS[i][0]]; if (v != null && v !== "" && v !== "Unclassified") n++; } return n; }
+  // true if candidate a (later in load order) should replace b
+  function better(a, b) {
+    var sa = STATUS_RANK[a.status] || 0, sb = STATUS_RANK[b.status] || 0;
+    if (sa !== sb) return sa > sb;
+    var ca = a.compl ? +a.compl : 0, cb = b.compl ? +b.compl : 0;
+    if (ca !== cb) return ca > cb;
+    var fa = filled(a), fb = filled(b);
+    if (fa !== fb) return fa > fb;
+    return true;                                   // tie: most recent file / last row wins
+  }
+  function A_fmt(d) { return d ? fmtDate(d) : ""; }
+  function compatible(a, b, key) { var x = normId(a[key]), y = normId(b[key]); return !x || !y || x === y; }
+  // records must be in priority order (oldest file first, then row order). Returns {records, removed:[{rule,id,kept,dropped}]}
+  function dedupe(records) {
+    var groups = [], idx = { A: {}, C: {}, S: {}, F: {} }, removed = [];
+    records.forEach(function (r) {
+      var ka = normId(r.accident_no), kc = normId(r.ccir), ks = normId(r.asmis), kf = fingerprint(r), g = null, rule = null;
+      if (ka && idx.A[ka] != null) { g = idx.A[ka]; rule = "Accident #"; }
+      else if (kc && idx.C[kc] != null && compatible(groups[idx.C[kc]], r, "accident_no")) { g = idx.C[kc]; rule = "CCIR #"; }
+      else if (ks && idx.S[ks] != null && compatible(groups[idx.S[ks]], r, "accident_no") && compatible(groups[idx.S[ks]], r, "ccir")) { g = idx.S[ks]; rule = "ASMIS #"; }
+      else if (!ka && !kc && !ks && kf && idx.F[kf] != null) { g = idx.F[kf]; rule = "Fingerprint (date + UIC + battalion + subtypes)"; }
+      if (g == null) { g = groups.length; groups.push(r); }
+      else {
+        var cur = groups[g], keep = better(r, cur) ? r : cur, drop = keep === r ? cur : r;
+        groups[g] = keep;
+        removed.push({ rule: rule, id: rule === "Accident #" ? r.accident_no : rule === "CCIR #" ? r.ccir : rule === "ASMIS #" ? r.asmis : (A_fmt(r.date) + " " + (r.uic || "") + " " + (r.subtype || "")), kept: keep, dropped: drop });
+      }
+      if (ka && idx.A[ka] == null) idx.A[ka] = g;
+      if (kc && idx.C[kc] == null) idx.C[kc] = g;
+      if (ks && idx.S[ks] == null) idx.S[ks] = g;
+      if (kf && idx.F[kf] == null) idx.F[kf] = g;
+    });
+    return { records: groups, removed: removed };
+  }
+
+  w.ASMIS = { dedupe: dedupe, normId: normId, COLUMNS: COLUMNS, REQUIRED: REQUIRED, CLASS_ORDER: CLASS_ORDER, classLabel: classLabel, blankish: blankish, BYKEY: BYKEY, norm: norm, mapHeaders: mapHeaders, parseTable: parseTable, objectsToAoa: objectsToAoa, readFile: readFile,
     parseDate: parseDate, parseNum: parseNum, parseYN: parseYN, parseClass: parseClass, parseStatus: parseStatus, parseTime: parseTime, fmtDate: fmtDate, iso: iso };
 })(window);

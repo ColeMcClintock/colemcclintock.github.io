@@ -25,7 +25,7 @@ All dashboards share one fictional unit roster (`data/units.json`): 31 company-l
 Assigned strength, MOS qualification, medical readiness (MRC 1-4), equipment on-hand and operational readiness, individual and collective training, and C1-C4 ratings for May 2025 to Oct 2026. KPI cards with month-over-month change, trends, an SVG map of Iowa, a ranked "units needing attention" table with drivers, upcoming drill/AT events, and a commander's summary. The C1-C4 rating is a simplified illustrative method, not the Army's official method.
 
 ### Safety & Mishaps Dashboard
-Built for the ASMIS accident export (45 columns, same order and headers). Choose the .xlsx or .csv export with **Load ASMIS export**; it is read in the browser only and never uploaded. The loader cleans header spelling (asterisks, spacing, case, common variants), shows `Tech` as **MSC**, reads `DD-Mon-YY` text dates, Excel dates and ISO dates, `$1,234.00` currency, and Y/N fields, then shows a load report (rows loaded, columns matched/missing/extra, rows with unreadable dates). Visuals whose columns are missing are hidden. Blank and formula-only rows are ignored; `-`, `$ -`, `(blank)` and `N/A` in number cells are read as zero/blank, and only genuinely unreadable cells are reported (with examples). Accident Class supports A-D, E (Ground) (`E - grnd`), R (NG) (`R - NG`) and Unclassified (blank). Optional trailing columns `SUB DATE REPORTED`, `Documentation`, `Comments` and `Assigned To` are used when present. After loading, the panel collapses to a one-line status bar (state remembered in the browser); **Presentation mode** hides loading and help panels (Esc exits).
+Built for the ASMIS accident export (45 columns, same order and headers). Choose the .xlsx or .csv export with **Load ASMIS export**; it is read in the browser only and never uploaded. The loader cleans header spelling (asterisks, spacing, case, common variants), shows `Tech` as **MSC**, reads `DD-Mon-YY` text dates, Excel dates and ISO dates, `$1,234.00` currency, and Y/N fields, then shows a load report (rows loaded, columns matched/missing/extra, rows with unreadable dates). You can load several exports at once (for example one tracker per fiscal year plus a roll-up) by choosing or dragging in multiple files, or use **Add more files**; rows are combined and duplicates are removed across and within files (match on Accident #, then CCIR #, then ASMIS # with normalized IDs, or a date + UIC + battalion + subtype fingerprint for rows without IDs; the most complete record is kept: Final over In Review NGB over Investigation Ongoing, then later completion date, then more filled-in fields, then the newest file). The load report lists each file and every duplicate removed. Visuals whose columns are missing are hidden. Blank and formula-only rows are ignored; `-`, `$ -`, `(blank)` and `N/A` in number cells are read as zero/blank, and only genuinely unreadable cells are reported (with examples). Accident Class supports A-D, E (Ground) (`E - grnd`), R (NG) (`R - NG`) and Unclassified (blank). Optional trailing columns `SUB DATE REPORTED`, `Documentation`, `Comments` and `Assigned To` are used when present. After loading, the panel collapses to a one-line status bar (state remembered in the browser); **Presentation mode** hides loading and help panels (Esc exits).
 
 Views: filters (fiscal year/date range, MSC, battalion, UIC, class, status, duty status, on duty, accident and cause subtype); KPIs (total and Class A-D, total/injury cost, material ECOD, days lost, open and overdue investigations, days since last Class A/B, accidents per 1,000 when a `Strength` sheet is present); an investigation tracker sorted by days overdue with red/amber/green status, status pipeline, aging buckets and CSV export; monthly accidents by class; fiscal-year cumulative comparison; subtype, cause, MSC, battalion, duty status, on/off duty and day-of-week charts; a day x time-of-day heat map; HFACS category > failure > subfailure drill-down; cost composition by FY; aggregated demographics with groups under 3 suppressed; a detail drawer with the full record and summary; and an auto-written summary with no personal details.
 
@@ -73,7 +73,19 @@ dashboards/safety/               Safety & Mishaps Dashboard (ASMIS loader, templ
 dashboards/finance/              Status of Funds Dashboard (+ template CSV, data/)
 powerbi-kit/                     Power BI Starter Kit page, files/, and the kit ZIP
 data-generation/                 seeded Python scripts that build all demo data and the kit
+tools/                           build-standalone.py (offline copies in downloads/)
+downloads/                       offline single-file dashboards and ZIPs
 ```
+
+## Offline copies (download and run at work)
+
+`python3 tools/build-standalone.py` builds, from the same source:
+
+- [`downloads/safety-dashboard.html`](downloads/safety-dashboard.html): one self-contained HTML file (CSS, JS, Chart.js, SheetJS, fictional demo data and templates inlined). Double-click to run; no network requests.
+- [`downloads/safety-dashboard.zip`](downloads/safety-dashboard.zip): the single file, a folder version, blank templates, `COLUMN-GUIDE.csv`, and `README - How to use at work.txt`.
+- The same for [`readiness-dashboard`](downloads/readiness-dashboard.html) and [`finance-dashboard`](downloads/finance-dashboard.html).
+
+Re-run it after changing any dashboard file.
 
 ## Regenerate the demo data
 
@@ -81,7 +93,9 @@ data-generation/                 seeded Python scripts that build all demo data 
 python3 data-generation/generate_readiness_data.py
 python3 data-generation/generate_asmis_data.py        # needs openpyxl (pip install openpyxl) for the .xlsx sample/template
 python3 data-generation/generate_finance_data.py
+python3 data-generation/generate_asmis_fy_trackers.py # fictional FY22-FY26 trackers + roll-up for multi-file/de-dup testing
 python3 data-generation/build_powerbi_kit.py      # refreshes the kit CSVs, snippets and ZIP
+python3 tools/build-standalone.py                  # rebuilds downloads/ (offline copies)
 ```
 
 Standard-library Python except `generate_asmis_data.py`, which uses openpyxl to write the Excel sample and template. Each script takes `--seed`; the same seed always produces the same data, and all of them read the shared roster in `data/units.json` (built by `units_roster.py`).

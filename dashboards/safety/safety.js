@@ -17,7 +17,7 @@
   var SUPPRESS = 3;
   var DEMO_KEYS = ["gender", "rank", "age_years", "yos"];
 
-  var S = { recs: [], have: {}, strength: null, asOf: new Date(), source: "demo", fileName: "", showAll: false, hf: [] };
+  var S = { files: [], dupes: [], failed: null, fileOrder: 0, recs: [], have: {}, strength: null, asOf: new Date(), source: "demo", fileName: "", showAll: false, hf: [] };
 
   function d0(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12); }
   function iso(d) { return A.iso(d); }
@@ -34,36 +34,75 @@
   function ragLabel(r) { return { red: "Overdue", amber: "Due within 30 days", green: "On time" }[rag(r)]; }
 
   // ---------- load ----------
-  function loadAoa(aoa, asOf, strength, source, fileName, sheetName) {
-    var res = A.parseTable(aoa, asOf);
-    report(res.report, source, fileName, sheetName, strength);
-    if (res.report.fatal || !res.records.length) return false;
-    S.recs = res.records; S.asOf = asOf; S.strength = strength; S.source = source; S.fileName = fileName || "";
-    S.have = {}; res.report.matched.forEach(function (k) { S.have[k] = res.records.some(function (r) { return r[k] != null && r[k] !== ""; }); });
+  function today() { var t = new Date(); return new Date(t.getFullYear(), t.getMonth(), t.getDate(), 12); }
+  function fyLabel(y) { return "FY" + String(y).slice(2); }
+  function fyRange(recs) { var f = K.uniq(recs.map(function (r) { return r.fy; })).sort(); return f.length ? (f.length > 1 ? fyLabel(f[0]) + "\u2013" + fyLabel(f[f.length - 1]) : fyLabel(f[0])) : ""; }
+
+  // Install a record set and redraw everything.
+  function applyData(recs, strength, asOf, source) {
+    recs.forEach(function (r, i) { r._i = i; });
+    S.recs = recs; S.asOf = asOf; S.strength = strength; S.source = source;
+    S.have = {}; A.COLUMNS.forEach(function (c) { var k = c[0]; S.have[k] = recs.some(function (r) { return r[k] != null && r[k] !== ""; }); });
     S.hf = []; S.showAll = false;
     applyVisibility(); buildFilters(true); render();
-    return true;
+    $("btnAdd").hidden = $("btnClear").hidden = source !== "file";
   }
   function loadDemo() {
-    var D = window.ASMIS_DATA, p = D.exportDate.split("-");
-    loadAoa(A.objectsToAoa(D.headers, D.rows), new Date(+p[0], +p[1] - 1, +p[2], 12), D.strength.map(function (s) { return { msc: s.MSC, battalion: s.Battalion, assigned: s.Assigned }; }), "demo", "", "");
+    var D = window.ASMIS_DATA, p = D.exportDate.split("-"), asOf = new Date(+p[0], +p[1] - 1, +p[2], 12);
+    var res = A.parseTable(A.objectsToAoa(D.headers, D.rows), asOf);
+    S.files = []; S.dupes = [];
+    applyData(res.records, D.strength.map(function (s) { return { msc: s.MSC, battalion: s.Battalion, assigned: s.Assigned }; }), asOf, "demo");
+    renderReport();
   }
+
+  // ---------- multi-file loading ----------
+  function readFiles(list, cb) {
+    var files = Array.prototype.slice.call(list), out = [], i = 0;
+    (function next() {
+      if (i >= files.length) return cb(out);
+      var f = files[i++];
+      setBar("busy", "Reading " + i + " of " + files.length + ": " + f.name + "\u2026", 0);
+      A.readFile(f, function (err, res) {
+        var e = { name: f.name, lastModified: f.lastModified || 0, order: S.fileOrder++ };
+        if (err) e.error = err.message || String(err);
+        else {
+          var p = A.parseTable(res.aoa, today());
+          e.sheetName = res.sheetName; e.rep = p.report; e.records = p.records; e.strength = res.strength;
+          p.records.forEach(function (r) { r._src = f.name; });
+        }
+        out.push(e); setTimeout(next, 0);
+      });
+    })();
+  }
+  function usable(e) { return !e.error && !e.rep.fatal && e.records.length > 0; }
+  function loadFiles(list, append) {
+    if (!list || !list.length) return;
+    readFiles(list, function (entries) {
+      var keepPrev = append && S.source === "file", all = (keepPrev ? S.files : []).concat(entries);
+      if (!all.some(usable)) { // nothing loadable: keep current data, show what went wrong
+        S.failed = entries; renderReport(); setExpanded(true, false); return;
+      }
+      S.failed = null; S.files = all; combine(); renderReport(); setExpanded(false);
+    });
+  }
+  function combine() {
+    var ok = S.files.filter(usable).slice().sort(function (a, b) { return (a.lastModified - b.lastModified) || (a.order - b.order); });
+    var recs = []; ok.forEach(function (e) { for (var i = 0; i < e.records.length; i++) recs.push(e.records[i]); });
+    var d = A.dedupe(recs); S.dupes = d.removed;
+    var str = null; ok.forEach(function (e) { if (e.strength) str = e.strength; });
+    applyData(d.records, str, today(), "file");
+  }
+  function clearFiles() { S.files = []; S.dupes = []; S.failed = null; $("fileInput").value = ""; $("addInput").value = ""; loadDemo(); setExpanded(false); }
+
   function codes(list) { return list.map(function (m) { return "<code>" + esc(m) + "</code>"; }).join(", "); }
-  // Builds the detailed load report and the compact status bar.
-  function report(rep, source, fileName, sheetName, strength) {
-    var el = $("loadReport"), h = [], warns = 0;
-    if (source === "demo") {
-      el.innerHTML = '<p class="muted">Showing the built-in fictional demo data (' + K.fmt(rep.rowsLoaded) + " records in the ASMIS export layout).</p>";
-      setBar("ok", "Demo data (fictional) \u00b7 " + K.fmt(rep.rowsLoaded) + " accidents \u00b7 " + rep.requiredMatched + "/" + rep.totalColumns + " columns", 0);
-      return;
-    }
-    if (rep.fatal) {
-      el.innerHTML = '<p class="err"><strong>Could not load ' + esc(fileName) + ".</strong> " + esc(rep.fatal) + "</p>" + (rep.missing.length ? '<p class="muted">Missing: ' + codes(rep.missing) + "</p>" : "");
-      setBar("err", "Could not load " + fileName + " \u00b7 still showing the previous data", 1); setExpanded(true, false); return;
-    }
+  // Lines for one file's report. Returns {html, warns}
+  function fileLines(e) {
+    var h = [], warns = 0, rep = e.rep;
+    if (e.error) return { html: '<p class="err">Could not read this file: ' + esc(e.error) + "</p>", warns: 1 };
+    if (rep.fatal) return { html: '<p class="err">' + esc(rep.fatal) + "</p>" + (rep.missing.length ? '<p class="muted">Missing: ' + codes(rep.missing) + "</p>" : ""), warns: 1 };
     var ok = rep.requiredMatched === rep.totalColumns;
-    h.push("<p class=\"" + (rep.rowsLoaded ? "ok" : "err") + "\"><strong>Loaded " + K.fmt(rep.rowsLoaded) + " of " + K.fmt(rep.rowsRead) + " rows</strong> from " + esc(fileName) + (sheetName && sheetName !== fileName ? " (sheet &ldquo;" + esc(sheetName) + "&rdquo;, header row " + rep.headerRow + ")" : "") + "." + (rep.blankRows ? ' <span class="muted">' + K.fmt(rep.blankRows) + " blank row(s) ignored.</span>" : "") + "</p>");
-    h.push("<p class=\"" + (ok ? "ok" : "warn") + "\"><strong>" + rep.requiredMatched + " of " + rep.totalColumns + " columns matched.</strong>" + (ok ? "" : " Visuals that need a missing column are hidden.") + "</p>");
+    h.push("<p class=\"" + (rep.rowsLoaded ? "ok" : "err") + "\">Loaded " + K.fmt(rep.rowsLoaded) + " of " + K.fmt(rep.rowsRead) + " rows" + (e.sheetName && e.sheetName !== e.name ? " from sheet &ldquo;" + esc(e.sheetName) + "&rdquo; (header row " + rep.headerRow + ")" : "") + "." + (rep.blankRows ? ' <span class="muted">' + K.fmt(rep.blankRows) + " blank row(s) ignored.</span>" : "") + "</p>");
+    h.push("<p class=\"" + (ok ? "ok" : "warn") + "\">" + rep.requiredMatched + " of " + rep.totalColumns + " columns matched." + (ok ? "" : " Other columns from this file were still loaded.") + "</p>");
     if (!ok) warns++;
     if (rep.missing.length) h.push('<p class="warn">Missing: ' + codes(rep.missing) + "</p>");
     if (rep.optional.length) h.push('<p class="ok">Optional columns used: ' + codes(rep.optional) + "</p>");
@@ -82,14 +121,52 @@
     if (rep.unclassified) h.push('<p class="muted">' + rep.unclassified + " record(s) have no Accident Class yet; shown as Unclassified.</p>");
     if (rep.computedOverdue) h.push('<p class="muted">Days Overdue was blank for ' + rep.computedOverdue + " open record(s); computed from the due date and today.</p>");
     if (rep.computedDue) h.push('<p class="muted">Due Date was blank for ' + rep.computedDue + " record(s); set to accident date + 90 days.</p>");
-    h.push('<p class="muted">' + (strength ? "Strength sheet found: " + strength.length + " battalion(s); rates per 1,000 shown." : "No Strength sheet: rates per 1,000 are not shown.") + "</p>");
+    if (e.strength) h.push('<p class="muted">Strength sheet found: ' + e.strength.length + " battalion(s).</p>");
+    return { html: h.join(""), warns: warns };
+  }
+  function recRef(r) { return esc(r._src || "") + (r._row ? " row " + r._row : "") + " \u00b7 " + esc(r.status || "no status") + (r.compl ? " \u00b7 completed " + fd(r.compl) : ""); }
+  function renderReport() {
+    var el = $("loadReport"), h = [], warns = 0;
+    if (S.failed) {
+      S.failed.forEach(function (e) { h.push('<div class="filerep"><h4>' + esc(e.name) + "</h4>" + fileLines(e).html + "</div>"); });
+      h.push('<p class="muted">Nothing was loaded; the dashboard still shows the previous data.</p>');
+      el.innerHTML = h.join("");
+      setBar("err", "Could not load " + (S.failed.length === 1 ? S.failed[0].name : S.failed.length + " files") + " \u00b7 still showing the previous data", 1);
+      return;
+    }
+    if (S.source === "demo") {
+      el.innerHTML = '<p class="muted">Showing the built-in fictional demo data (' + K.fmt(S.recs.length) + " records in the ASMIS export layout). Choose one or more exports, or drop them here.</p>";
+      setBar("ok", "Demo data (fictional) \u00b7 " + K.fmt(S.recs.length) + " accidents \u00b7 " + fyRange(S.recs), 0);
+      return;
+    }
+    S.files.forEach(function (e) {
+      var fl = fileLines(e); warns += fl.warns;
+      var head = esc(e.name) + (e.rep && !e.rep.fatal && !e.error ? " \u00b7 " + K.fmt(e.rep.rowsLoaded) + " rows \u00b7 " + e.rep.requiredMatched + "/" + e.rep.totalColumns + " columns" : " \u00b7 not loaded") + (fl.warns ? ' \u00b7 <span class="warn">' + fl.warns + " warning" + (fl.warns === 1 ? "" : "s") + "</span>" : "");
+      h.push('<details class="filerep"' + (fl.warns || S.files.length === 1 ? " open" : "") + "><summary>" + head + "</summary>" + fl.html + "</details>");
+    });
+    var nd = S.dupes.length, byRule = {};
+    S.dupes.forEach(function (d) { byRule[d.rule] = (byRule[d.rule] || 0) + 1; });
+    h.push('<div class="combined"><p class="ok"><strong>Combined: ' + K.fmt(S.recs.length) + " accidents from " + S.files.filter(usable).length + " file(s)</strong> \u00b7 " + fyRange(S.recs) + ".</p>");
+    if (nd) {
+      h.push("<p>" + nd + " duplicate record(s) removed (" + Object.keys(byRule).map(function (k) { return "matched on " + esc(k) + ": " + byRule[k]; }).join("; ") + "). Kept the most complete record: Final over In Review NGB over Investigation Ongoing, then later completion date, then more filled-in fields, then the most recently modified file. Examples: " +
+        codes(S.dupes.slice(0, 5).map(function (d) { return String(d.id); })) + '.</p><p><button class="btn ghost sm" id="btnDupes" type="button" aria-expanded="false">Show duplicates removed</button></p><div id="dupeList" hidden></div>');
+    } else h.push('<p class="muted">No duplicate records found across or within files.</p>');
+    h.push('<p class="muted">' + (S.strength ? "Strength sheet in use: " + S.strength.length + " battalion(s); rates per 1,000 shown." : "No Strength sheet: rates per 1,000 are not shown.") + "</p></div>");
     el.innerHTML = h.join("");
-    setBar(rep.rowsLoaded ? (warns ? "warn" : "ok") : "err", fileName + " \u00b7 " + K.fmt(rep.rowsLoaded) + " accidents \u00b7 " + rep.requiredMatched + "/" + rep.totalColumns + " columns", warns);
+    var nf = S.files.length, one = S.files[0];
+    var line = nf === 1 ? one.name + " \u00b7 " + K.fmt(S.recs.length) + " accidents \u00b7 " + (one.rep && !one.rep.fatal ? one.rep.requiredMatched + "/" + one.rep.totalColumns + " columns" : "")
+      : nf + " files \u00b7 " + K.fmt(S.recs.length) + " accidents \u00b7 " + fyRange(S.recs) + (nd ? " \u00b7 " + nd + " duplicates removed" : "");
+    setBar(warns ? "warn" : "ok", line, warns);
+  }
+  function renderDupes() {
+    var el = $("dupeList"); if (!el) return;
+    el.innerHTML = '<div class="tablewrap scrolly"><table class="units"><thead><tr><th>ID</th><th>Matched on</th><th>Kept</th><th>Removed</th></tr></thead><tbody>' +
+      S.dupes.map(function (d) { return "<tr><td>" + esc(String(d.id)) + "</td><td>" + esc(d.rule) + '</td><td class="comment">' + recRef(d.kept) + '</td><td class="comment">' + recRef(d.dropped) + "</td></tr>"; }).join("") + "</tbody></table></div>";
   }
   function setBar(state, textLine, warns) {
     var bar = $("loadBar");
     bar.className = "loadbar no-print chrome" + (state === "ok" ? "" : " " + state);
-    $("lbIcon").innerHTML = state === "ok" ? "&#10003;" : state === "warn" ? "&#9888;" : "&#10005;";
+    $("lbIcon").innerHTML = state === "ok" ? "&#10003;" : state === "warn" ? "&#9888;" : state === "busy" ? "&#8987;" : "&#10005;";
     $("lbText").textContent = textLine;
     var bd = $("lbBadge"); bd.hidden = !warns || state === "err"; bd.textContent = warns + " warning" + (warns === 1 ? "" : "s");
   }
@@ -170,7 +247,7 @@
     var range = rangeOf(f, rows);
     $("asofLabel").textContent = K.fmt(rows.length) + " accident" + (rows.length === 1 ? "" : "s") + " \u00b7 " + (range ? fd(range[0]) + " to " + fd(range[1]) : "no data");
     $("scopeLabel").textContent = scope.length ? scope.join(" \u00b7 ") : "All MSCs";
-    $("sourceLabel").textContent = S.source === "file" ? " \u00b7 Your file: " + S.fileName + " (as of today, " + fd(S.asOf) + ")" : " \u00b7 Demo data as of " + fd(S.asOf);
+    $("sourceLabel").textContent = S.source === "file" ? " \u00b7 Your " + (S.files.length === 1 ? "file: " + S.files[0].name : S.files.length + " files") + " (as of today, " + fd(S.asOf) + ")" : " \u00b7 Demo data as of " + fd(S.asOf);
     kpis(rows, f, range);
     summary(rows, all, f, range);
     tracker(rows);
@@ -252,7 +329,7 @@
     $("tTrack").tHead.innerHTML = '<tr><th>RAG</th><th>CCIR #</th><th class="hide-sm">ASMIS #</th><th>MSC</th><th class="hide-sm">Battalion</th><th>Class</th><th>Status</th><th>Accident date</th><th class="hide-sm">Due date</th><th>Days overdue</th>' + (xa ? "<th>Assigned to</th>" : "") + (xc ? '<th class="hide-sm">Comments</th>' : "") + "</tr>";
     var tb = $("tTrack").tBodies[0];
     tb.innerHTML = o.length ? o.map(function (r) {
-      return '<tr data-i="' + S.recs.indexOf(r) + '"><td><span class="rag ' + rag(r) + '" title="' + ragLabel(r) + '"></span></td><td>' + esc(r.ccir || "") + '</td><td class="hide-sm">' + esc(r.asmis || "") + "</td><td>" + esc(r.msc || "") + '</td><td class="hide-sm">' + esc(r.battalion || "") + "</td><td>" + pill(r.cls) + "</td><td>" + esc(r.status || "") + "</td><td>" + fd(r.date) + '</td><td class="hide-sm">' + fd(r.due) + '</td><td class="' + (r.isOverdue ? "cf-bad" : r.daysToDue <= 30 ? "cf-warn" : "") + '">' + (r.isOverdue ? r.overdue : "\u2014") + "</td>" +
+      return '<tr data-i="' + r._i + '"><td><span class="rag ' + rag(r) + '" title="' + ragLabel(r) + '"></span></td><td>' + esc(r.ccir || "") + '</td><td class="hide-sm">' + esc(r.asmis || "") + "</td><td>" + esc(r.msc || "") + '</td><td class="hide-sm">' + esc(r.battalion || "") + "</td><td>" + pill(r.cls) + "</td><td>" + esc(r.status || "") + "</td><td>" + fd(r.date) + '</td><td class="hide-sm">' + fd(r.due) + '</td><td class="' + (r.isOverdue ? "cf-bad" : r.daysToDue <= 30 ? "cf-warn" : "") + '">' + (r.isOverdue ? r.overdue : "\u2014") + "</td>" +
         (xa ? '<td class="comment">' + esc(r.assigned_to || "") + "</td>" : "") + (xc ? '<td class="comment hide-sm">' + esc(r.comments || "") + "</td>" : "") + "</tr>";
     }).join("") : '<tr><td colspan="' + ncol + '" class="muted">No open investigations in the current selection.</td></tr>';
     var sc = cnt(rows, function (r) { return r.status; }), labels = STATUSES.filter(function (s) { return sc[s]; }).concat(sortKeys(sc).filter(function (s) { return STATUSES.indexOf(s) < 0; }));
@@ -276,14 +353,30 @@
       return { label: c ? A.classLabel(c) : "Accidents", data: months.map(function (mm) { return rows.filter(function (r) { return r.month === mm && (!c || r.cls === c); }).length; }), backgroundColor: c ? clsColor(c) : "#5aa6e6" }; }) },
       options: stacked() });
   }
+  var FY_COLORS = ["#6b7a8f", "#8a9a5b", "#c9a27e", "#b59ad8", "#7fb3d5", "#a9c16a", "#5aa6e6", "#e3b34c"];
   function fyChart(all, f) {
-    var fys = K.uniq(all.map(function (r) { return r.fy; })).sort().slice(-4), cols = ["#8b9bb0", "#a9c16a", "#5aa6e6", "#e3b34c"].slice(-fys.length);
+    var fys = K.uniq(all.map(function (r) { return r.fy; })).sort().slice(-8);
+    var cols = FY_COLORS.slice(-fys.length);
     var cur = S.asOf.getMonth() >= 9 ? S.asOf.getFullYear() + 1 : S.asOf.getFullYear(), curIdx = (S.asOf.getMonth() + 3) % 12;
+    var grid = {}; all.forEach(function (r) { var k = r.fy + ":" + r.fyMonth; grid[k] = (grid[k] || 0) + 1; });
     K.upsert("cFy", { type: "line", data: { labels: FYM, datasets: fys.map(function (y, i) {
-      var acc = 0, data = FYM.map(function (_, mi) { acc += all.filter(function (r) { return r.fy === y && r.fyMonth === mi; }).length; return y === cur && mi > curIdx ? null : acc; });
-      return { label: "FY" + String(y).slice(2), data: data, borderColor: cols[i], backgroundColor: cols[i], borderWidth: y === cur ? 3 : 2, pointRadius: 2, tension: .2, spanGaps: false };
+      var acc = 0, data = FYM.map(function (_, mi) { acc += grid[y + ":" + mi] || 0; return y === cur && mi > curIdx ? null : acc; });
+      return { label: fyLabel(y), data: data, borderColor: cols[i], backgroundColor: cols[i], borderWidth: y === cur ? 3 : 1.6, pointRadius: y === cur ? 2.5 : 1, tension: .2, spanGaps: false };
     }) }, options: (function () { var o = K.chartBase(); o.scales.y.beginAtZero = true; o.scales.y.ticks = { precision: 0 }; return o; })() });
-    $("fyNote").textContent = "Cumulative count by fiscal month (Oct to Sep). Uses every filter except the date range.";
+    $("fyNote").textContent = "Cumulative count by fiscal month (Oct to Sep), up to 8 most recent FYs. Uses every filter except the date range.";
+    // multi-year comparison: accidents by class (bars) and total cost (line)
+    var fysAll = K.uniq(all.map(function (r) { return r.fy; })).sort(), cls = S.have.cls ? clsList() : [null];
+    var byFyCls = {}, costFy = {};
+    all.forEach(function (r) { var k = r.fy + ":" + r.cls; byFyCls[k] = (byFyCls[k] || 0) + 1; costFy[r.fy] = (costFy[r.fy] || 0) + n(r.c_total); });
+    var ds = cls.map(function (c) { return { type: "bar", label: c ? A.classLabel(c) : "Accidents", stack: "acc", yAxisID: "y", backgroundColor: c ? clsColor(c) : "#5aa6e6",
+      data: fysAll.map(function (y) { return c ? (byFyCls[y + ":" + c] || 0) : all.filter(function (r) { return r.fy === y; }).length; }) }; });
+    if (S.have.c_total) ds.forEach(function (d) { d.order = 2; }); ds.push({ type: "line", order: 0, label: "Total accident cost", yAxisID: "y2", data: fysAll.map(function (y) { return costFy[y] || 0; }), borderColor: "#f2f5f9", backgroundColor: "#f2f5f9", borderWidth: 2, pointRadius: 3, tension: .2 });
+    var o = K.chartBase(); o.scales.x.stacked = true; o.scales.y.stacked = true; o.scales.y.ticks = { precision: 0 }; o.scales.y.title = { display: true, text: "Accidents" };
+    if (S.have.c_total) o.scales.y2 = { position: "right", grid: { display: false }, beginAtZero: true, ticks: { callback: function (v) { return K.money(v); } }, title: { display: true, text: "Total cost" } };
+    o.plugins.tooltip.callbacks = { label: function (c) { return c.dataset.label + ": " + (c.dataset.yAxisID === "y2" ? K.money(c.raw) : c.raw); } };
+    K.upsert("cFyMulti", { type: "bar", data: { labels: fysAll.map(fyLabel), datasets: ds }, options: o });
+    var partial = fysAll.indexOf(cur) >= 0 ? " " + fyLabel(cur) + " is the current, partial year." : "";
+    $("fyMultiNote").textContent = fysAll.length + " fiscal year(s). Uses every filter except the date range." + partial;
   }
 
   // ---------- breakdowns ----------
@@ -383,7 +476,7 @@
   function allTable(rows) {
     var show = S.showAll ? rows : rows.slice(0, 25);
     $("tAll").tBodies[0].innerHTML = show.length ? show.map(function (r) {
-      return '<tr data-i="' + S.recs.indexOf(r) + '"><td>' + fd(r.date) + "</td><td>" + esc(r.ccir || r.accident_no || "") + "</td><td>" + esc(r.msc || "") + '</td><td class="hide-sm">' + esc(r.battalion || "") + "</td><td>" + pill(r.cls) + '</td><td class="hide-sm">' + esc(r.subtype || "") + '</td><td class="hide-sm">' + esc(r.cause || "") + '</td><td class="hide-sm">' + esc(r.status || "") + "</td><td>" + (r.c_total != null ? K.money(r.c_total) : "\u2014") + "</td></tr>";
+      return '<tr data-i="' + r._i + '"><td>' + fd(r.date) + "</td><td>" + esc(r.ccir || r.accident_no || "") + "</td><td>" + esc(r.msc || "") + '</td><td class="hide-sm">' + esc(r.battalion || "") + "</td><td>" + pill(r.cls) + '</td><td class="hide-sm">' + esc(r.subtype || "") + '</td><td class="hide-sm">' + esc(r.cause || "") + '</td><td class="hide-sm">' + esc(r.status || "") + "</td><td>" + (r.c_total != null ? K.money(r.c_total) : "\u2014") + "</td></tr>";
     }).join("") : '<tr><td colspan="9" class="muted">No accidents match the current filters.</td></tr>';
     $("btnAll").textContent = S.showAll ? "Show 25" : "Show all " + rows.length;
     $("btnAll").style.display = rows.length > 25 ? "" : "none";
@@ -401,6 +494,7 @@
       if (k === "overdue" && (v === "" || v == null)) v = r.open ? String(r.overdue) + " (computed)" : "";
       return "<dt>" + (k === "msc" ? "MSC" : esc(c[1])) + "</dt><dd>" + (v === "" || v == null ? '<span class="muted">blank</span>' : esc(v)) + "</dd>";
     }).join("") + "</dl>");
+    if (r._src) h.push('<dl style="margin-top:6px"><dt>Source File</dt><dd>' + esc(r._src) + (r._row ? " (row " + r._row + ")" : "") + "</dd></dl>");
     if (DEMO_KEYS.some(function (k) { return S.have[k]; })) h.push('<p class="muted small" style="margin-top:12px">Gender, rank, age and years of service are shown only in aggregate (Demographics panel).</p>');
     $("dBody").innerHTML = h.join("");
     $("drawer").classList.add("open"); $("drawer").setAttribute("aria-hidden", "false"); $("scrim").hidden = false; $("dClose").focus();
@@ -423,15 +517,23 @@
     $("btnPresent").addEventListener("click", function () { setPresent(!document.body.classList.contains("present")); });
     setExpanded(lsGet(), false);
     $("btnPrint").addEventListener("click", function () { window.print(); });
-    $("btnDemo").addEventListener("click", function () { $("fileInput").value = ""; loadDemo(); });
-    $("fileInput").addEventListener("change", function (e) {
-      var file = e.target.files[0]; if (!file) return;
-      $("loadReport").innerHTML = "<p>Reading " + esc(file.name) + "&hellip;</p>";
-      A.readFile(file, function (err, res) {
-        if (err) { $("loadReport").innerHTML = '<p class="err"><strong>Could not read ' + esc(file.name) + ".</strong> " + esc(err.message || err) + "</p>"; setBar("err", "Could not read " + file.name, 1); setExpanded(true, false); return; }
-        var now = new Date(), okLoad = loadAoa(res.aoa, new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12), res.strength, "file", file.name, res.sheetName);
-        if (okLoad) setExpanded(false);
-      });
+    $("btnDemo").addEventListener("click", clearFiles);
+    $("fileInput").addEventListener("change", function (e) { loadFiles(e.target.files, false); });
+    $("addInput").addEventListener("change", function (e) { loadFiles(e.target.files, true); this.value = ""; });
+    $("btnAdd").addEventListener("click", function () { $("addInput").click(); });
+    $("btnClear").addEventListener("click", clearFiles);
+    $("loadReport").addEventListener("click", function (e) {
+      var b = e.target.closest("#btnDupes"); if (!b) return;
+      var l = $("dupeList"), open = l.hidden; if (open && !l.innerHTML) renderDupes();
+      l.hidden = !open; b.textContent = open ? "Hide duplicates removed" : "Show duplicates removed"; b.setAttribute("aria-expanded", String(open));
+    });
+    // drag and drop one or more files onto the load bar / panel (replaces the current files)
+    ["dragover", "drop"].forEach(function (t) { document.addEventListener(t, function (e) { e.preventDefault(); }); });
+    ["loadBar", "loadPanel"].forEach(function (id) {
+      var el = $(id);
+      el.addEventListener("dragover", function (e) { e.preventDefault(); el.classList.add("dragging"); });
+      el.addEventListener("dragleave", function () { el.classList.remove("dragging"); });
+      el.addEventListener("drop", function (e) { e.preventDefault(); el.classList.remove("dragging"); if (e.dataTransfer && e.dataTransfer.files.length) loadFiles(e.dataTransfer.files, e.shiftKey); });
     });
     $("fFy").addEventListener("change", function () { var y = +this.value; if (y) { $("fFrom").value = (y - 1) + "-10-01"; $("fTo").value = y + "-09-30"; } else { $("fFrom").value = ""; $("fTo").value = ""; } S.hf = []; render(); });
     ["fFrom", "fTo"].forEach(function (id) { $(id).addEventListener("change", function () { $("fFy").value = ""; render(); }); });

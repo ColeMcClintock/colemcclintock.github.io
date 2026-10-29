@@ -47,6 +47,9 @@ def main():
         if os.path.exists(os.path.join(DATA, old)): os.remove(os.path.join(DATA, old))
     for dst, s in src.items():
         shutil.copyfile(os.path.join(ROOT, s), os.path.join(DATA, dst))
+    fy_src = os.path.join(ROOT, "dashboards/safety/data/fy-trackers"); fy_dst = os.path.join(DATA, "fy-trackers")
+    if os.path.isdir(fy_src):
+        shutil.rmtree(fy_dst, ignore_errors=True); shutil.copytree(fy_src, fy_dst)
     units = json.load(open(os.path.join(ROOT, "data", "units.json")))["units"]
     with open(os.path.join(DATA, "units.csv"), "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(units[0].keys())); w.writeheader(); w.writerows(units)

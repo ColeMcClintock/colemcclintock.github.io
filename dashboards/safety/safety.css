@@ -55,3 +55,13 @@ body.present #btnPresent{background:var(--olive);color:#0a1424}
 @media(max-width:640px){.kpis.k5{grid-template-columns:repeat(2,1fr)}}
 td.comment{white-space:normal!important;max-width:240px;font-size:.82rem;color:#c7d3e3}
 @media print{.loadbar,.loadpanel{display:none!important}.kpis.k5{grid-template-columns:repeat(5,1fr)}}
+
+.loadbar.busy .lb-icon{color:var(--info,#5aa6e6)}
+.loadbar.dragging,.loadpanel.dragging{outline:2px dashed var(--olive);outline-offset:2px}
+.filerep{border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin:6px 0;background:var(--bg2)}
+.filerep summary{cursor:pointer;font-weight:600}
+.filerep h4{margin:0 0 4px}
+.loadreport .combined{border-top:1px solid var(--line);margin-top:8px;padding-top:6px}
+.loadreport span.warn{color:var(--warn)}
+.loadbar [hidden],.loadpanel [hidden]{display:none!important}
+#loadPanel{grid-template-columns:1fr}

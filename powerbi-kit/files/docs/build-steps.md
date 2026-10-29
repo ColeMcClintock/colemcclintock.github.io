@@ -4,7 +4,7 @@ A `.pbix` file is **not** included: it can only be produced in Power BI Desktop 
 
 ## 0. Prepare (2 min)
 1. Unzip the kit to a short path, for example `C:\PowerBI\portfolio-kit\`.
-2. The `data\` folder holds the fictional CSVs: `units.csv`, `readiness_monthly.csv`, `events.csv`, `asmis_sample.xlsx` / `asmis_sample.csv` (ASMIS export layout, 45 columns), `strength_by_battalion.csv`, `status_of_funds.csv`, `ufr.csv`.
+2. The `data\` folder holds the fictional CSVs: `units.csv`, `readiness_monthly.csv`, `events.csv`, `asmis_sample.xlsx` / `asmis_sample.csv` (ASMIS export layout, 45 columns), `strength_by_battalion.csv`, `fy-trackers\` (fictional FY22-FY26 trackers + a roll-up with overlaps, for the folder query), `status_of_funds.csv`, `ufr.csv`.
 
 ## 1. Theme (1 min)
 View > Themes > Browse for themes > `theme\portfolio-theme-dark.json` (or the light theme for briefings).
@@ -13,7 +13,7 @@ View > Themes > Browse for themes > `theme\portfolio-theme-dark.json` (or the li
 1. Home > Transform data to open Power Query.
 2. Home > Manage Parameters > New: `DataFolder`, Text, value `C:\PowerBI\portfolio-kit\data\` (with the trailing backslash).
 3. New Source > Blank Query > Advanced Editor > paste `m\01_fnLoadCsv.pq` > rename the query `fnLoadCsv`.
-4. Manage Parameters > New: `ASMISFile`, Text, full path to the export (default `C:\PowerBI\portfolio-kit\data\asmis_sample.xlsx`; see `m\19_ASMISFile_parameter.pq`).
+4. Manage Parameters > New: `ASMISFile` (one file) or `ASMISFolder` (a folder of FY trackers, e.g. `data\fy-trackers\`), Text, full path to the export (default `C:\PowerBI\portfolio-kit\data\asmis_sample.xlsx`; see `m\19_ASMISFile_parameter.pq`).
 
 ## 3. Queries (10-15 min)
 For each file below: New Source > Blank Query > Advanced Editor > paste > rename to the name shown.
@@ -25,7 +25,9 @@ For each file below: New Source > Blank Query > Advanced Editor > paste > rename
 | 10_FactReadiness.pq | FactReadiness |
 | 11_FactMedical_unpivot.pq | FactMedical |
 | 12_FactEvents.pq | FactEvents |
-| 20_FactAccident_ASMIS.pq | FactAccident |
+| 18_fnCleanASMIS.pq | fnCleanASMIS (function, create first) |
+| 20_FactAccident_ASMIS.pq | FactAccident (one export) |
+| 22_FactAccident_Folder.pq | FactAccident (instead of 20: a folder of FY trackers + roll-up, de-duplicated) |
 | 21_DimBattalion_Strength.pq | DimBattalion |
 | 30_FactFunds.pq | FactFunds |
 | 31_FactFunds_long_unpivot.pq | FactFunds_long (optional) |

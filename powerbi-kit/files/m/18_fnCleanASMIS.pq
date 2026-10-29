@@ -1,0 +1,163 @@
+// Function: fnCleanASMIS  (Blank Query > Advanced Editor > paste > name it fnCleanASMIS)
+// Cleans one ASMIS export (xlsx or csv): finds the header row in the first non-"Strength" sheet, cleans header
+// names, renames Tech -> MSC, parses DD-Mon-YY dates (en-US) and currency ("$ -" = 0, "(blank)"/N/A = blank),
+// maps Accident Class (A-D, "E - grnd" -> E, "R - NG" -> R, blank -> Unclassified), keeps optional
+// Assigned To / Comments / Documentation / SUB DATE REPORTED, ignores blank formula rows, and adds
+// Due Date (Calc) / Is Open / Days Overdue (Calc) / Fiscal Year / Hour.
+// Used by 20_FactAccident_ASMIS.pq (one file) and 22_FactAccident_Folder.pq (a folder of FY trackers).
+(Content as binary, IsCsv as logical) as table =>
+let
+    // ---- 1. raw table (header row = first row that contains "Accident Date") ----
+    RawGrid = if IsCsv
+        then Csv.Document(Content, [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv])
+        else
+            let
+                Book   = Excel.Workbook(Content, null, true),
+                Sheets = Table.SelectRows(Book, each [Kind] = "Sheet" and Text.Lower(Text.Trim([Name])) <> "strength")
+            in
+                Sheets{0}[Data],
+    RowHasHeader = List.Transform(Table.ToRows(RawGrid),
+        (r) => List.AnyTrue(List.Transform(r, (v) => Text.Lower(Text.Trim(Text.From(v ?? ""))) = "accident date"))),
+    HeaderPos = List.PositionOf(RowHasHeader, true),
+    Promoted  = Table.PromoteHeaders(Table.Skip(RawGrid, if HeaderPos < 0 then 0 else HeaderPos), [PromoteAllScalars = true]),
+    // blank-like values: empty, "-", "$ -", "(blank)", "N/A"
+    IsBlankish = (v) as logical =>
+        v = null or (Value.Is(v, type text) and
+            (let t = Text.Lower(Text.Trim(Text.Replace(v, "#(00A0)", " "))) in
+                t = "" or t = "(blank)" or t = "blank" or t = "n/a" or t = "#n/a" or t = "none"
+                or Text.Remove(t, {"$", " ", "-", "#(2013)", "#(2014)"}) = "" )),
+    NonBlank  = Table.SelectRows(Promoted, each List.NonNullCount(List.Select(Record.FieldValues(_), (v) => not IsBlankish(v))) > 0),
+
+    // ---- 2. header cleanup: strip *, non-breaking spaces, repeated spaces ----
+    CleanName = (h as text) as text =>
+        Text.Combine(List.Select(Text.Split(Text.Trim(Text.Replace(Text.Replace(h, "*", ""), "#(00A0)", " ")), " "), (p) => p <> ""), " "),
+    Cleaned = Table.TransformColumnNames(NonBlank, CleanName),
+
+    // ---- 3. canonical names (case-insensitive) + known variants; Tech -> MSC ----
+    Canonical = {"Accident #", "CCIR #", "ASMIS #", "ASMIS Investigation Created By", "Unit UIC", "MSC", "Battalion",
+        "Accident Class", "Status", "Accident Age", "Accident Date", "Due Date", "Days Overdue", "Compl. Date", "Day of Week",
+        "Time of Day", "On Duty", "Duty Status", "Gender", "Years of Service", "Rank", "Age", "Reported Via", "Injury Y/N",
+        "No Lost Time Injury", "Days Away from Work", "Days Hospitalized", "Days Restricted", "Days Lost",
+        "Days Away from Work Cost", "Days Hospitalized Cost", "Perm. Partial Disability Cost", "Perm. Total Disability Cost",
+        "Fatality Cost", "Injury Cost", "Property Damage Y/N", "Material ECOD", "Total Accident Cost", "Accident Subtype",
+        "Cause Subtype", "Mistake Type", "HFACS Category", "HFACS Failure", "HFACS Subfailure", "Summary"},
+    Variants = {
+        {"sub date reported", "SUB DATE REPORTED"}, {"assigned to", "Assigned To"}, {"comments", "Comments"}, {"documentation", "Documentation"},
+        {"tech", "MSC"}, {"accident number", "Accident #"}, {"ccir", "CCIR #"}, {"ccir number", "CCIR #"},
+        {"asmis", "ASMIS #"}, {"asmis number", "ASMIS #"}, {"uic", "Unit UIC"}, {"class", "Accident Class"},
+        {"compl date", "Compl. Date"}, {"completion date", "Compl. Date"}, {"completed date", "Compl. Date"},
+        {"injury (y/n)", "Injury Y/N"}, {"injury", "Injury Y/N"}, {"property damage", "Property Damage Y/N"},
+        {"property damage (y/n)", "Property Damage Y/N"}, {"ecod", "Material ECOD"}, {"material ecod cost", "Material ECOD"},
+        {"perm partial disability cost", "Perm. Partial Disability Cost"}, {"perm total disability cost", "Perm. Total Disability Cost"},
+        {"hfacs sub failure", "HFACS Subfailure"}, {"hfacs sub-failure", "HFACS Subfailure"}},
+    Lookup = List.Transform(Canonical, (c) => {Text.Lower(c), c}) & Variants,
+    HasMSC = List.Contains(List.Transform(Table.ColumnNames(Cleaned), Text.Lower), "msc"),
+    DropTech = if HasMSC then Table.RemoveColumns(Cleaned, List.Select(Table.ColumnNames(Cleaned), (c) => Text.Lower(c) = "tech")) else Cleaned,
+    Renames = List.Select(
+        List.Transform(Table.ColumnNames(DropTech), (c) =>
+            let hit = List.First(List.Select(Lookup, (p) => p{0} = Text.Lower(c)), null)
+            in if hit = null then null else {c, hit{1}}),
+        (p) => p <> null and p{0} <> p{1}),
+    Renamed0 = Table.RenameColumns(DropTech, Renames, MissingField.Ignore),
+    KeyCols  = List.Intersect({{"Accident #", "CCIR #", "ASMIS #", "Unit UIC", "MSC", "Battalion", "Accident Date", "Status", "Summary",
+                                "Accident Subtype", "Cause Subtype"}, Table.ColumnNames(Renamed0)}),
+    Renamed  = Table.SelectRows(Renamed0, (r) => List.AnyTrue(List.Transform(KeyCols, (c) => not IsBlankish(Record.Field(r, c))))),   // formula rows below the data
+
+    // ---- 4. typing helpers ----
+    MonthNo = [jan = 1, feb = 2, mar = 3, apr = 4, may = 5, jun = 6, jul = 7, aug = 8, sep = 9, oct = 10, nov = 11, dec = 12],
+    fnDate = (v) as nullable date =>
+        if v = null or v = "" then null
+        else if Value.Is(v, type date) then v
+        else if Value.Is(v, type datetime) then Date.From(v)
+        else if Value.Is(v, type number) then Date.From(v)                       // Excel serial
+        else
+            let
+                t = Text.Trim(Text.From(v)),
+                p = Text.Split(Text.Replace(t, " ", "-"), "-"),
+                ddMonYY = try (
+                    let y = Number.From(p{2}),
+                        yyyy = if y < 100 then (if y < 70 then 2000 + y else 1900 + y) else y
+                    in #date(yyyy, Record.Field(MonthNo, Text.Lower(Text.Start(p{1}, 3))), Number.From(p{0}))) otherwise null
+            in
+                if ddMonYY <> null then ddMonYY
+                else try Date.From(Date.FromText(t, [Culture = "en-US"])) otherwise null,
+    fnMoney = (v) as nullable number =>
+        if v = null then null
+        else if Value.Is(v, type number) then v
+        else
+            let t = Text.Remove(Text.Trim(Text.From(v)), {"$", ",", " ", "#(00A0)"}),
+                lower = Text.Lower(t)
+            in
+                if t = "" or lower = "(blank)" or lower = "n/a" or lower = "#n/a" or lower = "none" then null
+                else if Text.Remove(t, {"-", "#(2013)", "#(2014)"}) = "" then 0                  // accounting zero "$ -"
+                else
+                    let neg = Text.StartsWith(t, "(") or Text.StartsWith(t, "-"),
+                        n = try Number.FromText(Text.Remove(t, {"(", ")", "-"}), "en-US") otherwise null   // real text -> null
+                    in if n = null then null else (if neg then -n else n),
+    fnYN = (v) as nullable text =>
+        let t = Text.Upper(Text.Trim(Text.From(v ?? ""))) in
+        if List.Contains({"Y", "YES", "TRUE", "1"}, t) then "Y" else if List.Contains({"N", "NO", "FALSE", "0"}, t) then "N" else null,
+    // Accident Class: A-D, "E - grnd" -> E, "R - NG" -> R, blank -> Unclassified, anything else kept as-is
+    fnClass = (v) as text =>
+        let raw = Text.Trim(Text.From(v ?? "")),
+            t = Text.Remove(Text.Trim(Text.Replace(Text.Upper(raw), "CLASS", "")), {" ", "-", "(", ")"})
+        in
+            if IsBlankish(raw) then "Unclassified"
+            else if List.Contains({"A", "B", "C", "D"}, t) then t
+            else if List.Contains({"E", "EGRND", "EGROUND", "EGRD"}, t) then "E"
+            else if List.Contains({"R", "RNG"}, t) then "R"
+            else if t = "UNCLASSIFIED" then "Unclassified"
+            else raw,
+
+    Present   = (cols as list) => List.Intersect({cols, Table.ColumnNames(Renamed)}),
+    DateCols  = Present({"Accident Date", "Due Date", "Compl. Date", "SUB DATE REPORTED"}),
+    MoneyCols = Present({"Days Away from Work Cost", "Days Hospitalized Cost", "Perm. Partial Disability Cost",
+                         "Perm. Total Disability Cost", "Fatality Cost", "Injury Cost", "Material ECOD", "Total Accident Cost"}),
+    IntCols   = Present({"Accident Age", "Days Overdue", "Years of Service", "Age", "Days Away from Work", "Days Hospitalized",
+                         "Days Restricted", "Days Lost"}),
+    YNCols    = Present({"On Duty", "Injury Y/N", "No Lost Time Injury", "Property Damage Y/N"}),
+    TextCols  = Present({"Accident #", "CCIR #", "ASMIS #", "Unit UIC", "MSC", "Battalion", "Status",
+                         "Duty Status", "Accident Subtype", "Cause Subtype", "HFACS Category", "HFACS Failure", "HFACS Subfailure",
+                         "Assigned To", "Comments", "Documentation"}),          // last three are optional trailing columns
+
+    T1 = Table.TransformColumns(Renamed, List.Transform(DateCols,  (c) => {c, fnDate, type nullable date})),
+    T2 = Table.TransformColumns(T1, List.Transform(MoneyCols, (c) => {c, fnMoney, Currency.Type})),
+    T3 = Table.TransformColumns(T2, List.Transform(IntCols,   (c) => {c, (v) => let n = fnMoney(v) in if n = null then null else Number.Round(n), Int64.Type})),
+    T4 = Table.TransformColumns(T3, List.Transform(YNCols,    (c) => {c, fnYN, type nullable text})),
+    T5 = Table.TransformColumns(T4, List.Transform(TextCols,  (c) => {c, (v) => if IsBlankish(v) then null else Text.Trim(Text.From(v)), type nullable text})),
+    T6a = if List.Contains(Table.ColumnNames(T5), "Accident Class") then Table.TransformColumns(T5, {{"Accident Class", fnClass, type text}}) else T5,
+    T6 = if List.Contains(Table.ColumnNames(T6a), "Accident Class") then
+            Table.AddColumn(T6a, "Class Label", each
+                if List.Contains({"A", "B", "C", "D"}, [Accident Class]) then "Class " & [Accident Class]
+                else if [Accident Class] = "E" then "Class E (Ground)"
+                else if [Accident Class] = "R" then "Class R (NG)"
+                else [Accident Class], type text)
+         else T6a,
+    // Class Label sort: add a "Class Sort" column (A=1 ... R=6, Unclassified=7, other=8) and use Column tools > Sort by column if wanted
+    ValidDate = Table.SelectRows(T6, each [Accident Date] <> null),            // rows with unreadable dates are dropped
+
+    // ---- 5. derived columns (refresh date = today) ----
+    Today   = Date.From(DateTime.LocalNow()),
+    AddDue  = Table.AddColumn(ValidDate, "Due Date (Calc)",
+                each if Record.HasFields(_, "Due Date") and [Due Date] <> null then [Due Date] else Date.AddDays([Accident Date], 90), type date),
+    AddOpen = Table.AddColumn(AddDue, "Is Open",
+                each if Record.HasFields(_, "Status") then [Status] <> "Final" else not (Record.HasFields(_, "Compl. Date") and [Compl. Date] <> null), type logical),
+    AddOver = Table.AddColumn(AddOpen, "Days Overdue (Calc)",
+                each if not [Is Open] then 0
+                     else if Record.HasFields(_, "Days Overdue") and [Days Overdue] <> null then [Days Overdue]
+                     else List.Max({0, Duration.Days(Today - [#"Due Date (Calc)"])}), Int64.Type),
+    AddFY   = Table.AddColumn(AddOver, "Fiscal Year",
+                each "FY" & Text.End(Text.From(if Date.Month([Accident Date]) >= 10 then Date.Year([Accident Date]) + 1 else Date.Year([Accident Date])), 2), type text),
+    fnHour  = (v) as nullable number =>                                          // "0715", "07:15", 715, Excel time
+                if v = null or v = "" then null
+                else if Value.Is(v, type time) then Time.Hour(v)
+                else if Value.Is(v, type datetime) then Time.Hour(DateTime.Time(v))
+                else if Value.Is(v, type number) and v < 1 then Number.RoundDown(v * 24)
+                else try Number.IntegerDivide(Number.From(Text.Start(Text.PadStart(Text.Remove(Text.From(v), {":", " "}), 4, "0"), 4)), 100) otherwise null,
+    AddHour = if Table.HasColumns(AddFY, "Time of Day") then Table.AddColumn(AddFY, "Hour", each fnHour([Time of Day]), Int64.Type) else AddFY
+in
+    AddHour
+
+// Optional privacy step: if demographic columns are not needed, add
+//   Table.RemoveColumns(AddHour, {"Gender", "Rank", "Age", "Years of Service"}, MissingField.Ignore)
+// Keep the report in an approved workspace; ASMIS data is controlled.

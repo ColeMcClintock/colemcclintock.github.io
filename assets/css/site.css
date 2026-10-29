@@ -67,3 +67,5 @@ footer.site .disclaimer{font-size:.78rem;color:#7f90a6;margin-top:6px}
   header.site{position:static}
   body{background:#fff;color:#111}
 }
+html[data-standalone] .dl-only{display:none!important}
+.card p.dl{font-size:.85rem;margin:0 0 10px}.card p.dl span{color:var(--muted)}.card p.dl a{color:var(--olive2)}

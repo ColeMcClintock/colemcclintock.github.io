@@ -157,3 +157,10 @@ RETURN
         & FORMAT ( [Open Investigations], "0" ) & " investigations open, "
         & FORMAT ( [Overdue Investigations], "0" ) & " past the 90-day suspense. "
         & IF ( NOT ISBLANK ( [Days Since Last Class A/B] ), FORMAT ( [Days Since Last Class A/B], "0" ) & " days since the last Class A/B.", "" )
+
+// ---- Multi-file loads (22_FactAccident_Folder.pq) ----
+Source Files Loaded =
+DISTINCTCOUNT ( FactAccident[Source File] )
+
+Accidents per FY (avg) =
+AVERAGEX ( VALUES ( 'Date'[Fiscal Year] ), [Accidents] )
