@@ -18,6 +18,10 @@
 </header>
 
 <main class="wrap dash">
+  <div class="realbanner" id="realBanner" role="alert" hidden>
+    <strong>Contains real data. Keep only in the restricted SharePoint folder. Do not email or post publicly.</strong>
+    <span id="realBannerMeta"></span>
+  </div>
   <div class="titlebar">
     <div>
       <div class="eyebrow">Iowa Army National Guard &middot; State Safety Office</div>
@@ -39,6 +43,7 @@
       <button class="btn sm" id="btnLoad" type="button" title="Choose one or more ASMIS exports (replaces the current files)">Load files</button>
       <button class="btn ghost sm" id="btnAdd" type="button" hidden title="Add more exports to the current set">Add more files</button>
       <button class="btn ghost sm" id="btnClear" type="button" hidden title="Remove loaded files and show the demo data">Clear</button>
+      <button class="btn sm save" id="btnSave" type="button" disabled title="Load your files first">&#128190; Save with data</button>
       <a class="btn ghost sm dl-only" id="btnDownload" href="../../downloads/safety-dashboard.html" download="safety-dashboard.html" title="Single HTML file that runs offline">&#8681; Download dashboard</a>
     </span>
   </div>
@@ -97,7 +102,7 @@
       <div><h3 class="sub">Open investigations by age</h3><div class="chartbox short"><canvas id="cAging"></canvas></div></div>
     </div>
     <p class="muted small">Open = any status other than Final. Due date = accident date + 90 days. Red = overdue; amber = due within 30 days; green = on time. Click a row for the full record.</p>
-    <div class="tablewrap scrolly"><table class="units clickable" id="tTrack"><thead><tr><th>RAG</th><th>CCIR #</th><th class="hide-sm">ASMIS #</th><th>MSC</th><th class="hide-sm">Battalion</th><th>Class</th><th>Status</th><th>Accident date</th><th class="hide-sm">Due date</th><th>Days overdue</th></tr></thead><tbody></tbody></table></div>
+    <div class="tablewrap scrolly"><table class="units clickable" id="tTrack"><thead><tr><th>RAG</th><th>CCIR #</th><th>ASMIS #</th><th>MSC</th><th class="hide-sm">Battalion</th><th>Class</th><th>Status</th><th>Accident date</th><th class="hide-sm">Due date</th><th>Days overdue</th></tr></thead><tbody></tbody></table></div>
   </section>
 
   <div class="row r2">
@@ -158,9 +163,9 @@
   </section>
 
   <section class="panel">
-    <div class="tablehead"><h2>All accidents in selection</h2><div class="no-print"><button class="btn ghost" id="btnAll" type="button">Show all</button></div></div>
-    <p class="muted small">Most recent first. Click a row for the full record, including the summary narrative.</p>
-    <div class="tablewrap"><table class="units clickable" id="tAll"><thead><tr><th>Accident date</th><th>CCIR #</th><th>MSC</th><th class="hide-sm">Battalion</th><th>Class</th><th class="hide-sm">Subtype</th><th class="hide-sm">Cause</th><th class="hide-sm">Status</th><th>Total cost</th></tr></thead><tbody></tbody></table></div>
+    <div class="tablehead"><h2>All accidents in selection</h2><div class="no-print tabletools"><input type="search" id="fSearch" placeholder="Search ASMIS #, CCIR #, Accident #, unit&hellip;" aria-label="Search accidents by ASMIS #, CCIR #, Accident #, UIC, unit or text" autocomplete="off"><button class="btn ghost" id="btnAllCsv" type="button">Export CSV</button><button class="btn ghost" id="btnAll" type="button">Show all</button></div></div>
+    <p class="muted small">Most recent first. Click a row for the full record, including the summary narrative. A dash (&mdash;) means the ID is blank in the export. <span id="searchNote" class="searchnote"></span></p>
+    <div class="tablewrap"><table class="units clickable" id="tAll"><thead><tr><th>Accident date</th><th>CCIR #</th><th>ASMIS #</th><th>MSC</th><th class="hide-sm">Battalion</th><th>Class</th><th class="hide-sm">Subtype</th><th class="hide-sm">Cause</th><th class="hide-sm">Status</th><th>Total cost</th></tr></thead><tbody></tbody></table></div>
   </section>
 
   <details class="panel method chrome">
@@ -192,6 +197,7 @@
   </div>
 </footer>
 
+<script>window.__dashSrc = document.documentElement.outerHTML; /* page markup before any script runs; used by "Save with data" */</script>
 <script src="../../assets/vendor/chart.umd.min.js"></script>
 <script src="../../assets/vendor/xlsx.full.min.js"></script>
 <script src="../../assets/js/dashkit.js"></script>

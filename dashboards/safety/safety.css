@@ -34,7 +34,7 @@ table.clickable tbody tr:hover td{background:rgba(90,166,230,.08)}
 .tablewrap.scrolly thead th{position:sticky;top:0;background:var(--panel);z-index:1}
 @media print{.tablewrap.scrolly{max-height:none;overflow:visible}}
 #tTrack td,#tAll td{white-space:nowrap}
-#tTrack td:nth-child(4),#tTrack td:nth-child(5),#tAll td:nth-child(3),#tAll td:nth-child(4){white-space:normal}
+#tTrack td:nth-child(4),#tTrack td:nth-child(5),#tAll td:nth-child(4),#tAll td:nth-child(5){white-space:normal}
 .drawer:not(.open){display:none}
 .dash .row>*{min-width:0}
 table.heat td{min-width:24px}
@@ -65,3 +65,24 @@ td.comment{white-space:normal!important;max-width:240px;font-size:.82rem;color:#
 .loadreport span.warn{color:var(--warn)}
 .loadbar [hidden],.loadpanel [hidden]{display:none!important}
 #loadPanel{grid-template-columns:1fr}
+
+td.id{font-variant-numeric:tabular-nums;white-space:nowrap}
+.tabletools{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tabletools input[type=search]{background:var(--bg2);border:1px solid var(--line);color:inherit;border-radius:8px;padding:6px 10px;font:inherit;font-size:.88rem;width:260px;max-width:100%}
+.searchnote{color:var(--olive);font-weight:600}
+.drawer p.ids{display:flex;flex-wrap:wrap;gap:6px 16px;margin:0 0 8px;font-size:.9rem}
+.drawer p.ids b{color:#9fb0c6;font-weight:600;margin-right:4px}
+@media(max-width:640px){.tabletools input[type=search]{width:100%}}
+#tTrack td:nth-child(7){white-space:normal;min-width:96px}
+#tTrack td.comment{max-width:200px}
+@media(max-width:1400px){#tTrack th,#tTrack td{padding-left:6px;padding-right:6px}#tTrack td.comment{max-width:170px}}
+
+.realbanner{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;background:#8f1d1d;border:1px solid #e0645c;color:#fff;border-radius:10px;padding:8px 14px;margin:0 0 12px;font-size:.9rem;box-shadow:0 2px 10px rgba(0,0,0,.35)}
+.realbanner[hidden]{display:none}
+.realbanner span{color:#ffd9d6;font-size:.84rem}
+body.present .realbanner{padding:3px 12px;font-size:.78rem;border-radius:6px;margin-bottom:8px}
+body.present .realbanner span{font-size:.74rem}
+.btn.save:disabled{opacity:.45;cursor:not-allowed}
+@media print{.realbanner{display:flex!important;position:static;background:#fff;color:#8f1d1d;border:2px solid #8f1d1d;box-shadow:none}.realbanner span{color:#8f1d1d}}
+body.present .realbanner{flex-wrap:nowrap;white-space:nowrap}
+body.present .realbanner span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}

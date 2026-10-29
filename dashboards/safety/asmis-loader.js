@@ -8,7 +8,7 @@
   var COLUMNS = [
     ["accident_no", "Accident #", "text", ["accident no", "accident number", "accident id", "accident"], "Record ID (detail view)"],
     ["ccir", "CCIR #", "text", ["ccir no", "ccir", "ccir number"], "Tracker, tables, detail"],
-    ["asmis", "ASMIS #", "text", ["asmis no", "asmis", "asmis number", "asmis id"], "Tracker, detail"],
+    ["asmis", "ASMIS #", "text", ["asmis no", "asmis", "asmis number", "asmis id"], "Tracker, accident list, search, detail, CSV export"],
     ["created_by", "ASMIS Investigation Created By", "text", ["asmis investigation created by", "investigation created by", "created by"], "Detail view only"],
     ["uic", "Unit UIC", "text", ["unit uic", "uic", "unit"], "Unit UIC filter"],
     ["msc", "Tech", "text", ["tech", "msc", "major subordinate command"], "Shown as MSC: filter, MSC chart, tracker"],

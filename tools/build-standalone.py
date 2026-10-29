@@ -61,6 +61,7 @@ def build_single(page_dir, html):
     html = re.sub(r'href="([\w\-]+\.(?:csv|xlsx))"([^>]*)', tmpl, html)
     html = common_rewrites(html)
     assert not re.search(r'<(script|link)[^>]+(src|href)="(?!data:|https?://colemcclintock|#)', html), "unresolved local reference"
+    assert ('<script id="safety' + 'Saved"') not in html, "embedded data found in a public build"
     return "<!-- Offline copy built by tools/build-standalone.py from the portfolio source. -->\n" + html
 
 def folder_files(page_dir, html):
@@ -103,15 +104,28 @@ OPEN IT
 
 LOAD YOUR DATA
   - Click "Load files" (or drag files onto the bar) and pick one or more Excel/CSV exports.
-{multi_line}  - Files are read by this browser tab only. Nothing is uploaded, saved, or sent. Close the tab to clear it.
+{multi_line}  - Files are read by this browser tab only. Nothing is uploaded or sent. Close the tab to clear it.
   - The load report ("Show details") lists rows loaded, columns matched, and anything that could not be read.
 
-PRESENTING / PRINTING
+{save_block}PRESENTING / PRINTING
   - "Presentation mode" hides the loading and help panels (Esc exits). "Print / PDF" prints the dashboard.
 
 DATA HANDLING
   Follow your organization's policies for the source data. Do not save real exports into a shared copy of this
   folder. The only thing the page remembers is whether the details panel was open (browser storage).
+"""
+
+SAVE_BLOCK = """SAVE A COPY WITH YOUR DATA BUILT IN (so others can open it without loading files)
+  1. Open {name}.html and load your trackers (all FYs plus the roll-up). Check the load report.
+  2. Click "Save with data". The browser downloads SAFETY-REAL-DATA-<date>.html (for example
+     SAFETY-REAL-DATA-29Oct26.html) with the de-duplicated records inside it. Nothing is uploaded.
+  3. Put that file ONLY in the restricted SharePoint folder (unique permissions, access requests on).
+     It contains real data: do not email it, post it, or put it in GitHub or any shared/public location.
+  4. To update it: open the saved file, click "Load files" (or "Add more files") with the newer exports,
+     then "Save with data" again and replace the old file in the restricted folder.
+  The saved file shows a red "Contains real data" banner with the save date/time and source file names.
+  "Clear" in a saved file goes back to its built-in data; "Restore demo data" shows the fictional data.
+
 """
 
 def main():
@@ -135,7 +149,7 @@ def main():
                 z.write(os.path.join(page_dir, t), f"{name}/folder-version/{t}")   # keeps the in-page template links working
             if is_safety:
                 z.writestr(f"{name}/COLUMN-GUIDE.csv", column_guide(page_dir))
-            z.writestr(f"{name}/README - How to use at work.txt", README.format(
+            z.writestr(f"{name}/README - How to use at work.txt", README.replace("{save_block}", SAVE_BLOCK.replace("{name}", name) if is_safety else "").format(
                 title=cfg["title"], name=name,
                 guide_line="  COLUMN-GUIDE.csv     Every column, whether it is required, and what it drives.\n" if is_safety else "",
                 multi_line="  - You can load several files at once (e.g. one tracker per fiscal year plus a roll-up).\n    Rows are combined and duplicate accidents are removed; \"Show duplicates removed\" lists them.\n" if is_safety else ""))

@@ -52,6 +52,8 @@
     S.hf = []; S.showAll = false;
     applyVisibility(); buildFilters(true); render();
     $("btnAdd").hidden = $("btnClear").hidden = source !== "file";
+    var sv = $("btnSave"); sv.disabled = source !== "file";
+    sv.title = source === "file" ? "Download one offline HTML file with the " + recs.length + " loaded records built in (real data: handle per policy)" : "Load your files first";
   }
   function loadDemo() {
     var D = window.ASMIS_DATA, p = D.exportDate.split("-"), asOf = new Date(+p[0], +p[1] - 1, +p[2], 12);
@@ -98,7 +100,76 @@
     var str = null; ok.forEach(function (e) { if (e.strength) str = e.strength; });
     applyData(d.records, str, today(), "file");
   }
-  function clearFiles() { S.files = []; S.dupes = []; S.failed = null; $("fileInput").value = ""; $("addInput").value = ""; loadDemo(); setExpanded(false); }
+  function clearFiles() { S.files = []; S.dupes = []; S.failed = null; $("fileInput").value = ""; $("addInput").value = ""; if (!(SAVED && loadSaved())) loadDemo(); setExpanded(false); }
+  function showDemo() { S.files = []; S.dupes = []; S.failed = null; $("fileInput").value = ""; $("addInput").value = ""; loadDemo(); setExpanded(false); }
+
+  // ---------- save with data (one self-contained HTML file with the loaded records embedded) ----------
+  var SAVED_ID = "safety" + "Saved", SAVED = null, MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function readSaved() {
+    var el = document.getElementById(SAVED_ID); if (!el) return null;
+    try { var o = JSON.parse(el.textContent); return o && o.v === 1 && o.rows ? o : null; } catch (e) { return null; }
+  }
+  function fmtStamp(d) { return fd(d) + " " + ("0" + d.getHours()).slice(-2) + ("0" + d.getMinutes()).slice(-2); }
+  function srcNames() { // original source file names behind the current data
+    var out = []; S.files.filter(usable).forEach(function (e) { (e.srcNames || [e.name]).forEach(function (nm) { if (out.indexOf(nm) < 0) out.push(nm); }); }); return out;
+  }
+  function loadSaved() {
+    var D = SAVED, res = A.parseTable([D.headers].concat(D.rows), today());
+    res.records.forEach(function (r, i) { r._src = D.src[i] || ""; r._row = D.srcRow[i] || null; });
+    var e = { name: "Saved data (" + D.files.length + " source file" + (D.files.length === 1 ? "" : "s") + ")", srcNames: D.files, lastModified: 0, order: S.fileOrder++, rep: res.report, records: res.records, strength: D.strength, embedded: true };
+    S.files = [e]; S.dupes = []; S.failed = null;
+    applyData(res.records, D.strength, today(), "file"); renderReport();
+    return true;
+  }
+  function showBanner() {
+    if (!SAVED) return;
+    var sa = new Date(SAVED.savedAt);
+    $("realBanner").hidden = false;
+    $("realBannerMeta").textContent = "Data as of " + fmtStamp(sa) + " \u00b7 " + K.fmt(SAVED.rows.length) + " records from " + SAVED.files.length + " source file" + (SAVED.files.length === 1 ? "" : "s") + ": " + SAVED.files.join(", ");
+    $("realBannerMeta").title = SAVED.files.join("\n");
+  }
+  function safeJson(o) { // JSON that cannot end its script element or break the HTML parser
+    return JSON.stringify(o).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+  }
+  function snapshot() {
+    var cols = A.COLUMNS, now = new Date();
+    return { v: 1, savedAt: now.toISOString(), files: srcNames(), dupesRemoved: S.dupes.length,
+      headers: cols.map(function (c) { return c[1]; }),
+      rows: S.recs.map(function (r) { return cols.map(function (c) { var t = r["_t_" + c[0]]; return t == null ? "" : String(t); }); }),
+      src: S.recs.map(function (r) { return r._src || ""; }), srcRow: S.recs.map(function (r) { return r._row || null; }),
+      strength: S.strength || null };
+  }
+  // Pristine page source: captured before any script ran (inline single-file build), else fetched from the site.
+  function pageSource(cb) {
+    var cap = window.__dashSrc, scripts = [], seen = false, external = false;
+    Array.prototype.forEach.call(document.scripts, function (sc) {
+      if (sc.id === SAVED_ID) return;
+      if (seen) { scripts.push(sc.outerHTML); if (sc.src) external = true; }
+      else if (sc.textContent.indexOf("__dashSrc") >= 0) seen = true;
+    });
+    if (cap && seen && !external) return cb(null, "<!doctype html>\n" + cap.replace(/<\/body>\s*<\/html>\s*$/i, "") + "\n" + scripts.join("\n") + "\n</body>\n</html>\n");
+    if (/^https?:$/.test(location.protocol)) {
+      var url = new URL("../../downloads/safety-dashboard.html", location.href).href;
+      return fetch(url, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
+        .then(function (t) { cb(null, t); }, function (e) { cb(e); });
+    }
+    cb(new Error("This copy loads its scripts from separate files. Open the single-file safety-dashboard.html to save with data."));
+  }
+  function saveWithData() {
+    if (S.source !== "file") return;
+    var btn = $("btnSave"), label = btn.innerHTML; btn.disabled = true; btn.textContent = "Saving\u2026";
+    pageSource(function (err, html) {
+      btn.innerHTML = label; btn.disabled = S.source !== "file";
+      if (err) { alert("Could not build the saved file: " + (err.message || err)); return; }
+      var snap = snapshot(), tag = "<script id=\"" + SAVED_ID + "\" type=\"application/json\">" + safeJson(snap) + "</scr" + "ipt>\n";
+      var m, i = -1, re = /<\/body\s*>/gi; while ((m = re.exec(html))) i = m.index; // last </body> (no toLowerCase: it can change string length)
+      if (i < 0) { alert("Could not build the saved file."); return; }
+      html = html.slice(0, i) + tag + html.slice(i);
+      var d = new Date(snap.savedAt), name = "SAFETY-REAL-DATA-" + ("0" + d.getDate()).slice(-2) + MON[d.getMonth()] + String(d.getFullYear()).slice(2) + ".html";
+      var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" })); a.download = name;
+      document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    });
+  }
 
   function codes(list) { return list.map(function (m) { return "<code>" + esc(m) + "</code>"; }).join(", "); }
   // Lines for one file's report. Returns {html, warns}
@@ -130,6 +201,8 @@
     if (e.strength) h.push('<p class="muted">Strength sheet found: ' + e.strength.length + " battalion(s).</p>");
     return { html: h.join(""), warns: warns };
   }
+  function idv(v) { return v ? esc(v) : '<span class="muted" title="Blank in the export">\u2014</span>'; }
+  function idt(v) { return v ? String(v) : "\u2014"; }
   function recRef(r) { return esc(r._src || "") + (r._row ? " row " + r._row : "") + " \u00b7 " + esc(r.status || "no status") + (r.compl ? " \u00b7 completed " + fd(r.compl) : ""); }
   function renderReport() {
     var el = $("loadReport"), h = [], warns = 0;
@@ -166,8 +239,9 @@
   }
   function renderDupes() {
     var el = $("dupeList"); if (!el) return;
-    el.innerHTML = '<div class="tablewrap scrolly"><table class="units"><thead><tr><th>ID</th><th>Matched on</th><th>Kept</th><th>Removed</th></tr></thead><tbody>' +
-      S.dupes.map(function (d) { return "<tr><td>" + esc(String(d.id)) + "</td><td>" + esc(d.rule) + '</td><td class="comment">' + recRef(d.kept) + '</td><td class="comment">' + recRef(d.dropped) + "</td></tr>"; }).join("") + "</tbody></table></div>";
+    el.innerHTML = '<div class="tablewrap scrolly"><table class="units"><thead><tr><th>ID</th><th>Matched on</th><th>CCIR #</th><th>ASMIS #</th><th>Kept</th><th>Removed</th></tr></thead><tbody>' +
+      S.dupes.map(function (d) { var k = d.kept, x = d.dropped, two = function (a, b) { return a && b && A.normId(a) !== A.normId(b) ? esc(a) + ' <span class="muted">(removed: ' + esc(b) + ")</span>" : idv(a || b); };
+        return "<tr><td>" + esc(String(d.id)) + "</td><td>" + esc(d.rule) + '</td><td class="id">' + two(k.ccir, x.ccir) + '</td><td class="id">' + two(k.asmis, x.asmis) + '</td><td class="comment">' + recRef(d.kept) + '</td><td class="comment">' + recRef(d.dropped) + "</td></tr>"; }).join("") + "</tbody></table></div>";
   }
   function setBar(state, textLine, warns) {
     var bar = $("loadBar");
@@ -332,10 +406,10 @@
   function trackRows(rows) { return rows.filter(function (r) { return r.open; }).sort(function (a, b) { return b.overdue - a.overdue || a.due - b.due; }); }
   function tracker(rows) {
     var o = trackRows(rows), xa = S.have.assigned_to, xc = S.have.comments, ncol = 10 + (xa ? 1 : 0) + (xc ? 1 : 0);
-    $("tTrack").tHead.innerHTML = '<tr><th>RAG</th><th>CCIR #</th><th class="hide-sm">ASMIS #</th><th>MSC</th><th class="hide-sm">Battalion</th><th>Class</th><th>Status</th><th>Accident date</th><th class="hide-sm">Due date</th><th>Days overdue</th>' + (xa ? "<th>Assigned to</th>" : "") + (xc ? '<th class="hide-sm">Comments</th>' : "") + "</tr>";
+    $("tTrack").tHead.innerHTML = '<tr><th>RAG</th><th>CCIR #</th><th>ASMIS #</th><th>MSC</th><th class="hide-sm">Battalion</th><th>Class</th><th>Status</th><th>Accident date</th><th class="hide-sm">Due date</th><th>Days overdue</th>' + (xa ? "<th>Assigned to</th>" : "") + (xc ? '<th class="hide-sm">Comments</th>' : "") + "</tr>";
     var tb = $("tTrack").tBodies[0];
     tb.innerHTML = o.length ? o.map(function (r) {
-      return '<tr data-i="' + r._i + '"><td><span class="rag ' + rag(r) + '" title="' + ragLabel(r) + '"></span></td><td>' + esc(r.ccir || "") + '</td><td class="hide-sm">' + esc(r.asmis || "") + "</td><td>" + esc(r.msc || "") + '</td><td class="hide-sm">' + esc(r.battalion || "") + "</td><td>" + pill(r.cls) + "</td><td>" + esc(r.status || "") + "</td><td>" + fd(r.date) + '</td><td class="hide-sm">' + fd(r.due) + '</td><td class="' + (r.isOverdue ? "cf-bad" : r.daysToDue <= 30 ? "cf-warn" : "") + '">' + (r.isOverdue ? r.overdue : "\u2014") + "</td>" +
+      return '<tr data-i="' + r._i + '"><td><span class="rag ' + rag(r) + '" title="' + ragLabel(r) + '"></span></td><td>' + idv(r.ccir) + '</td><td class="id">' + idv(r.asmis) + "</td><td>" + esc(r.msc || "") + '</td><td class="hide-sm">' + esc(r.battalion || "") + "</td><td>" + pill(r.cls) + "</td><td>" + esc(r.status || "") + "</td><td>" + fd(r.date) + '</td><td class="hide-sm">' + fd(r.due) + '</td><td class="' + (r.isOverdue ? "cf-bad" : r.daysToDue <= 30 ? "cf-warn" : "") + '">' + (r.isOverdue ? r.overdue : "\u2014") + "</td>" +
         (xa ? '<td class="comment">' + esc(r.assigned_to || "") + "</td>" : "") + (xc ? '<td class="comment hide-sm">' + esc(r.comments || "") + "</td>" : "") + "</tr>";
     }).join("") : '<tr><td colspan="' + ncol + '" class="muted">No open investigations in the current selection.</td></tr>';
     var sc = cnt(rows, function (r) { return r.status; }), labels = STATUSES.filter(function (s) { return sc[s]; }).concat(sortKeys(sc).filter(function (s) { return STATUSES.indexOf(s) < 0; }));
@@ -479,18 +553,29 @@
   }
 
   // ---------- tables / drawer ----------
+  function idMatch(r, q) {
+    var raw = q.toLowerCase(), al = function (v) { return String(v).toUpperCase().replace(/[^A-Z0-9]/g, ""); }, nq = al(q);
+    if (nq && [r.asmis, r.ccir, r.accident_no].some(function (v) { return v && al(v).indexOf(nq) >= 0; })) return true;
+    return [r.asmis, r.ccir, r.accident_no, r.uic, r.msc, r.battalion, r.subtype, r.cause, r.status, r.summary].some(function (v) { return v && String(v).toLowerCase().indexOf(raw) >= 0; });
+  }
   function allTable(rows) {
+    S.allRows = rows;
+    var q = ($("fSearch").value || "").trim();
+    if (q) rows = rows.filter(function (r) { return idMatch(r, q); });
+    S.allShown = rows;
+    $("searchNote").textContent = q ? K.fmt(rows.length) + " of " + K.fmt(S.allRows.length) + " match \u201c" + q + "\u201d" : "";
     var show = S.showAll ? rows : rows.slice(0, 25);
     $("tAll").tBodies[0].innerHTML = show.length ? show.map(function (r) {
-      return '<tr data-i="' + r._i + '"><td>' + fd(r.date) + "</td><td>" + esc(r.ccir || r.accident_no || "") + "</td><td>" + esc(r.msc || "") + '</td><td class="hide-sm">' + esc(r.battalion || "") + "</td><td>" + pill(r.cls) + '</td><td class="hide-sm">' + esc(r.subtype || "") + '</td><td class="hide-sm">' + esc(r.cause || "") + '</td><td class="hide-sm">' + esc(r.status || "") + "</td><td>" + (r.c_total != null ? K.money(r.c_total) : "\u2014") + "</td></tr>";
-    }).join("") : '<tr><td colspan="9" class="muted">No accidents match the current filters.</td></tr>';
+      return '<tr data-i="' + r._i + '"><td>' + fd(r.date) + "</td><td>" + idv(r.ccir || r.accident_no) + '</td><td class="id">' + idv(r.asmis) + "</td><td>" + esc(r.msc || "") + '</td><td class="hide-sm">' + esc(r.battalion || "") + "</td><td>" + pill(r.cls) + '</td><td class="hide-sm">' + esc(r.subtype || "") + '</td><td class="hide-sm">' + esc(r.cause || "") + '</td><td class="hide-sm">' + esc(r.status || "") + "</td><td>" + (r.c_total != null ? K.money(r.c_total) : "\u2014") + "</td></tr>";
+    }).join("") : '<tr><td colspan="10" class="muted">' + (q ? "No accidents match the search in the current selection." : "No accidents match the current filters.") + "</td></tr>";
     $("btnAll").textContent = S.showAll ? "Show 25" : "Show all " + rows.length;
     $("btnAll").style.display = rows.length > 25 ? "" : "none";
   }
   function openDrawer(r) {
-    $("dTitle").innerHTML = (r.ccir ? "CCIR " + esc(r.ccir) : "Accident " + esc(r.accident_no || "")) + " " + pill(r.cls);
+    $("dTitle").innerHTML = (r.ccir ? "CCIR " + esc(r.ccir) : r.asmis ? "ASMIS " + esc(r.asmis) : "Accident " + esc(r.accident_no || "")) + " " + pill(r.cls);
     var dEl = $("drawer"); dEl.setAttribute("aria-label", "Accident detail");
     var h = [];
+    h.push('<p class="ids"><span><b>ASMIS #</b> ' + idv(r.asmis) + "</span><span><b>CCIR #</b> " + idv(r.ccir) + "</span><span><b>Accident #</b> " + idv(r.accident_no) + "</span></p>");
     h.push('<p><span class="rag ' + (r.open ? rag(r) : "green") + '"></span> ' + esc(r.status || "") + (r.open ? " \u00b7 " + ragLabel(r) + (r.isOverdue ? " (" + r.overdue + " days)" : "") : "") + "</p>");
     if (S.have.summary) h.push('<div class="narr">' + esc(r.summary || "No summary provided.") + "</div>");
     h.push("<dl>" + A.COLUMNS.filter(function (c) { return c[0] !== "summary" && DEMO_KEYS.indexOf(c[0]) < 0 && (c[0] in r) && r[c[0]] !== undefined && S.have.hasOwnProperty(c[0]); }).map(function (c) {
@@ -514,6 +599,12 @@
       o.map(function (r) { return [ragLabel(r), r.ccir || "", r.asmis || "", r.msc || "", r.battalion || "", r.uic || "", A.classLabel(r.cls), r.status || "", fd(r.date), fd(r.due), r.isOverdue ? r.overdue : 0, r.acc_age].concat(xa ? [r.assigned_to || ""] : [], xc ? [r.comments || ""] : []); }));
   }
 
+  function exportAllCsv() {
+    var o = S.allShown || [];
+    K.downloadCsv("accidents_" + iso(new Date()) + ".csv", ["Accident Date", "Accident #", "CCIR #", "ASMIS #", "MSC", "Battalion", "Unit UIC", "Accident Class", "Subtype", "Cause", "Status", "Total Cost"],
+      o.map(function (r) { return [fd(r.date), r.accident_no || "", r.ccir || "", r.asmis || "", r.msc || "", r.battalion || "", r.uic || "", A.classLabel(r.cls), r.subtype || "", r.cause || "", r.status || "", r.c_total != null ? r.c_total : ""]; }));
+  }
+
   // ---------- wiring ----------
   function init() {
     K.initCharts();
@@ -523,7 +614,8 @@
     $("btnPresent").addEventListener("click", function () { setPresent(!document.body.classList.contains("present")); });
     setExpanded(lsGet(), false);
     $("btnPrint").addEventListener("click", function () { window.print(); });
-    $("btnDemo").addEventListener("click", clearFiles);
+    $("btnDemo").addEventListener("click", showDemo);
+    $("btnSave").addEventListener("click", saveWithData);
     $("fileInput").addEventListener("change", function (e) { loadFiles(e.target.files, false); });
     $("addInput").addEventListener("change", function (e) { loadFiles(e.target.files, true); this.value = ""; });
     $("btnAdd").addEventListener("click", function () { $("addInput").click(); });
@@ -548,6 +640,9 @@
     ["fUic", "fClass", "fStatus", "fDuty", "fOn", "fSub", "fCause"].forEach(function (id) { $(id).addEventListener("change", function () { S.hf = []; render(); }); });
     $("btnReset").addEventListener("click", function () { S.hf = []; buildFilters(true); ["fFy", "fClass", "fStatus", "fDuty", "fOn", "fSub", "fCause"].forEach(function (id) { $(id).value = ""; }); render(); });
     $("btnCsv").addEventListener("click", exportCsv);
+    $("btnAllCsv").addEventListener("click", exportAllCsv);
+    var st; $("fSearch").addEventListener("input", function () { clearTimeout(st); st = setTimeout(function () { allTable(S.allRows || []); }, 120); });
+    $("fSearch").addEventListener("keydown", function (e) { if (e.key === "Escape" && this.value) { e.stopPropagation(); this.value = ""; allTable(S.allRows || []); } });
     $("btnAll").addEventListener("click", function () { S.showAll = !S.showAll; allTable(currentRows().sort(function (a, b) { return b.date - a.date; })); });
     ["tTrack", "tAll"].forEach(function (id) { $(id).addEventListener("click", function (e) { var tr = e.target.closest("tr[data-i]"); if (tr) openDrawer(S.recs[+tr.getAttribute("data-i")]); }); });
     $("hfCrumbs").addEventListener("click", function (e) { var b = e.target.closest("button[data-d]"); if (!b) return; S.hf = S.hf.slice(0, +b.getAttribute("data-d")); hfacs(currentRows()); });
@@ -557,7 +652,8 @@
       if ($("drawer").classList.contains("open")) closeDrawer();
       else if (document.body.classList.contains("present")) setPresent(false);
     });
-    loadDemo();
+    SAVED = readSaved();
+    if (SAVED) { showBanner(); document.title = "REAL DATA \u00b7 " + document.title; loadSaved(); } else loadDemo();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 })();

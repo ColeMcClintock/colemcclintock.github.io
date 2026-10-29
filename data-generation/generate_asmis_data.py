@@ -199,7 +199,9 @@ def main():
         out.append({
             "Accident #": f"{fy2(d):02d}{i:05d}",
             "CCIR #": ccir,
-            "ASMIS #": f"{d.year}{rng.randint(100000, 999999)}",
+            # newest open cases often have no ASMIS # yet (entered once the investigation is created);
+            # the draw is always made so the rest of the seeded data is unchanged
+            "ASMIS #": (lambda n: "" if status == "Investigation Ongoing" and age_days <= 45 and i % 2 == 0 else n)(f"{d.year}{rng.randint(100000, 999999)}"),
             "ASMIS Investigation Created By": rng.choice(CREATORS),
             "Unit UIC": u["uic"], "Tech": u["brigade"], "Battalion": u["battalion"],
             "Accident Class": r["_cls"], "Status": status, "Accident Age": age_days,

@@ -1,2 +1,6 @@
 __pycache__/
 .DS_Store
+# Never commit real data (files saved with "Save with data" are named SAFETY-REAL-DATA-*.html)
+*REAL-DATA*
+*real-data*
+*Real-Data*

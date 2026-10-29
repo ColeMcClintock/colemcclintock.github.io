@@ -59,6 +59,19 @@ python3 -m http.server 8000
 
 Follow your organization's policies before loading any official or sensitive data.
 
+### Saved copies with real data (Safety dashboard) and the commit guard
+
+The Safety dashboard has **Save with data**: after you load your own exports it downloads `SAFETY-REAL-DATA-<DDMonYY>.html`, a single offline file with the de-duplicated records built in and a red "Contains real data" banner. Keep those files only in a restricted location (for example a SharePoint folder with unique permissions). **They must never be committed here.** Two guards are in place:
+
+- `.gitignore` ignores `*REAL-DATA*` and `*real-data*`.
+- `tools/pre-commit-guard.sh` rejects any staged file with `real-data` in its name (any case) or containing a saved-data block. Install it in every clone:
+
+  ```sh
+  ln -sf ../../tools/pre-commit-guard.sh .git/hooks/pre-commit
+  ```
+
+`tools/build-standalone.py` also refuses to build if a public download would contain embedded data. The public site only ever ships the fictional demo data.
+
 ## Repository layout
 
 ```
