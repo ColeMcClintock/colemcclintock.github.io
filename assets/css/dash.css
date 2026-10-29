@@ -3,7 +3,7 @@
 .titlebar h1{margin:.1em 0;font-size:clamp(1.5rem,3vw,2.2rem)}
 .asof{color:var(--muted);font-size:.95rem}
 .actions{display:flex;gap:10px;flex-wrap:wrap}
-.filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:16px;position:sticky;top:63px;z-index:10}
+.filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:16px}
 .filters label{display:flex;flex-direction:column;font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;gap:4px;flex:1;min-width:150px}
 .filters select{background:var(--bg2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:.95rem;font-family:inherit}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
@@ -61,7 +61,7 @@ details.method{margin-bottom:10px}
 @media(max-width:1100px){.row.r3{grid-template-columns:1fr 1fr}.row.r3>section:first-child{grid-column:1/-1}}
 @media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}.row.r2,.row.r3{grid-template-columns:1fr}.loadpanel{grid-template-columns:1fr}}
 @media(max-width:640px){
-  .filters{position:static;padding:10px;gap:8px}
+  .filters{padding:10px;gap:8px}
   .filters label{min-width:calc(50% - 8px)}
   .kpi .val{font-size:1.5rem}
   .chartbox{height:240px}
