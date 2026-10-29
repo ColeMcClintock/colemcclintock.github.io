@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Status of Funds Dashboard | Iowa Army National Guard | Cole McClintock</title>
+<link rel="icon" href="../../assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/css/site.css">
+<link rel="stylesheet" href="../../assets/css/dash.css">
+</head>
+<body>
+<header class="site">
+  <div class="wrap topnav">
+    <a class="brand" href="../../index.html"><span class="mark">CM</span><span>Cole McClintock</span></a>
+    <nav><a href="../../index.html#projects">&larr; All projects</a></nav>
+  </div>
+</header>
+
+<main class="wrap dash">
+  <div class="titlebar">
+    <div>
+      <div class="eyebrow">Iowa Army National Guard &middot; Resource Management</div>
+      <h1>Status of Funds Dashboard</h1>
+      <div class="asof"><strong id="asofLabel">&mdash;</strong> &middot; <span id="scopeLabel">All funds</span><span id="sourceLabel"></span></div>
+    </div>
+    <div class="actions no-print">
+      <button class="btn ghost" id="btnLoad" type="button">Load your own data</button>
+      <button class="btn ghost" id="btnPrint" type="button">Print / PDF</button>
+    </div>
+  </div>
+
+  <div class="loadpanel no-print" id="loadPanel" hidden>
+    <div>
+      <h3>Load your own data (stays on this device)</h3>
+      <p>Choose a <strong>.csv</strong> or <strong>.xlsx</strong> status-of-funds extract that follows the column template (one row per program, organization and month). Nothing is uploaded.</p>
+      <p><a class="btn" href="finance_template.csv" download>&#8681; Download template CSV</a>
+         <label class="btn ghost filebtn">Choose file&hellip;<input type="file" id="fileInput" accept=".csv,.xlsx,.xls"></label>
+         <button class="btn ghost" id="btnDemo" type="button">Restore demo data</button></p>
+      <div id="loadMsg" class="loadmsg" role="status"></div>
+    </div>
+    <details>
+      <summary>Column template</summary>
+      <table class="dict"><thead><tr><th>Column</th><th>Required</th><th>Description</th></tr></thead><tbody id="dictBody"></tbody></table>
+      <p class="muted small">Monthly amounts are for that month only (not running totals). Enter <code>afp</code> once per program, organization and fiscal year. An optional sheet named <code>ufr</code> (ufr_id, title, program_code, organization, brigade, amount, priority, status, fy) fills the unfunded requirements table.</p>
+    </details>
+  </div>
+
+  <div class="filters no-print" role="group" aria-label="Filters">
+    <label>Fiscal year<select id="fFy"></select></label>
+    <label>As of month<select id="fMonth"></select></label>
+    <label>Appropriation<select id="fAppn"></select></label>
+    <label>Brigade<select id="fBrigade"></select></label>
+    <label>Organization<select id="fOrg"></select></label>
+    <button class="btn ghost" id="btnReset" type="button">Reset</button>
+  </div>
+
+  <section class="kpis k6" id="kpis" aria-label="Key indicators"></section>
+
+  <section class="panel summary">
+    <h2>Resource Manager summary</h2>
+    <p id="summary">Loading&hellip;</p>
+    <p class="muted small">Auto-generated from the filtered data each time a filter changes.</p>
+  </section>
+
+  <div class="row r2">
+    <section class="panel"><h2>Cumulative execution vs spend plan (S-curve)</h2><div class="chartbox"><canvas id="cScurve"></canvas></div></section>
+    <section class="panel"><h2>Execution funnel</h2><div class="chartbox"><canvas id="cFunnel"></canvas></div></section>
+  </div>
+
+  <div class="row r2b">
+    <section class="panel"><h2>Monthly obligations by appropriation</h2><div class="chartbox"><canvas id="cAppn"></canvas></div></section>
+    <section class="panel"><h2>Travel (TDY) obligations</h2><div class="chartbox"><canvas id="cTdy"></canvas></div></section>
+  </div>
+
+  <section class="panel">
+    <div class="tablehead">
+      <h2>Program variance &amp; year-end risk</h2>
+      <div class="no-print"><button class="btn" id="btnCsv" type="button">&#8681; Export CSV</button></div>
+    </div>
+    <p class="muted small">Obligations compared with the spend plan through the selected month. Red = behind plan by more than 5 points or use-or-lose risk; amber = 2&ndash;5 points behind; green = on or ahead of plan. Click a column header to sort.</p>
+    <div class="tablewrap"><table class="units" id="tVar"><thead></thead><tbody></tbody></table></div>
+  </section>
+
+  <section class="panel">
+    <h2>Unfunded requirements (UFRs)</h2>
+    <p class="muted small" id="ufrNote"></p>
+    <div class="tablewrap"><table class="units" id="tUfr"><thead><tr><th>ID</th><th>Requirement</th><th>Program</th><th>Organization</th><th>Priority</th><th>Status</th><th>Amount</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <details class="panel method">
+    <summary><h2>How the numbers work</h2></summary>
+    <ul>
+      <li><strong>Annual Funding Program (AFP):</strong> the total planned funding for the fiscal year for a program and organization.</li>
+      <li><strong>Allotment (funds received):</strong> the portion of the AFP actually released so far. Releases come in quarterly increments, smaller during a continuing resolution.</li>
+      <li><strong>Commitment:</strong> an administrative reservation of funds for a planned purchase (for example, an approved purchase request). <strong>Open commitments</strong> = committed but not yet obligated.</li>
+      <li><strong>Obligation:</strong> a legally binding agreement to pay (contract award, travel order, payroll). The main measure of execution.</li>
+      <li><strong>Disbursement (expenditure):</strong> cash actually paid out against an obligation.</li>
+      <li><strong>Unobligated balance</strong> = AFP &minus; obligations. <strong>Allotted but unobligated</strong> = allotment &minus; obligations (money in hand not yet put on contract).</li>
+      <li><strong>Obligation rate</strong> = obligations &divide; AFP. <strong>Plan rate</strong> = cumulative spend plan &divide; AFP. <strong>Variance</strong> = obligation rate &minus; plan rate (points) or obligations &minus; plan (dollars).</li>
+      <li><strong>Burn rate</strong> = average monthly obligations over the last three months.</li>
+      <li><strong>Projected end-of-year (EOY) execution</strong> = obligations to date + remaining plan &times; adjusted pace. Pace = obligations &divide; plan to date (bounded 50%&ndash;115%), moved partway back toward 100% because programs usually recover part of a shortfall, and trusted less early in the year. Working from the plan respects seasonal programs such as Annual Training pay and construction awards.</li>
+      <li><strong>Use-or-lose risk:</strong> one-year money (NGPA, OMNG, and State in this demo) that is projected to finish the year below 97% obligated (and more than $25K short) with three or fewer months left. After September 30 the unobligated balance of one-year money expires. MCNG is multi-year money and is not flagged.</li>
+      <li>State funds are shown on the federal fiscal year here for comparison; a real state ledger may use a July&ndash;June year.</li>
+    </ul>
+  </details>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <div>&copy; 2026 Cole McClintock &middot; <a href="../../index.html">Portfolio home</a> &middot; Runs fully offline; no data leaves this device.</div>
+    <div class="disclaimer">Data shown is fictional for demonstration. Not an official Iowa National Guard product.</div>
+  </div>
+</footer>
+
+<script src="../../assets/vendor/chart.umd.min.js"></script>
+<script src="../../assets/vendor/xlsx.full.min.js"></script>
+<script src="../../assets/js/dashkit.js"></script>
+<script src="data/data.js"></script>
+<script src="finance.js"></script>
+</body>
+</html>

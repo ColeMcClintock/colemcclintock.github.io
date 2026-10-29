@@ -1,0 +1,17 @@
+fy,ufr_id,title,program_code,organization,brigade,amount,priority,status,impact
+FY26,UFR-26-001,Night vision maintenance surge,OM11,2-512th Infantry Bn,58th Infantry Brigade Combat Team,956000,2,Validated,Readiness (equipment)
+FY26,UFR-26-002,Readiness center roof repair,OM12,Joint Force HQ (state level),State Headquarters,612000,1,Submitted,Facilities
+FY26,UFR-26-003,Simulator lease extension,OM10,371st Brigade Support Bn,58th Infantry Brigade Combat Team,529000,3,Validated,Readiness (training)
+FY26,UFR-26-004,Additional medical/dental readiness day,OM14,857th Signal Bn,96th Troop Command,1113000,1,Funded,Readiness (medical)
+FY26,UFR-26-005,Cyber training seats,PA03,2-512th Infantry Bn,58th Infantry Brigade Combat Team,438000,1,Funded,Readiness (training)
+FY26,UFR-26-006,Generator replacement (two armories),OM12,Joint Force HQ (state level),State Headquarters,1115000,2,Unfunded,Facilities
+FY26,UFR-26-007,Recruiting event support,OM15,Joint Force HQ (state level),State Headquarters,675000,2,Unfunded,Personnel strength
+FY26,UFR-26-008,Network switch refresh,OM13,Joint Force HQ (state level),State Headquarters,392000,1,Funded,Mission command / IT
+FY26,UFR-26-009,Range target system repairs,OM10,371st Brigade Support Bn,58th Infantry Brigade Combat Team,975000,1,Validated,Readiness (training)
+FY26,UFR-26-010,Additional AT transportation (buses),OM10,2-512th Infantry Bn,58th Infantry Brigade Combat Team,1084000,1,Submitted,Readiness (training)
+FY26,UFR-26-011,Hearing conservation equipment,OM17,Joint Force HQ (state level),State Headquarters,761000,2,Unfunded,Safety
+FY27,UFR-27-012,Aviation tool kit replacement,OM16,2-473rd Aviation Bn,96th Troop Command,160000,1,Submitted,Readiness (aviation)
+FY27,UFR-27-013,Armory HVAC controls,ST30,Joint Force HQ (state level),State Headquarters,1190000,3,Validated,Facilities
+FY27,UFR-27-014,Leadership course seats,PA03,371st Brigade Support Bn,58th Infantry Brigade Combat Team,668000,2,Funded,Readiness (training)
+FY27,UFR-27-015,Tactical vehicle tire replacement,OM11,2-512th Infantry Bn,58th Infantry Brigade Combat Team,903000,1,Validated,Readiness (equipment)
+FY27,UFR-27-016,Winter driving trainer,OM17,Joint Force HQ (state level),State Headquarters,506000,2,Unfunded,Safety
