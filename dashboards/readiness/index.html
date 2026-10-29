@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Readiness Command Dashboard | Iowa Army National Guard | Cole McClintock</title>
+<link rel="icon" href="../../assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/css/site.css">
+<link rel="stylesheet" href="readiness.css">
+</head>
+<body>
+<header class="site">
+  <div class="wrap topnav">
+    <a class="brand" href="../../index.html"><span class="mark">CM</span><span>Cole McClintock</span></a>
+    <nav><a href="../../index.html#projects">&larr; All projects</a></nav>
+  </div>
+</header>
+
+<main class="wrap dash">
+  <div class="titlebar">
+    <div>
+      <div class="eyebrow">Iowa Army National Guard &middot; Statewide</div>
+      <h1>Readiness Command Dashboard</h1>
+      <div class="asof">As of <strong id="asofLabel">&mdash;</strong> &middot; <span id="scopeLabel">All units</span><span id="sourceLabel"></span></div>
+    </div>
+    <div class="actions no-print">
+      <button class="btn ghost" id="btnLoad" type="button">Load your own data</button>
+      <button class="btn ghost" id="btnPrint" type="button">Print / PDF</button>
+    </div>
+  </div>
+
+  <div class="loadpanel no-print" id="loadPanel" hidden>
+    <div>
+      <h3>Load your own data (stays on this device)</h3>
+      <p>Choose a <strong>.csv</strong> or <strong>.xlsx</strong> file that follows the column template. The file is read by your browser only; nothing is uploaded anywhere. Reload the page to return to the demo data.</p>
+      <p><a class="btn" href="readiness_template.csv" download>&#8681; Download template CSV</a>
+         <label class="btn ghost filebtn">Choose file&hellip;<input type="file" id="fileInput" accept=".csv,.xlsx,.xls"></label>
+         <button class="btn ghost" id="btnDemo" type="button">Restore demo data</button></p>
+      <div id="loadMsg" class="loadmsg" role="status"></div>
+    </div>
+    <details>
+      <summary>Column template</summary>
+      <table class="dict"><thead><tr><th>Column</th><th>Required</th><th>Description</th></tr></thead><tbody id="dictBody"></tbody></table>
+      <p class="muted small">Percent columns are 0&ndash;100. If <code>readiness_rating</code> is blank it is computed with the method below. An optional second sheet named <code>events</code> (columns: start, end, type, brigade, battalion, location, notes) fills the events table.</p>
+    </details>
+  </div>
+
+  <div class="filters no-print" role="group" aria-label="Filters">
+    <label>Brigade<select id="fBrigade"></select></label>
+    <label>Battalion<select id="fBattalion"></select></label>
+    <label>Location<select id="fLocation"></select></label>
+    <label>Month<select id="fMonth"></select></label>
+    <button class="btn ghost" id="btnReset" type="button">Reset</button>
+  </div>
+
+  <section class="kpis" id="kpis" aria-label="Key indicators"></section>
+
+  <section class="panel summary">
+    <h2>Commander's summary</h2>
+    <p id="summary">Loading&hellip;</p>
+    <p class="muted small">Auto-generated from the filtered data each time a filter changes.</p>
+  </section>
+
+  <div class="row r2">
+    <section class="panel"><h2>Readiness trends</h2><div class="chartbox"><canvas id="cTrend" aria-label="Readiness trend chart"></canvas></div></section>
+    <section class="panel"><h2>Unit ratings over time</h2><div class="chartbox"><canvas id="cRating" aria-label="Rating distribution chart"></canvas></div></section>
+  </div>
+
+  <div class="row r3">
+    <section class="panel"><h2>Units by location</h2><div id="map" class="map" aria-label="Iowa map of unit locations"></div><div class="legend" id="mapLegend"></div></section>
+    <section class="panel"><h2>Battalion comparison</h2><div class="chartbox tall"><canvas id="cBn" aria-label="Battalion comparison chart"></canvas></div></section>
+    <section class="panel"><h2>Medical readiness categories</h2><div class="chartbox"><canvas id="cMed" aria-label="Medical readiness chart"></canvas></div></section>
+  </div>
+
+  <section class="panel">
+    <div class="tablehead">
+      <h2>Units needing attention</h2>
+      <div class="no-print"><button class="btn ghost" id="btnAll" type="button">Show all units</button>
+      <button class="btn" id="btnCsv" type="button">&#8681; Export CSV</button></div>
+    </div>
+    <p class="muted small">Ranked by an attention score: how far each unit sits below standard, plus sharp month-over-month drops and C3/C4 ratings. Click a column header to sort.</p>
+    <div class="tablewrap"><table class="units" id="tUnits"><thead></thead><tbody></tbody></table></div>
+  </section>
+
+  <section class="panel">
+    <h2>Upcoming drill &amp; training events</h2>
+    <div class="tablewrap"><table class="events" id="tEvents"><thead><tr><th>Dates</th><th>Event</th><th>Unit</th><th>Location</th><th>Focus</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <details class="panel method">
+    <summary><h2>How the numbers are calculated</h2></summary>
+    <ul>
+      <li><strong>Assigned strength</strong> = assigned &divide; authorized (sum across selected units).</li>
+      <li><strong>MOS-qualified, individual &amp; collective training</strong> are weighted by assigned strength.</li>
+      <li><strong>Medically ready</strong> = (MRC 1 + MRC 2) &divide; assigned. MRC 1 Ready, MRC 2 Ready with minor gaps, MRC 3 Not ready (temporary), MRC 4 Not ready / unknown.</li>
+      <li><strong>Equipment on-hand and operational readiness</strong> are weighted by authorized strength.</li>
+      <li><strong>Overall rating (C1&ndash;C4)</strong> is a simplified illustrative method: each area (personnel, equipment, training) gets a level; the rating is the average level, never more than one level better than the weakest area. It is not the Army's official readiness reporting method.</li>
+      <li><strong>Standards used for attention flags:</strong> strength 90%, MOSQ 85%, medical 85%, equipment on-hand 90%, equipment OR 85%, individual training 85%, collective training 80%.</li>
+    </ul>
+  </details>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <div>&copy; 2026 Cole McClintock &middot; <a href="../../index.html">Portfolio home</a> &middot; Runs fully offline; no data leaves this device.</div>
+    <div class="disclaimer">Data shown is fictional for demonstration. Not an official Iowa National Guard product.</div>
+  </div>
+</footer>
+
+<script src="../../assets/vendor/chart.umd.min.js"></script>
+<script src="../../assets/vendor/xlsx.full.min.js"></script>
+<script src="data/data.js"></script>
+<script src="iowa.js"></script>
+<script src="readiness.js"></script>
+</body>
+</html>
