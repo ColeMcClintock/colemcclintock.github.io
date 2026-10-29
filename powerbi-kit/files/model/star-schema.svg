@@ -24,11 +24,11 @@
     <text x="52" y="297" fill="#C7D3E3">unit_id (key), unit_name</text><text x="52" y="314" fill="#C7D3E3">battalion, brigade, branch</text><text x="52" y="331" fill="#C7D3E3">location, armory, lat, lon</text><text x="52" y="348" fill="#C7D3E3">authorized</text>
 
     <rect x="40" y="470" width="220" height="70" rx="8" fill="#2E3A1C" stroke="#A9B97A"/>
-    <text x="52" y="492" fill="#E7EDF5" font-weight="700">FactMishap</text>
-    <text x="52" y="512" fill="#C7D3E3">unit_id, date, class, category</text><text x="52" y="529" fill="#C7D3E3">duty_status, days_lost, cost</text>
+    <text x="52" y="492" fill="#E7EDF5" font-weight="700">FactAccident (ASMIS)</text>
+    <text x="52" y="512" fill="#C7D3E3">Accident Date, Battalion, MSC, Class</text><text x="52" y="529" fill="#C7D3E3">Status, Due Date (Calc), costs</text>
 
     <rect x="40" y="560" width="220" height="60" rx="8" fill="#2E3A1C" stroke="#A9B97A"/>
-    <text x="52" y="582" fill="#E7EDF5" font-weight="700">FactStrength / FactMedical</text>
+    <text x="52" y="582" fill="#E7EDF5" font-weight="700">DimBattalion / FactMedical</text>
     <text x="52" y="602" fill="#C7D3E3">unit_id, MonthStart, assigned / MRC</text>
 
     <rect x="470" y="260" width="160" height="110" rx="8" fill="#16294A" stroke="#5AA6E6" stroke-width="2"/>

@@ -25,13 +25,17 @@ All dashboards share one fictional unit roster (`data/units.json`): 31 company-l
 Assigned strength, MOS qualification, medical readiness (MRC 1-4), equipment on-hand and operational readiness, individual and collective training, and C1-C4 ratings for May 2025 to Oct 2026. KPI cards with month-over-month change, trends, an SVG map of Iowa, a ranked "units needing attention" table with drivers, upcoming drill/AT events, and a commander's summary. The C1-C4 rating is a simplified illustrative method, not the Army's official method.
 
 ### Safety & Mishaps Dashboard
-Nov 2024 to Oct 2026 mishaps and near misses: mishap rate per 1,000 personnel (12-month window vs prior year), Class A-D counts with illustrative cost bands, lost workdays, cost, days since the last Class A/B, category and root-cause breakdowns, a month x category heat map with seasonal callouts, a unit ranking normalized by strength, a composite hotspot table, and a safety officer summary.
+Built for the ASMIS accident export (45 columns, same order and headers). Choose the .xlsx or .csv export with **Load ASMIS export**; it is read in the browser only and never uploaded. The loader cleans header spelling (asterisks, spacing, case, common variants), shows `Tech` as **MSC**, reads `DD-Mon-YY` text dates, Excel dates and ISO dates, `$1,234.00` currency, and Y/N fields, then shows a load report (rows loaded, columns matched/missing/extra, rows with unreadable dates). Visuals whose columns are missing are hidden.
+
+Views: filters (fiscal year/date range, MSC, battalion, UIC, class, status, duty status, on duty, accident and cause subtype); KPIs (total and Class A-D, total/injury cost, material ECOD, days lost, open and overdue investigations, days since last Class A/B, accidents per 1,000 when a `Strength` sheet is present); an investigation tracker sorted by days overdue with red/amber/green status, status pipeline, aging buckets and CSV export; monthly accidents by class; fiscal-year cumulative comparison; subtype, cause, MSC, battalion, duty status, on/off duty and day-of-week charts; a day x time-of-day heat map; HFACS category > failure > subfailure drill-down; cost composition by FY; aggregated demographics with groups under 3 suppressed; a detail drawer with the full record and summary; and an auto-written summary with no personal details.
+
+Blank templates: [`asmis_template.xlsx`](dashboards/safety/asmis_template.xlsx), [`asmis_template.csv`](dashboards/safety/asmis_template.csv). Fictional sample in the same layout: [`data/asmis_sample.xlsx`](dashboards/safety/data/asmis_sample.xlsx).
 
 ### Status of Funds Dashboard
 FY26 (Oct 2025 to Sep 2026) and FY27 to date by appropriation (NGPA, OMNG, MCNG, State) and fictional program codes: Annual Funding Program, allotments, commitments, obligations, disbursements, unobligated balance, obligation rate vs spend plan, burn rate, projected end-of-year execution, a program variance table with conditional formatting and use-or-lose flags, TDY spend, unfunded requirements, and a resource manager summary. A "How the numbers work" section explains each term.
 
 ### Power BI Starter Kit
-Two schema-validated report themes, a DAX measures library (readiness, rolling 12-month mishap rate per 1,000, obligation and burn rates, EOY projection, variance, ranking, dynamic titles), Power Query (M) scripts (parameter, loader, folder load, date table, dims, facts, unpivots), a star-schema diagram, a page-by-page report layout, step-by-step build instructions, and the fictional CSVs. A `.pbix` is not included because it can only be built in Power BI Desktop; the kit rebuilds it in about 30-60 minutes. Download: [`powerbi-kit/powerbi-starter-kit.zip`](powerbi-kit/powerbi-starter-kit.zip).
+Two schema-validated report themes, a DAX measures library (readiness; ASMIS overdue investigations, days since last Class A/B, cost totals and accidents per 1,000; obligation and burn rates, EOY projection, variance, ranking, dynamic titles), Power Query (M) scripts (parameter, loader, an ASMIS export query that cleans headers, renames Tech to MSC and parses DD-Mon-YY dates and currency, folder load, date table, dims, facts, unpivots), a star-schema diagram, a page-by-page report layout, step-by-step build instructions, and the fictional CSVs. A `.pbix` is not included because it can only be built in Power BI Desktop; the kit rebuilds it in about 30-60 minutes. Download: [`powerbi-kit/powerbi-starter-kit.zip`](powerbi-kit/powerbi-starter-kit.zip).
 
 ## Run it locally
 
@@ -65,7 +69,7 @@ assets/img/                      favicon, project thumbnails
 assets/vendor/                   Chart.js 4.4.4 (MIT), SheetJS CE 0.20.3 (Apache-2.0), bundled for offline use
 data/units.json                  shared fictional unit roster
 dashboards/readiness/            Readiness Command Dashboard (+ template CSV, data/)
-dashboards/safety/               Safety & Mishaps Dashboard (+ template CSV, data/)
+dashboards/safety/               Safety & Mishaps Dashboard (ASMIS loader, templates, data/)
 dashboards/finance/              Status of Funds Dashboard (+ template CSV, data/)
 powerbi-kit/                     Power BI Starter Kit page, files/, and the kit ZIP
 data-generation/                 seeded Python scripts that build all demo data and the kit
@@ -75,12 +79,12 @@ data-generation/                 seeded Python scripts that build all demo data 
 
 ```bash
 python3 data-generation/generate_readiness_data.py
-python3 data-generation/generate_safety_data.py
+python3 data-generation/generate_asmis_data.py        # needs openpyxl (pip install openpyxl) for the .xlsx sample/template
 python3 data-generation/generate_finance_data.py
 python3 data-generation/build_powerbi_kit.py      # refreshes the kit CSVs, snippets and ZIP
 ```
 
-Standard-library Python only. Each script takes `--seed`; the same seed always produces the same data, and all of them read the shared roster in `data/units.json` (built by `units_roster.py`).
+Standard-library Python except `generate_asmis_data.py`, which uses openpyxl to write the Excel sample and template. Each script takes `--seed`; the same seed always produces the same data, and all of them read the shared roster in `data/units.json` (built by `units_roster.py`).
 
 ## Edit your bio
 

@@ -17,19 +17,28 @@ Grid: 16 px margins, 8 px gutters. Top band (0-72 px) holds the dynamic title, a
 ## Page 2: Unit Drill-through
 Drill-through field: DimUnit[unit_name]. Cards for all readiness measures, a 18-month line chart, the FactMedical donut (MRC Category / soldiers), and a table of upcoming FactEvents for that unit's battalion.
 
-## Page 3: Safety Overview
+## Page 3: Safety Overview (ASMIS)
 | Visual | Fields / measures | Position | Notes |
 |---|---|---|---|
 | Title | `[Title Safety]` | 16, 8, 900, 40 | |
-| Slicers | brigade, battalion, location, FactMishap[duty_status], 'Date'[Month] (single = window end) | 16, 52, 1248, 40 | |
-| 6 cards | Mishap Rate per 1,000 (R12), Class A-C R12, Days Lost R12, Mishap Cost R12, Days Since Last Class A/B, Near Miss Ratio | 16, 100, 1248, 110 | Reference label: Mishap Rate YoY Change |
-| Clustered column + line | X: Month; Columns: Mishaps; Line: Mishaps R12 PY | 16, 220, 760, 250 | Relative date filter: last 12 months |
-| Donut | Legend: mishap_class; Values: Mishaps | 784, 220, 480, 250 | |
-| Matrix heat map | Rows: category; Columns: 'Date'[Month Number]; Values: Mishaps | 16, 480, 760, 224 | Conditional background color, gradient #16294A to #E0645C |
-| Bar | Y: root_cause; X: Mishaps (Top N 10) | 784, 480, 480, 224 | |
+| Slicers | DimBattalion[MSC], DimBattalion[Battalion], FactAccident[Unit UIC], [Accident Class], [Status], [Duty Status], [On Duty], [Accident Subtype], [Cause Subtype], 'Date'[Fiscal Year] | 16, 52, 1248, 40 | Between date slicer on 'Date'[Date] for custom ranges |
+| 6 cards | Accidents, Class A-D (4 cards or one multi-row card), Total Accident Cost, Open Investigations, Overdue Investigations, Days Since Last Class A/B | 16, 100, 1248, 110 | Overdue card: red font when > 0 |
+| Stacked column | X: 'Date'[Month]; Y: Accidents; Legend: Accident Class | 16, 220, 760, 250 | Class colors A #E0645C, B #E88A4C, C #E3B34C, D #A9C16A |
+| Line | X: 'Date'[Fiscal Month]; Y: Accidents (running total in Fiscal Year); Legend: 'Date'[Fiscal Year] | 784, 220, 480, 250 | Quick measure: Running total by Fiscal Month |
+| Stacked bar x2 | Y: Accident Subtype / Cause Subtype; X: Accidents; Legend: Accident Class | 16, 480, 620, 224 | |
+| Matrix heat map | Rows: Day of Week; Columns: Hour (bin 4); Values: Accidents | 644, 480, 620, 224 | Conditional background, gradient #16294A to #E0645C |
 
-## Page 4: Safety Hotspots
-Table of DimUnit[unit_name] with Avg Strength R12, Mishaps R12, Mishap Rate per 1,000 (R12), Unit Rate Rank, Days Lost R12. Matrix of battalion x category with Hotspot Score and conditional formatting. Card with `[Safety Summary]`.
+## Page 4: Investigations and Cost
+| Visual | Fields / measures | Position | Notes |
+|---|---|---|---|
+| Table (tracker) | Investigation RAG, CCIR #, ASMIS #, MSC, Battalion, Accident Class, Status, Accident Date, Due Date (Calc), Days Overdue (Calc) | 16, 52, 820, 360 | Filter: Is Open = True; sort by Days Overdue (Calc) desc; RAG icon via conditional formatting > Field value = [Investigation RAG Color] |
+| Funnel | Category: Status (Investigation Ongoing, In Review NGB, Final); Values: Accidents | 844, 52, 420, 170 | Status pipeline |
+| Column | X: aging bucket (group Accident Age: 0-30, 31-60, 61-90, 90+); Y: Open Investigations | 844, 230, 420, 182 | |
+| Stacked bar | Y: 'Date'[Fiscal Year]; X: Days Away Cost, Days Hospitalized Cost, PPD Cost, PTD Cost, Fatality Cost, Material ECOD | 16, 420, 620, 280 | Cost composition |
+| Decomposition tree | Analyze: Accidents; Explain by: HFACS Category > HFACS Failure > HFACS Subfailure | 644, 420, 620, 280 | HFACS drill-down |
+| Card | `[Safety Summary]` | 16, 708, 1248, 40 | No demographics in the narrative |
+
+Demographics (optional, restricted page): bar charts of Gender, Rank, Age bins, Years of Service bins using `[Accidents (suppressed <3)]` so any group under 3 is blank. Do not publish this page outside the safety office.
 
 ## Page 5: Status of Funds
 | Visual | Fields / measures | Position | Notes |

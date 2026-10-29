@@ -15,7 +15,10 @@ Title Readiness =
 "Readiness Command Dashboard | " & [Selected Scope] & " | as of " & [As Of Month]
 
 Title Safety =
-"Safety & Mishaps | 12 months ending " & [As Of Month] & " | " & [Selected Scope]
+VAR _msc = IF ( ISFILTERED ( DimBattalion[MSC] ), SELECTEDVALUE ( DimBattalion[MSC], "Multiple MSCs" ) )
+VAR _bn  = IF ( ISFILTERED ( DimBattalion[Battalion] ), SELECTEDVALUE ( DimBattalion[Battalion], "Multiple battalions" ) )
+VAR _scope = CONCATENATEX ( FILTER ( { _msc, _bn }, NOT ISBLANK ( [Value] ) ), [Value], " > " )
+RETURN "Safety & Mishaps | " & IF ( _scope = "", "All MSCs", _scope ) & " | through " & [As Of Month]
 
 Title Finance =
 VAR _fy = SELECTEDVALUE ( 'Date'[Fiscal Year], "All fiscal years" )

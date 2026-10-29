@@ -1,312 +1,393 @@
-/* Safety & Mishaps Dashboard - all processing happens in the browser. */
+/* Safety & Mishaps dashboard (ASMIS export layout). All processing is local. */
 (function () {
   "use strict";
-  var K = window.DashKit, $ = K.$, esc = K.esc, uniq = K.uniq, sum = K.sum;
+  var K = window.DashKit, A = window.ASMIS, $ = K.$, esc = K.esc;
   var CLASSES = ["A", "B", "C", "D"];
-  var CLASS_COLORS = { A: "#e0645c", B: "#e88a4c", C: "#e3b34c", D: "#a9c16a", NM: "#5aa6e6" };
-  var WEIGHT = { A: 50, B: 20, C: 5, D: 2, NM: 0.5 };
-  var COLUMNS = [
-    ["date", true, "Date of the event (YYYY-MM-DD)"], ["unit_id", true, "Unique unit identifier"], ["unit_name", true, "Unit display name"],
-    ["battalion", true, "Parent battalion"], ["brigade", true, "Parent brigade / command"], ["location", true, "City or armory"],
-    ["event_type", true, "Mishap or Near miss"], ["mishap_class", true, "A, B, C or D (blank for near misses)"],
-    ["category", true, "e.g. POV/AOV vehicle, Tactical vehicle, Range, Heat/cold injury"], ["duty_status", true, "On-duty or Off-duty"],
-    ["days_lost", true, "Lost workdays"], ["cost", true, "Total cost in dollars"], ["root_cause", false, "Primary root-cause factor"],
-    ["unit_strength", false, "Assigned strength (used for rates if no strength sheet)"]
-  ];
-  var DEMO = window.SAFETY_DATA || { records: [], strength: [] };
-  var S = { recs: [], strength: {}, months: [], sortKey: "rate", sortAsc: false, showAll: false, unitRows: [] };
+  var CLS_COLOR = { A: "#e0645c", B: "#e88a4c", C: "#e3b34c", D: "#a9c16a", Other: "#8b9bb0" };
+  var STATUSES = ["Investigation Ongoing", "In Review NGB", "Final"];
+  var DOW = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  var TBANDS = [["0000-0359", 0], ["0400-0759", 4], ["0800-1159", 8], ["1200-1559", 12], ["1600-1959", 16], ["2000-2359", 20]];
+  var FYM = ["Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"];
+  var SUPPRESS = 3;
+  var DEMO_KEYS = ["gender", "rank", "age_years", "yos"];
 
-  function normalize(rows) {
-    var out = [];
-    rows.forEach(function (raw) {
-      var r = K.lowerKeys(raw);
-      var d = K.toISODate(r.date); if (!d || !r.unit_id) return;
-      var et = /near/i.test(r.event_type) ? "Near miss" : "Mishap";
-      var cls = et === "Near miss" ? "NM" : String(r.mishap_class || "").trim().toUpperCase().replace("CLASS ", "");
-      if (et === "Mishap" && CLASSES.indexOf(cls) < 0) return;
-      out.push({
-        date: d, month: d.slice(0, 7), unit_id: String(r.unit_id).trim(), unit_name: String(r.unit_name || r.unit_id).trim(),
-        battalion: String(r.battalion || "").trim(), brigade: String(r.brigade || "").trim(), location: String(r.location || "").trim(),
-        event_type: et, mishap_class: cls, category: String(r.category || "Other").trim(), duty_status: /off/i.test(r.duty_status) ? "Off-duty" : "On-duty",
-        days_lost: +r.days_lost || 0, cost: +r.cost || 0, root_cause: String(r.root_cause || "Not recorded").trim(), unit_strength: +r.unit_strength || null
-      });
+  var S = { recs: [], have: {}, strength: null, asOf: new Date(), source: "demo", fileName: "", showAll: false, hf: [] };
+
+  function d0(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12); }
+  function iso(d) { return A.iso(d); }
+  function fd(d) { return d ? A.fmtDate(d) : "\u2014"; }
+  function n(v) { return v || 0; }
+  function cnt(a, f) { var m = {}; a.forEach(function (r) { var k = f(r); if (k == null || k === "") return; m[k] = (m[k] || 0) + 1; }); return m; }
+  function sortKeys(m) { return Object.keys(m).sort(function (a, b) { return m[b] - m[a] || (a < b ? -1 : 1); }); }
+  function pill(c) { return c ? '<span class="pill ' + (CLASSES.indexOf(c) >= 0 ? c : "NM") + '">' + esc(c) + "</span>" : ""; }
+  function rag(r) { return r.isOverdue ? "red" : (r.daysToDue <= 30 ? "amber" : "green"); }
+  function ragLabel(r) { return { red: "Overdue", amber: "Due within 30 days", green: "On time" }[rag(r)]; }
+
+  // ---------- load ----------
+  function loadAoa(aoa, asOf, strength, source, fileName, sheetName) {
+    var res = A.parseTable(aoa, asOf);
+    report(res.report, source, fileName, sheetName, strength);
+    if (res.report.fatal || !res.records.length) return false;
+    S.recs = res.records; S.asOf = asOf; S.strength = strength; S.source = source; S.fileName = fileName || "";
+    S.have = {}; res.report.matched.forEach(function (k) { S.have[k] = res.records.some(function (r) { return r[k] != null && r[k] !== ""; }); });
+    S.hf = []; S.showAll = false;
+    applyVisibility(); buildFilters(true); render();
+    return true;
+  }
+  function loadDemo() {
+    var D = window.ASMIS_DATA, p = D.exportDate.split("-");
+    loadAoa(A.objectsToAoa(D.headers, D.rows), new Date(+p[0], +p[1] - 1, +p[2], 12), D.strength.map(function (s) { return { msc: s.MSC, battalion: s.Battalion, assigned: s.Assigned }; }), "demo", "", "");
+    $("loadReport").innerHTML = "";
+  }
+  function report(rep, source, fileName, sheetName, strength) {
+    var el = $("loadReport");
+    if (source === "demo") return;
+    var h = [];
+    if (rep.fatal) { el.innerHTML = '<p class="err"><strong>Could not load ' + esc(fileName) + ".</strong> " + esc(rep.fatal) + "</p>" + colList(rep); return; }
+    var ok = rep.matched.length === rep.totalColumns;
+    h.push("<p class=\"" + (rep.rowsLoaded ? "ok" : "err") + "\"><strong>Loaded " + K.fmt(rep.rowsLoaded) + " of " + K.fmt(rep.rowsRead) + " rows</strong> from " + esc(fileName) + (sheetName && sheetName !== fileName ? " (sheet &ldquo;" + esc(sheetName) + "&rdquo;, header row " + rep.headerRow + ")" : "") + ".</p>");
+    h.push("<p class=\"" + (ok ? "ok" : "warn") + "\"><strong>" + rep.matched.length + " of " + rep.totalColumns + " columns matched.</strong>" + (ok ? "" : " Visuals that need a missing column are hidden.") + "</p>");
+    if (rep.missing.length) h.push('<p class="warn">Missing: ' + rep.missing.map(function (m) { return "<code>" + esc(m) + "</code>"; }).join(", ") + "</p>");
+    if (rep.extra.length) h.push('<p class="muted">Extra columns ignored: ' + rep.extra.map(function (m) { return "<code>" + esc(m) + "</code>"; }).join(", ") + "</p>");
+    if (rep.dupes.length) h.push('<p class="muted">Duplicate columns ignored: ' + rep.dupes.map(function (m) { return "<code>" + esc(m) + "</code>"; }).join(", ") + "</p>");
+    if (rep.badDate.length) h.push('<p class="err">' + rep.badDate.length + " row(s) skipped because Accident Date could not be read (" + (rep.badDate.length === 1 ? "row " : "rows ") + rep.badDate.slice(0, 8).map(function (b) { return b.row + (b.value ? " &ldquo;" + esc(b.value) + "&rdquo;" : " blank"); }).join(", ") + (rep.badDate.length > 8 ? ", &hellip;" : "") + ").</p>");
+    else h.push('<p class="ok">All accident dates parsed.</p>');
+    if (rep.badNumber) h.push('<p class="warn">' + rep.badNumber + " number/currency cell(s) could not be read and were treated as blank.</p>");
+    if (rep.otherClass) h.push('<p class="warn">' + rep.otherClass + " row(s) have an Accident Class other than A to D.</p>");
+    if (rep.computedOverdue) h.push('<p class="muted">Days Overdue was blank for ' + rep.computedOverdue + " open record(s); computed from the due date and today.</p>");
+    if (rep.computedDue) h.push('<p class="muted">Due Date was blank for ' + rep.computedDue + " record(s); set to accident date + 90 days.</p>");
+    h.push('<p class="muted">' + (strength ? "Strength sheet found: " + strength.length + " battalion(s); rates per 1,000 shown." : "No Strength sheet: rates per 1,000 are not shown.") + "</p>");
+    el.innerHTML = h.join("");
+  }
+  function colList(rep) { return rep.missing.length ? '<p class="muted">Missing: ' + rep.missing.map(function (m) { return "<code>" + esc(m) + "</code>"; }).join(", ") + "</p>" : ""; }
+
+  function applyVisibility() {
+    document.querySelectorAll("[data-req]").forEach(function (el) {
+      var ok = el.getAttribute("data-req").split(",").every(function (k) { return S.have[k]; });
+      el.classList.toggle("hidden-missing", !ok);
     });
-    return out;
-  }
-  function setData(recs, strengthRows, source) {
-    S.recs = normalize(recs);
-    S.strength = {};
-    (strengthRows || []).forEach(function (r0) { var r = K.lowerKeys(r0), m = K.toMonth(r.month); if (m && r.unit_id) S.strength[m + "|" + String(r.unit_id).trim()] = +r.assigned || 0; });
-    S.unitStrength = {};
-    S.recs.forEach(function (r) { if (r.unit_strength) S.unitStrength[r.unit_id] = r.unit_strength; });
-    S.units = {}; S.recs.forEach(function (r) { S.units[r.unit_id] = r; });
-    if (strengthRows && strengthRows.length && !Object.keys(S.units).length) {}
-    var ms = uniq(S.recs.map(function (r) { return r.month; }).concat(Object.keys(S.strength).map(function (k) { return k.split("|")[0]; }))).sort();
-    S.months = [];
-    if (ms.length) { for (var m = ms[0]; m <= ms[ms.length - 1]; m = K.addMonths(m, 1)) S.months.push(m); }
-    // demo strength table lists all units even with zero mishaps
-    S.allUnits = {};
-    Object.keys(S.strength).forEach(function (k) { S.allUnits[k.split("|")[1]] = true; });
-    Object.keys(S.units).forEach(function (u) { S.allUnits[u] = true; });
-    S.unitInfo = {};
-    (source === "demo" ? (DEMO.units || []) : []).forEach(function (u) { S.unitInfo[u.unit_id] = u; });
-    S.recs.forEach(function (r) { S.unitInfo[r.unit_id] = S.unitInfo[r.unit_id] || r; });
-    $("sourceLabel").textContent = source === "demo" ? "" : " \u00B7 " + source;
-    buildFilters(true); render();
+    document.querySelectorAll("[data-req-any]").forEach(function (el) {
+      el.classList.toggle("hidden-missing", !el.getAttribute("data-req-any").split(",").some(function (k) { return S.have[k]; }));
+    });
+    var map = { fMsc: "msc", fBn: "battalion", fUic: "uic", fClass: "cls", fStatus: "status", fDuty: "duty_status", fOn: "on_duty", fSub: "subtype", fCause: "cause" };
+    Object.keys(map).forEach(function (id) { $(id).parentNode.classList.toggle("hidden-missing", !S.have[map[id]]); });
   }
 
-  function unitList() { return Object.keys(S.unitInfo).map(function (k) { return S.unitInfo[k]; }); }
+  // ---------- filters ----------
+  function opts(key, order) {
+    var v = K.uniq(S.recs.map(function (r) { return r[key]; }).filter(function (x) { return x != null && x !== ""; }));
+    if (order) v.sort(function (a, b) { var i = order.indexOf(a), j = order.indexOf(b); return (i < 0 ? 99 : i) - (j < 0 ? 99 : j) || (a < b ? -1 : 1); });
+    else v.sort();
+    return v;
+  }
   function buildFilters(reset) {
-    var U = unitList(), b = reset ? "" : $("fBrigade").value;
-    K.fillSelect($("fBrigade"), uniq(U.map(function (u) { return u.brigade; })).sort(), "All brigades", !reset);
-    var pool = U.filter(function (u) { return !$("fBrigade").value || u.brigade === $("fBrigade").value; });
-    K.fillSelect($("fBattalion"), uniq(pool.map(function (u) { return u.battalion; })).sort(), "All battalions", !reset);
-    pool = pool.filter(function (u) { return !$("fBattalion").value || u.battalion === $("fBattalion").value; });
-    K.fillSelect($("fLocation"), uniq(pool.map(function (u) { return u.location; })).sort(), "All locations", !reset);
-    var ends = S.months.slice(Math.min(11, Math.max(0, S.months.length - 1))).reverse(), cur = $("fEnd").value;
-    K.fillSelect($("fEnd"), ends, null, false, ends.map(K.monthLabel));
-    if (!reset && ends.indexOf(cur) >= 0) $("fEnd").value = cur;
-    if (reset) $("fDuty").value = "";
+    var fys = K.uniq(S.recs.map(function (r) { return r.fy; })).sort();
+    var fsel = $("fFy"); fsel.innerHTML = '<option value="">All years</option>' + fys.map(function (y) { return '<option value="' + y + '">FY' + String(y).slice(2) + "</option>"; }).join("");
+    if (reset) { $("fFrom").value = ""; $("fTo").value = ""; }
+    cascade(reset);
+    K.fillSelect($("fClass"), opts("cls", CLASSES.concat(["Other"])), "All classes", !reset, null);
+    K.fillSelect($("fStatus"), opts("status", STATUSES), "All statuses", !reset);
+    K.fillSelect($("fDuty"), opts("duty_status", ["MDAY", "AGR", "ADOS", "AT"]), "All", !reset);
+    $("fOn").innerHTML = '<option value="">All</option><option value="Y">On duty</option><option value="N">Off duty</option>';
+    K.fillSelect($("fSub"), opts("subtype"), "All subtypes", !reset);
+    K.fillSelect($("fCause"), opts("cause"), "All causes", !reset);
   }
-  function inScopeUnit(u) {
-    var b = $("fBrigade").value, bn = $("fBattalion").value, loc = $("fLocation").value;
-    return (!b || u.brigade === b) && (!bn || u.battalion === bn) && (!loc || u.location === loc);
+  function cascade(reset) {
+    var msc = reset ? "" : $("fMsc").value, bn = reset ? "" : $("fBn").value;
+    K.fillSelect($("fMsc"), opts("msc"), "All MSCs", !reset);
+    var bns = K.uniq(S.recs.filter(function (r) { return !msc || r.msc === msc; }).map(function (r) { return r.battalion; }).filter(Boolean)).sort();
+    K.fillSelect($("fBn"), bns, "All battalions", !reset);
+    if (bns.indexOf(bn) < 0) $("fBn").value = "";
+    bn = $("fBn").value;
+    var uics = K.uniq(S.recs.filter(function (r) { return (!msc || r.msc === msc) && (!bn || r.battalion === bn); }).map(function (r) { return r.uic; }).filter(Boolean)).sort();
+    var u = $("fUic").value; K.fillSelect($("fUic"), uics, "All UICs", !reset); if (uics.indexOf(u) < 0) $("fUic").value = "";
   }
-  function scopeLabel() { var p = [$("fBrigade").value, $("fBattalion").value, $("fLocation").value, $("fDuty").value].filter(Boolean); return p.length ? p.join(" \u203A ") : "All units statewide"; }
-
-  function windowMonths(end) { var out = []; for (var i = 11; i >= 0; i--) out.push(K.addMonths(end, -i)); return out; }
-  function unitStrength(uid, months) {
-    var vals = months.map(function (m) { return S.strength[m + "|" + uid]; }).filter(function (v) { return v != null; });
-    if (vals.length) return sum(vals) / vals.length;
-    return S.unitStrength[uid] || null;
+  function F() {
+    var f = { from: $("fFrom").value, to: $("fTo").value, msc: $("fMsc").value, bn: $("fBn").value, uic: $("fUic").value, cls: $("fClass").value,
+      status: $("fStatus").value, duty: $("fDuty").value, on: $("fOn").value, sub: $("fSub").value, cause: $("fCause").value };
+    return f;
   }
-  function strengthFor(unitIds, months) {
-    var t = 0, ok = false;
-    unitIds.forEach(function (u) { var s = unitStrength(u, months); if (s) { t += s; ok = true; } });
-    return ok ? t : null;
-  }
-
-  function stats(recs, strength) {
-    var m = recs.filter(function (r) { return r.event_type === "Mishap"; });
-    var o = { mishaps: m.length, nm: recs.length - m.length, ac: m.filter(function (r) { return r.mishap_class !== "D"; }).length,
-      days: sum(m, function (r) { return r.days_lost; }), cost: sum(m, function (r) { return r.cost; }), byClass: {} };
-    CLASSES.forEach(function (c) { o.byClass[c] = m.filter(function (r) { return r.mishap_class === c; }).length; });
-    o.rate = strength ? 1000 * o.mishaps / strength : null;
-    o.onduty = m.filter(function (r) { return r.duty_status === "On-duty"; }).length;
-    return o;
+  function pass(r, f, ignoreDates) {
+    if (!ignoreDates) { var di = iso(r.date); if (f.from && di < f.from) return false; if (f.to && di > f.to) return false; }
+    if (f.msc && r.msc !== f.msc) return false; if (f.bn && r.battalion !== f.bn) return false; if (f.uic && r.uic !== f.uic) return false;
+    if (f.cls && r.cls !== f.cls) return false; if (f.status && r.status !== f.status) return false; if (f.duty && r.duty_status !== f.duty) return false;
+    if (f.on && r.on_duty !== (f.on === "Y")) return false; if (f.sub && r.subtype !== f.sub) return false; if (f.cause && r.cause !== f.cause) return false;
+    return true;
   }
 
+  // ---------- render ----------
   function render() {
-    if (!S.recs.length) { $("summary").textContent = "No data loaded."; return; }
-    var end = $("fEnd").value || S.months[S.months.length - 1];
-    var cur = windowMonths(end), prev = windowMonths(K.addMonths(end, -12));
-    var duty = $("fDuty").value;
-    var units = unitList().filter(inScopeUnit).map(function (u) { return u.unit_id; });
-    var uset = {}; units.forEach(function (u) { uset[u] = 1; });
-    var scoped = S.recs.filter(function (r) { return uset[r.unit_id] && (!duty || r.duty_status === duty); });
-    var inW = function (ms) { var set = {}; ms.forEach(function (m) { set[m] = 1; }); return function (r) { return set[r.month]; }; };
-    var C = scoped.filter(inW(cur)), P = scoped.filter(inW(prev));
-    var prevAvail = prev.filter(function (m) { return S.months.indexOf(m) >= 0; }).length;
-    var sC = strengthFor(units, cur), sP = strengthFor(units, prev);
-    var A = stats(C, sC), B = prevAvail ? stats(P, sP) : null;
-    $("windowLabel").textContent = "12 months ending " + K.monthLabel(end);
-    $("scopeLabel").textContent = scopeLabel();
-    var endDate = K.monthEnd(end);
-    var lastAB = scoped.filter(function (r) { return (r.mishap_class === "A" || r.mishap_class === "B") && new Date(r.date + "T12:00:00") <= endDate; }).sort(function (x, y) { return x.date < y.date ? 1 : -1; })[0];
-    var daysSince = lastAB ? Math.floor((endDate - new Date(lastAB.date + "T00:00:00")) / 864e5) : null;
-    renderKpis(A, B, prevAvail, daysSince, lastAB, scoped);
-    renderTrend(C, P, cur, prev, prevAvail);
-    renderClass(A);
-    renderCat(C);
-    renderCause(C);
-    var seasonal = renderHeat(scoped);
-    var unitRows = renderUnits(C, P, units, cur);
-    var hot = renderHot(C, P, units, cur);
-    renderSummary(A, B, prevAvail, daysSince, lastAB, C, seasonal, unitRows, hot, end);
+    var f = F(), rows = S.recs.filter(function (r) { return pass(r, f); }), all = S.recs.filter(function (r) { return pass(r, f, true); });
+    rows.sort(function (a, b) { return b.date - a.date; });
+    var scope = [f.msc, f.bn, f.uic ? "UIC " + f.uic : "", f.cls ? "Class " + f.cls : "", f.status, f.duty, f.on ? (f.on === "Y" ? "On duty" : "Off duty") : "", f.sub, f.cause].filter(Boolean);
+    var range = rangeOf(f, rows);
+    $("asofLabel").textContent = K.fmt(rows.length) + " accident" + (rows.length === 1 ? "" : "s") + " \u00b7 " + (range ? fd(range[0]) + " to " + fd(range[1]) : "no data");
+    $("scopeLabel").textContent = scope.length ? scope.join(" \u00b7 ") : "All MSCs";
+    $("sourceLabel").textContent = S.source === "file" ? " \u00b7 Your file: " + S.fileName + " (as of today, " + fd(S.asOf) + ")" : " \u00b7 Demo data as of " + fd(S.asOf);
+    kpis(rows, f, range);
+    summary(rows, all, f, range);
+    tracker(rows);
+    monthly(rows, range);
+    fyChart(all, f);
+    breakdowns(rows);
+    heat(rows);
+    hfacs(rows);
+    cost(rows);
+    demographics(rows);
+    allTable(rows);
+  }
+  function rangeOf(f, rows) {
+    if (!rows.length && !f.from && !f.to) return null;
+    var ds = rows.map(function (r) { return r.date; });
+    var lo = f.from ? new Date(f.from + "T12:00") : new Date(Math.min.apply(null, ds));
+    var hi = f.to ? new Date(f.to + "T12:00") : (S.source === "demo" || !rows.length ? S.asOf : new Date(Math.max(Math.max.apply(null, ds), Math.min(S.asOf, Date.now()))));
+    if (!f.to && S.source === "demo") hi = S.asOf;
+    return [lo, hi];
+  }
+  function strengthFor(f) {
+    if (!S.strength || f.uic) return null;
+    var s = S.strength.filter(function (x) { return (!f.msc || x.msc === f.msc) && (!f.bn || x.battalion === f.bn); });
+    var t = K.sum(s, function (x) { return x.assigned; }); return t > 0 ? t : null;
+  }
+  function kpi(lbl, val, sub, cls, title) { return '<div class="kpi' + (cls ? " " + cls : "") + '"' + (title ? ' title="' + esc(title) + '"' : "") + '><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div><div class="sub">' + (sub || "&nbsp;") + "</div></div>"; }
+  function kpis(rows, f, range) {
+    var c = cnt(rows, function (r) { return r.cls; }), str = strengthFor(f), months = range ? Math.max(1, (range[1] - range[0]) / 864e5 / 30.44) : 0;
+    var rate = str && months ? rows.length / str * 1000 * 12 / months : null;
+    var open = rows.filter(function (r) { return r.open; }), od = open.filter(function (r) { return r.isOverdue; });
+    var ab = S.recs.filter(function (r) { return pass(r, f, true) && (r.cls === "A" || r.cls === "B") && r.date <= S.asOf; }).sort(function (a, b) { return b.date - a.date; })[0];
+    var since = ab ? Math.round((d0(S.asOf) - d0(ab.date)) / 864e5) : null;
+    var ecodN = rows.filter(function (r) { return r.hasEcod; }).length, inj = rows.filter(function (r) { return r.injury; }).length;
+    var h = [];
+    h.push(kpi("Total accidents", K.fmt(rows.length), rate != null ? K.fmt(rate, 2) + " per 1,000 / yr (" + K.fmt(str) + " assigned)" : (S.have.injury ? K.fmt(inj) + " with injury" : "")));
+    CLASSES.forEach(function (k) { if (S.have.cls) h.push(kpi("Class " + k, K.fmt(c[k] || 0), k === "A" ? "$2.5M+ or fatality / PTD" : k === "B" ? "$600K+ or PPD / 3+ hospitalized" : k === "C" ? "$60K+ or lost-time injury" : "$25K+ or restricted-duty injury", (k === "A" || k === "B") && c[k] ? "bad" : "")); });
+    if (S.have.c_total) h.push(kpi("Total accident cost", K.money(K.sum(rows, function (r) { return n(r.c_total); })), "injury + material"));
+    if (S.have.c_injury) h.push(kpi("Injury cost", K.money(K.sum(rows, function (r) { return n(r.c_injury); })), K.fmt(inj) + " injury record" + (inj === 1 ? "" : "s")));
+    if (S.have.ecod || S.have.prop) h.push(kpi("Material ECOD", K.money(K.sum(rows, function (r) { return n(r.ecod); })), K.fmt(ecodN) + " with material damage; blank = none"));
+    if (S.have.days_lost) h.push(kpi("Days lost", K.fmt(K.sum(rows, function (r) { return n(r.days_lost); })), S.have.days_restr ? K.fmt(K.sum(rows, function (r) { return n(r.days_restr); })) + " days restricted" : ""));
+    if (S.have.status) h.push(kpi("Open investigations", K.fmt(open.length), "Ongoing " + open.filter(function (r) { return r.status === "Investigation Ongoing"; }).length + " \u00b7 NGB review " + open.filter(function (r) { return r.status === "In Review NGB"; }).length));
+    if (S.have.status) h.push(kpi("Overdue investigations", K.fmt(od.length), od.length ? "oldest " + Math.max.apply(null, od.map(function (r) { return r.overdue; })) + " days past due" : "none past 90 days", od.length ? "bad" : "good"));
+    if (S.have.cls) h.push(kpi("Days since last Class A/B", since == null ? "\u2014" : K.fmt(since), ab ? "Class " + ab.cls + " on " + fd(ab.date) + (ab.ccir ? " (" + esc(ab.ccir) + ")" : "") : "none on record", since != null && since < 90 ? "bad" : "good", "Counts to " + fd(S.asOf) + "; ignores the date-range filter"));
+    $("kpis").innerHTML = h.join("");
   }
 
-  function delta(a, b, lowerIsBetter, money) {
-    if (b == null || a == null) return '<span class="delta flat">no prior-year data</span>';
-    var d = a - b, cls = Math.abs(d) < 1e-9 ? "flat" : (d < 0) === lowerIsBetter ? "up" : "down";
-    var pct = b ? " (" + (d > 0 ? "+" : "") + (100 * d / b).toFixed(0) + "%)" : "";
-    var txt = money ? K.money(d) : (Math.abs(d) < 10 && d % 1 ? d.toFixed(2) : K.fmt(d));
-    return '<span class="delta ' + cls + '">' + (d > 0 ? "\u25B2 +" : d < 0 ? "\u25BC " : "\u25AC ") + txt.replace("-", "") + pct + "</span> vs prior yr";
-  }
-  function renderKpis(A, B, prevAvail, daysSince, lastAB) {
-    var col = function (good) { return good ? "var(--good)" : "var(--bad)"; };
-    var cards = [
-      ["Mishap rate per 1,000", A.rate == null ? "\u2014" : A.rate.toFixed(1), delta(A.rate, B && B.rate, true), A.mishaps + " Class A\u2013D mishaps", col(!B || A.rate <= B.rate)],
-      ["Class A\u2013C mishaps", A.ac, delta(A.ac, B && B.ac, true), "A " + A.byClass.A + " \u00B7 B " + A.byClass.B + " \u00B7 C " + A.byClass.C, col(!B || A.ac <= B.ac)],
-      ["Lost workdays", K.fmt(A.days), delta(A.days, B && B.days, true), "Class D: " + A.byClass.D + " events", col(!B || A.days <= B.days)],
-      ["Mishap cost", K.money(A.cost, 1), delta(A.cost, B && B.cost, true, true), "Property damage + injury", col(!B || A.cost <= B.cost)],
-      ["Days since last Class A/B", daysSince == null ? "None" : K.fmt(daysSince), lastAB ? "Last: Class " + lastAB.mishap_class + ", " + esc(lastAB.category) : "No Class A/B on record", lastAB ? esc(lastAB.unit_name) + " \u00B7 " + lastAB.date : "", col(daysSince == null || daysSince > 180)],
-      ["Near misses reported", A.nm, delta(A.nm, B && B.nm, false), (A.mishaps ? (A.nm / A.mishaps).toFixed(1) : "\u2014") + " per mishap", col(A.mishaps === 0 || A.nm / A.mishaps >= 1)]
-    ];
-    $("kpis").innerHTML = cards.map(function (c) { return '<div class="kpi" style="--st:' + c[4] + '"><div class="lbl">' + c[0] + '</div><div class="val">' + c[1] + '</div><div class="sub">' + c[2] + "<br>" + c[3] + "</div></div>"; }).join("");
-  }
-
-  function renderTrend(C, P, cur, prev, prevAvail) {
-    var cnt = function (rs, m) { return rs.filter(function (r) { return r.month === m && r.event_type === "Mishap"; }).length; };
-    var nm = function (rs, m) { return rs.filter(function (r) { return r.month === m && r.event_type !== "Mishap"; }).length; };
-    var o = K.chartBase(); o.scales.y.beginAtZero = true; o.scales.y.ticks = { precision: 0 };
-    var ds = [{ type: "bar", label: "Mishaps (this period)", data: cur.map(function (m) { return cnt(C, m); }), backgroundColor: "#e3b34c", borderRadius: 4, order: 2 },
-      { type: "bar", label: "Near misses", data: cur.map(function (m) { return nm(C, m); }), backgroundColor: "rgba(90,166,230,.55)", borderRadius: 4, order: 3 }];
-    if (prevAvail) ds.push({ type: "line", label: "Mishaps (prior year)", data: prev.map(function (m) { return S.months.indexOf(m) >= 0 ? cnt(P, m) : null; }), borderColor: "#c7d3e3", borderDash: [5, 4], pointRadius: 2, tension: .3, order: 1 });
-    K.upsert("cTrend", { type: "bar", options: o, data: { labels: cur.map(function (m) { return K.MON[+m.slice(5) - 1]; }), datasets: ds } });
-  }
-  function renderClass(A) {
-    var o = { responsive: true, maintainAspectRatio: false, cutout: "58%", plugins: { legend: { position: "bottom", labels: { boxWidth: 12 } } } };
-    K.upsert("cClass", { type: "doughnut", options: o, data: { labels: CLASSES.map(function (c) { return "Class " + c; }), datasets: [{ data: CLASSES.map(function (c) { return A.byClass[c]; }), backgroundColor: CLASSES.map(function (c) { return CLASS_COLORS[c]; }), borderColor: "#132540", borderWidth: 2 }] } });
-  }
-  function renderCat(C) {
-    var M = C.filter(function (r) { return r.event_type === "Mishap"; });
-    var cats = uniq(S.recs.map(function (r) { return r.category; })).sort(function (a, b) { return M.filter(function (r) { return r.category === b; }).length - M.filter(function (r) { return r.category === a; }).length; });
-    var o = K.chartBase(); o.indexAxis = "y"; o.scales.x.stacked = true; o.scales.y.stacked = true; o.scales.x.ticks = { precision: 0 };
-    K.upsert("cCat", { type: "bar", options: o, data: { labels: cats, datasets: CLASSES.map(function (c) { return { label: "Class " + c, backgroundColor: CLASS_COLORS[c], data: cats.map(function (k) { return M.filter(function (r) { return r.category === k && r.mishap_class === c; }).length; }) }; }) } });
-  }
-  function renderCause(C) {
-    var counts = {}; C.forEach(function (r) { counts[r.root_cause] = (counts[r.root_cause] || 0) + (r.event_type === "Mishap" ? 1 : 0); });
-    var top = Object.keys(counts).filter(function (k) { return counts[k] > 0; }).sort(function (a, b) { return counts[b] - counts[a]; }).slice(0, 10);
-    var o = K.chartBase(); o.indexAxis = "y"; o.plugins.legend.display = false; o.scales.x.ticks = { precision: 0 }; o.scales.y.ticks = { font: { size: 11 } };
-    K.upsert("cCause", { type: "bar", options: o, data: { labels: top, datasets: [{ label: "Mishaps", data: top.map(function (k) { return counts[k]; }), backgroundColor: "#a9b97a", borderRadius: 4 }] } });
-  }
-
-  function renderHeat(scoped) {
-    var M = scoped.filter(function (r) { return r.event_type === "Mishap"; });
-    var cats = uniq(S.recs.map(function (r) { return r.category; })).sort();
-    var grid = {}, max = 0;
-    M.forEach(function (r) { var k = r.category + "|" + (+r.month.slice(5)); grid[k] = (grid[k] || 0) + 1; max = Math.max(max, grid[k]); });
-    var h = "<thead><tr><th></th>" + K.MON.map(function (m) { return "<th>" + m + "</th>"; }).join("") + "<th>Total</th></tr></thead><tbody>";
-    cats.forEach(function (c) {
-      var tot = 0;
-      h += '<tr><th class="rowh">' + esc(c) + "</th>" + K.MON.map(function (_, i) {
-        var v = grid[c + "|" + (i + 1)] || 0; tot += v;
-        return '<td style="background:' + K.heatColor(max ? v / max : 0) + ";color:" + (v / max > .25 ? "#0a1424" : "#9fb0c6") + '">' + (v || "") + "</td>";
-      }).join("") + '<td style="color:#c7d3e3">' + tot + "</td></tr>";
-    });
-    $("tHeat").innerHTML = h + "</tbody>";
-    // seasonal callouts: 3-month window holding the largest share of a category
-    var notes = [];
-    cats.forEach(function (c) {
-      var arr = K.MON.map(function (_, i) { return grid[c + "|" + (i + 1)] || 0; }), tot = sum(arr);
-      if (tot < 4) return;
-      var best = 0, bi = 0;
-      for (var i = 0; i < 12; i++) { var s = arr[i] + arr[(i + 1) % 12] + arr[(i + 2) % 12]; if (s > best) { best = s; bi = i; } }
-      var share = best / tot;
-      if (share >= 0.45) notes.push({ c: c, share: share, span: K.MON[bi] + "\u2013" + K.MON[(bi + 2) % 12], n: best, tot: tot });
-    });
-    notes.sort(function (a, b) { return b.share - a.share; });
-    $("seasonal").innerHTML = notes.length ? "<strong>Seasonal pattern:</strong> " + notes.slice(0, 4).map(function (n) { return esc(n.c) + " concentrates in " + n.span + " (" + n.n + " of " + n.tot + ", " + (100 * n.share).toFixed(0) + "%)"; }).join("; ") + ". Plan pre-season safety briefs, risk assessments, and inspections ahead of these windows."
-      : "No strong seasonal concentration in the current selection.";
-    return notes;
-  }
-
-  var UCOLS = [["rank", "#"], ["unit", "Unit"], ["strength", "Avg strength"], ["mishaps", "Mishaps"], ["rate", "Rate / 1,000"], ["ac", "Class A\u2013C"], ["days", "Days lost"], ["cost", "Cost"], ["nm", "Near misses"], ["topcat", "Top category"], ["chg", "vs prior yr"]];
-  function renderUnits(C, P, units, cur) {
-    var rows = units.map(function (u) {
-      var info = S.unitInfo[u], rc = C.filter(function (r) { return r.unit_id === u; }), rp = P.filter(function (r) { return r.unit_id === u; });
-      var st = unitStrength(u, cur), a = stats(rc, st), b = stats(rp, st);
-      var cc = {}; rc.forEach(function (r) { if (r.event_type === "Mishap") cc[r.category] = (cc[r.category] || 0) + 1; });
-      var topcat = Object.keys(cc).sort(function (x, y) { return cc[y] - cc[x]; })[0] || "\u2014";
-      return { u: u, info: info, strength: st, mishaps: a.mishaps, rate: a.rate, ac: a.ac, days: a.days, cost: a.cost, nm: a.nm, topcat: topcat, chg: a.mishaps - b.mishaps };
-    });
-    rows.sort(function (x, y) { return (y.rate || 0) - (x.rate || 0) || y.mishaps - x.mishaps; });
-    rows.forEach(function (r, i) { r.rank = i + 1; });
-    var k = S.sortKey, asc = S.sortAsc;
-    if (k !== "rate" || asc) rows = rows.slice().sort(function (x, y) {
-      var a = k === "unit" ? x.info.unit_name : x[k === "rank" ? "rate" : k], b = k === "unit" ? y.info.unit_name : y[k === "rank" ? "rate" : k];
-      var c = a < b ? -1 : a > b ? 1 : 0; return asc ? c : -c;
-    });
-    S.unitRows = rows;
-    var shown = S.showAll ? rows : rows.slice(0, 10);
-    $("btnAll").textContent = S.showAll ? "Show top 10" : "Show all " + rows.length;
-    $("tUnits").querySelector("thead").innerHTML = "<tr>" + UCOLS.map(function (c) { return '<th data-k="' + c[0] + '" class="' + (S.sortKey === c[0] ? "sorted" + (S.sortAsc ? " asc" : "") : "") + (["strength", "nm", "chg", "cost"].indexOf(c[0]) >= 0 ? " hide-sm" : "") + '">' + c[1] + "</th>"; }).join("") + "</tr>";
-    var maxRate = Math.max.apply(null, rows.map(function (r) { return r.rate || 0; }).concat([1]));
-    $("tUnits").querySelector("tbody").innerHTML = shown.map(function (r) {
-      return '<tr><td class="num">' + r.rank + '</td><td><div class="unit">' + esc(r.info.unit_name) + '</div><div class="bn">' + esc(r.info.battalion) + " \u00B7 " + esc(r.info.location) + '</div></td><td class="num hide-sm">' + K.fmt(r.strength) + '</td><td class="num">' + r.mishaps +
-        '</td><td class="num"><strong>' + (r.rate == null ? "\u2014" : r.rate.toFixed(1)) + '</strong><div class="bar-in"><i style="width:' + (100 * (r.rate || 0) / maxRate).toFixed(0) + '%"></i></div></td><td class="num">' + r.ac + '</td><td class="num">' + r.days + '</td><td class="num hide-sm">' + K.money(r.cost) + '</td><td class="num hide-sm">' + r.nm +
-        "</td><td>" + esc(r.topcat) + '</td><td class="num hide-sm ' + (r.chg > 0 ? "bad" : "") + '">' + (r.chg > 0 ? "+" : "") + r.chg + "</td></tr>";
-    }).join("");
-    Array.prototype.forEach.call($("tUnits").querySelectorAll("th"), function (th) {
-      th.onclick = function () { var key = th.getAttribute("data-k"); if (key === "rank") key = "rate"; if (S.sortKey === key) S.sortAsc = !S.sortAsc; else { S.sortKey = key; S.sortAsc = key === "unit" || key === "topcat"; } render(); };
-    });
-    return rows;
-  }
-
-  function renderHot(C, P, units, cur) {
-    var byBn = {};
-    units.forEach(function (u) { var bn = S.unitInfo[u].battalion; byBn[bn] = (byBn[bn] || 0) + (unitStrength(u, cur) || 0); });
-    var keys = {};
-    C.concat(P).forEach(function (r) { if (byBn[r.battalion] != null) keys[r.battalion + "|" + r.category] = 1; });
-    var rows = Object.keys(keys).map(function (k) {
-      var p = k.split("|"), rc = C.filter(function (r) { return r.battalion === p[0] && r.category === p[1]; }), rp = P.filter(function (r) { return r.battalion === p[0] && r.category === p[1]; });
-      var sev = sum(rc, function (r) { return WEIGHT[r.mishap_class] || 0; }), st = byBn[p[0]] || null;
-      var m = rc.filter(function (r) { return r.event_type === "Mishap"; }), mp = rp.filter(function (r) { return r.event_type === "Mishap"; });
-      var flags = [];
-      if (m.some(function (r) { return r.mishap_class === "A" || r.mishap_class === "B"; })) flags.push(["Severe (A/B)", ""]);
-      if (m.length >= 3) flags.push(["Repeat (" + m.length + ")", ""]);
-      if (m.length > mp.length && m.length >= 2) flags.push(["Rising (+" + (m.length - mp.length) + ")", "warn"]);
-      if (m.length >= 2 && (rc.length - m.length) < m.length) flags.push(["Low near-miss reporting", "warn"]);
-      return { bn: p[0], cat: p[1], score: st ? 1000 * sev / st : sev, mishaps: m.length, nm: rc.length - m.length, days: sum(m, function (r) { return r.days_lost; }), cost: sum(m, function (r) { return r.cost; }), flags: flags };
-    }).filter(function (r) { return r.mishaps > 0; }).sort(function (a, b) { return b.score - a.score; }).slice(0, 10);
-    $("tHot").querySelector("tbody").innerHTML = rows.length ? rows.map(function (r, i) {
-      return '<tr><td class="num">' + (i + 1) + "</td><td>" + esc(r.bn) + "</td><td>" + esc(r.cat) + '</td><td class="num score">' + r.score.toFixed(1) + '</td><td class="num">' + r.mishaps + '</td><td class="num">' + r.nm + '</td><td class="num">' + r.days + '</td><td class="num">' + K.money(r.cost) + "</td><td>" +
-        (r.flags.length ? r.flags.map(function (f) { return '<span class="flag ' + f[1] + '">' + f[0] + "</span>"; }).join("") : '<span class="muted small">\u2014</span>') + "</td></tr>";
-    }).join("") : '<tr><td colspan="9" class="muted">No mishaps in this selection.</td></tr>';
-    return rows;
-  }
-
-  function renderSummary(A, B, prevAvail, daysSince, lastAB, C, seasonal, unitRows, hot, end) {
-    var s = [];
-    s.push("For the 12 months ending " + K.monthLabel(end) + ", " + scopeLabel().replace("All units statewide", "units statewide") + " recorded " + A.mishaps + " Class A\u2013D mishap" + (A.mishaps === 1 ? "" : "s") +
-      (A.rate != null ? " (" + A.rate.toFixed(1) + " per 1,000 personnel)" : "") + ", with " + K.fmt(A.days) + " lost workdays and " + K.money(A.cost, 1) + " in losses.");
-    if (B && B.mishaps != null) {
-      var d = A.mishaps - B.mishaps;
-      s.push(d === 0 ? "That is unchanged from the prior 12 months." : "That is " + (d < 0 ? "down " + (-d) : "up " + d) + " from the prior 12 months (" + B.mishaps + ")" + (B.rate != null && A.rate != null ? ", a rate change of " + (A.rate - B.rate > 0 ? "+" : "") + (A.rate - B.rate).toFixed(1) + " per 1,000" : "") + ".");
+  function top(m) { var k = sortKeys(m)[0]; return k ? [k, m[k]] : null; }
+  function pct(a, b) { return b ? Math.round(a / b * 100) + "%" : "0%"; }
+  function summary(rows, all, f, range) {
+    if (!rows.length) { $("summary").textContent = "No accidents match the current filters."; return; }
+    var c = cnt(rows, function (r) { return r.cls; }), s = [];
+    s.push(K.fmt(rows.length) + " accident" + (rows.length === 1 ? "" : "s") + " reported " + (range ? "from " + fd(range[0]) + " to " + fd(range[1]) : "") + (S.have.cls ? " (Class A " + (c.A || 0) + ", B " + (c.B || 0) + ", C " + (c.C || 0) + ", D " + (c.D || 0) + ")" : "") + ".");
+    if (S.have.c_total) { var tc = K.sum(rows, function (r) { return n(r.c_total); }), ic = K.sum(rows, function (r) { return n(r.c_injury); }), ec = K.sum(rows, function (r) { return n(r.ecod); });
+      s.push("Total cost " + K.money(tc) + (S.have.c_injury ? ": " + K.money(ic) + " injury and " + K.money(ec) + " material damage" : "") + "."); }
+    var ts = S.have.subtype && top(cnt(rows, function (r) { return r.subtype; })), tcz = S.have.cause && top(cnt(rows, function (r) { return r.cause; }));
+    if (ts) s.push("The most common accident subtype is " + ts[0] + " (" + ts[1] + ", " + pct(ts[1], rows.length) + ")" + (tcz ? " and the leading cause is " + tcz[0] + " (" + tcz[1] + ")" : "") + ".");
+    if (S.have.on_duty) { var off = rows.filter(function (r) { return r.on_duty === false; }); if (off.length) s.push(off.length + " (" + pct(off.length, rows.length) + ") occurred off duty" + (S.have.subtype ? ", " + off.filter(function (r) { return r.subtype === "POV"; }).length + " of them POV" : "") + "."); }
+    if (!f.bn && S.have.battalion) { var tb = top(cnt(rows, function (r) { return r.battalion; })); if (tb && tb[1] >= 3) s.push(tb[0] + " has the most accidents in the selection (" + tb[1] + ")."); }
+    if (S.have.status) {
+      var open = rows.filter(function (r) { return r.open; }), od = open.filter(function (r) { return r.isOverdue; }).sort(function (a, b) { return b.overdue - a.overdue; });
+      s.push(open.length + " investigation" + (open.length === 1 ? " is" : "s are") + " open; " + (od.length ? od.length + " " + (od.length === 1 ? "is" : "are") + " past the 90-day suspense, the oldest " + (od[0].ccir ? "CCIR " + od[0].ccir + " " : "") + "at " + od[0].overdue + " days overdue." : "none are past the 90-day suspense."));
     }
-    if (A.mishaps) s.push(Math.round(100 * A.onduty / A.mishaps) + "% of mishaps occurred on duty; " + (A.mishaps - A.onduty) + (A.mishaps - A.onduty === 1 ? " was" : " were") + " off duty.");
-    var cats = {}; C.forEach(function (r) { if (r.event_type === "Mishap") cats[r.category] = (cats[r.category] || 0) + 1; });
-    var topc = Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a]; }).slice(0, 2);
-    if (topc.length) s.push("Leading categories: " + topc.map(function (c) { return c + " (" + cats[c] + ")"; }).join(" and ") + ".");
-    s.push(lastAB ? "It has been " + K.fmt(daysSince) + " days since the last Class A or B mishap (Class " + lastAB.mishap_class + ", " + lastAB.category + ", " + lastAB.unit_name + ")." : "There is no Class A or B mishap on record in this scope.");
-    var u = unitRows.filter(function (r) { return r.mishaps > 0; }).slice(0, 2);
-    if (u.length) s.push("Highest normalized rates: " + u.map(function (r) { return r.info.unit_name + " (" + (r.rate == null ? r.mishaps + " mishaps" : r.rate.toFixed(1) + " per 1,000") + ")"; }).join(" and ") + ".");
-    if (hot.length) s.push("Top hotspot: " + hot[0].bn + ", " + hot[0].cat + (hot[0].flags.length ? " (" + hot[0].flags.map(function (f) { return f[0]; }).join(", ") + ")" : "") + ".");
-    if (seasonal.length) s.push("Seasonal focus: " + seasonal.slice(0, 2).map(function (n) { return n.c + " in " + n.span; }).join(" and ") + ".");
-    s.push("Near-miss reporting: " + A.nm + " reports" + (A.mishaps ? " (" + (A.nm / A.mishaps).toFixed(1) + " per mishap)" : "") + (B ? (A.nm >= B.nm ? ", up from " : ", down from ") + B.nm + " the prior year." : "."));
+    if (S.have.cls) { var ab = all.filter(function (r) { return r.cls === "A" || r.cls === "B"; }).sort(function (a, b) { return b.date - a.date; })[0];
+      if (ab) s.push("Last Class A/B: " + fd(ab.date) + " (" + Math.round((d0(S.asOf) - d0(ab.date)) / 864e5) + " days ago)."); }
+    if (S.have.hf_cat) { var th = top(cnt(rows, function (r) { return r.hf_cat; })); if (th) s.push("Top HFACS category: " + th[0] + " (" + th[1] + ")."); }
+    // FYTD comparison
+    var asOf = S.asOf, fy = asOf.getMonth() >= 9 ? asOf.getFullYear() + 1 : asOf.getFullYear(), doy = function (d) { var st = new Date(d.getMonth() >= 9 ? d.getFullYear() : d.getFullYear() - 1, 9, 1, 12); return Math.round((d0(d) - st) / 864e5); }, cut = doy(asOf);
+    var cur = all.filter(function (r) { return r.fy === fy && doy(r.date) <= cut; }).length, prev = all.filter(function (r) { return r.fy === fy - 1 && doy(r.date) <= cut; }).length;
+    if (prev || cur) s.push("FY" + String(fy).slice(2) + " to date: " + cur + " vs " + prev + " at the same point in FY" + String(fy - 1).slice(2) + ".");
     $("summary").textContent = s.join(" ");
   }
 
-  function exportCsv() {
-    K.downloadCsv("safety_unit_ranking_" + ($("fEnd").value || "") + ".csv",
-      ["rank", "unit_id", "unit_name", "battalion", "brigade", "location", "avg_strength", "mishaps", "rate_per_1000", "class_a_c", "days_lost", "cost", "near_misses", "top_category", "change_vs_prior_year"],
-      S.unitRows.map(function (r) { return [r.rank, r.u, r.info.unit_name, r.info.battalion, r.info.brigade, r.info.location, r.strength == null ? "" : r.strength.toFixed(0), r.mishaps, r.rate == null ? "" : r.rate.toFixed(2), r.ac, r.days, r.cost, r.nm, r.topcat, r.chg]; }));
+  // ---------- tracker ----------
+  function trackRows(rows) { return rows.filter(function (r) { return r.open; }).sort(function (a, b) { return b.overdue - a.overdue || a.due - b.due; }); }
+  function tracker(rows) {
+    var o = trackRows(rows);
+    var tb = $("tTrack").tBodies[0];
+    tb.innerHTML = o.length ? o.map(function (r) {
+      return '<tr data-i="' + S.recs.indexOf(r) + '"><td><span class="rag ' + rag(r) + '" title="' + ragLabel(r) + '"></span></td><td>' + esc(r.ccir || "") + '</td><td class="hide-sm">' + esc(r.asmis || "") + "</td><td>" + esc(r.msc || "") + '</td><td class="hide-sm">' + esc(r.battalion || "") + "</td><td>" + pill(r.cls) + "</td><td>" + esc(r.status || "") + "</td><td>" + fd(r.date) + '</td><td class="hide-sm">' + fd(r.due) + '</td><td class="' + (r.isOverdue ? "cf-bad" : r.daysToDue <= 30 ? "cf-warn" : "") + '">' + (r.isOverdue ? r.overdue : "\u2014") + "</td></tr>";
+    }).join("") : '<tr><td colspan="10" class="muted">No open investigations in the current selection.</td></tr>';
+    var sc = cnt(rows, function (r) { return r.status; }), labels = STATUSES.filter(function (s) { return sc[s]; }).concat(sortKeys(sc).filter(function (s) { return STATUSES.indexOf(s) < 0; }));
+    K.upsert("cPipe", { type: "bar", data: { labels: labels, datasets: [{ label: "Accidents", data: labels.map(function (l) { return sc[l]; }), backgroundColor: labels.map(function (l) { return { "Investigation Ongoing": "#e3b34c", "In Review NGB": "#5aa6e6", "Final": "#5fbf7f" }[l] || "#8b9bb0"; }) }] },
+      options: Object.assign(K.chartBase(), { indexAxis: "y", plugins: { legend: { display: false } } }) });
+    var B = [["0-30", 0, 30], ["31-60", 31, 60], ["61-90", 61, 90], ["90+", 91, 1e9]];
+    K.upsert("cAging", { type: "bar", data: { labels: B.map(function (b) { return b[0] + " days"; }), datasets: [
+      { label: "Investigation Ongoing", data: B.map(function (b) { return o.filter(function (r) { return r.status === "Investigation Ongoing" && r.acc_age >= b[1] && r.acc_age <= b[2]; }).length; }), backgroundColor: "#e3b34c" },
+      { label: "In Review NGB", data: B.map(function (b) { return o.filter(function (r) { return r.status !== "Investigation Ongoing" && r.acc_age >= b[1] && r.acc_age <= b[2]; }).length; }), backgroundColor: "#5aa6e6" }] },
+      options: stacked() });
+  }
+  function stacked(horiz) { var o = K.chartBase(); o.scales.x.stacked = true; o.scales.y.stacked = true; if (horiz) o.indexAxis = "y"; o.scales[horiz ? "x" : "y"].ticks = { precision: 0 }; return o; }
+
+  // ---------- trends ----------
+  function monthly(rows, range) {
+    if (!range) { K.upsert("cMonthly", { type: "bar", data: { labels: [], datasets: [] }, options: stacked() }); return; }
+    var m0 = A.iso(range[0]).slice(0, 7), m1 = A.iso(range[1]).slice(0, 7), months = [];
+    for (var m = m0; m <= m1 && months.length < 120; m = K.addMonths(m, 1)) months.push(m);
+    var cls = S.have.cls ? CLASSES.concat(rows.some(function (r) { return r.cls === "Other"; }) ? ["Other"] : []) : [null];
+    K.upsert("cMonthly", { type: "bar", data: { labels: months.map(K.monthShort), datasets: cls.map(function (c) {
+      return { label: c ? "Class " + c : "Accidents", data: months.map(function (mm) { return rows.filter(function (r) { return r.month === mm && (!c || r.cls === c); }).length; }), backgroundColor: CLS_COLOR[c] || "#5aa6e6" }; }) },
+      options: stacked() });
+  }
+  function fyChart(all, f) {
+    var fys = K.uniq(all.map(function (r) { return r.fy; })).sort().slice(-4), cols = ["#8b9bb0", "#a9c16a", "#5aa6e6", "#e3b34c"].slice(-fys.length);
+    var cur = S.asOf.getMonth() >= 9 ? S.asOf.getFullYear() + 1 : S.asOf.getFullYear(), curIdx = (S.asOf.getMonth() + 3) % 12;
+    K.upsert("cFy", { type: "line", data: { labels: FYM, datasets: fys.map(function (y, i) {
+      var acc = 0, data = FYM.map(function (_, mi) { acc += all.filter(function (r) { return r.fy === y && r.fyMonth === mi; }).length; return y === cur && mi > curIdx ? null : acc; });
+      return { label: "FY" + String(y).slice(2), data: data, borderColor: cols[i], backgroundColor: cols[i], borderWidth: y === cur ? 3 : 2, pointRadius: 2, tension: .2, spanGaps: false };
+    }) }, options: (function () { var o = K.chartBase(); o.scales.y.beginAtZero = true; o.scales.y.ticks = { precision: 0 }; return o; })() });
+    $("fyNote").textContent = "Cumulative count by fiscal month (Oct to Sep). Uses every filter except the date range.";
   }
 
+  // ---------- breakdowns ----------
+  function byClassBar(id, rows, key, order, horiz, limit) {
+    var m = cnt(rows, function (r) { return r[key]; }), labels = order ? order.filter(function (k) { return m[k]; }).concat(sortKeys(m).filter(function (k) { return order.indexOf(k) < 0; })) : sortKeys(m);
+    if (limit) labels = labels.slice(0, limit);
+    var cls = S.have.cls ? CLASSES.concat(rows.some(function (r) { return r.cls === "Other"; }) ? ["Other"] : []) : [null];
+    K.upsert(id, { type: "bar", data: { labels: labels, datasets: cls.map(function (c) {
+      return { label: c ? "Class " + c : "Accidents", data: labels.map(function (l) { return rows.filter(function (r) { return r[key] === l && (!c || r.cls === c); }).length; }), backgroundColor: CLS_COLOR[c] || "#5aa6e6" }; }) },
+      options: stacked(horiz) });
+    return labels;
+  }
+  function breakdowns(rows) {
+    if (S.have.subtype) byClassBar("cSub", rows, "subtype", ["AMV", "ACV", "POV", "GSA", "Air", "Injury", "Other"], true);
+    if (S.have.cause) byClassBar("cCause", rows, "cause", null, true);
+    if (S.have.msc) byClassBar("cMsc", rows, "msc", null, true);
+    if (S.have.battalion) {
+      var str = S.strength ? S.strength.reduce(function (m, s) { m[s.battalion] = s.assigned; return m; }, {}) : null;
+      byClassBar("cBn", rows, "battalion", null, true, 20);
+      $("bnNote").textContent = str ? "Hover a bar for counts. Rates per 1,000 by battalion are in the tooltip footer." : "";
+      if (str && K.charts.cBn) {
+        var range = rangeOf(F(), rows), months = range ? Math.max(1, (range[1] - range[0]) / 864e5 / 30.44) : 12;
+        K.charts.cBn.options.plugins.tooltip.callbacks = { footer: function (it) { var b = it[0].label, t = rows.filter(function (r) { return r.battalion === b; }).length; return str[b] ? "Rate: " + (t / str[b] * 1000 * 12 / months).toFixed(2) + " per 1,000 / yr" : ""; } };
+        K.charts.cBn.update();
+      }
+    }
+    if (S.have.duty_status) { var m = cnt(rows, function (r) { return r.duty_status; }), l = ["MDAY", "AGR", "ADOS", "AT"].filter(function (k) { return m[k]; }).concat(sortKeys(m).filter(function (k) { return ["MDAY", "AGR", "ADOS", "AT"].indexOf(k) < 0; }));
+      K.upsert("cDuty", { type: "bar", data: { labels: l, datasets: [{ label: "Accidents", data: l.map(function (k) { return m[k]; }), backgroundColor: "#5aa6e6" }] }, options: (function () { var o = K.chartBase(); o.plugins.legend.display = false; o.scales.y.ticks = { precision: 0 }; return o; })() }); }
+    if (S.have.on_duty) { var on = rows.filter(function (r) { return r.on_duty === true; }).length, off = rows.filter(function (r) { return r.on_duty === false; }).length;
+      K.upsert("cOn", { type: "doughnut", data: { labels: ["On duty", "Off duty"], datasets: [{ data: [on, off], backgroundColor: ["#a9c16a", "#e88a4c"], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom" } } } }); }
+    if (S.have.dow) { K.upsert("cDow", { type: "bar", data: { labels: DOW.map(function (d) { return d.slice(0, 3); }), datasets: [{ label: "Accidents", data: DOW.map(function (_, i) { return rows.filter(function (r) { return r.dowIdx === i; }).length; }), backgroundColor: DOW.map(function (_, i) { return i >= 5 ? "#e3b34c" : "#5aa6e6"; }) }] }, options: (function () { var o = K.chartBase(); o.plugins.legend.display = false; o.scales.y.ticks = { precision: 0 }; return o; })() }); }
+  }
+  function heat(rows) {
+    if (!S.have.dow || !S.have.tod) return;
+    var g = DOW.map(function (_, di) { return TBANDS.map(function (b) { return rows.filter(function (r) { return r.dowIdx === di && r.tod != null && r.tod >= b[1] && r.tod < b[1] + 4; }).length; }); });
+    var mx = Math.max(1, Math.max.apply(null, g.map(function (r) { return Math.max.apply(null, r); })));
+    var unk = rows.filter(function (r) { return r.tod == null || r.dowIdx < 0; }).length;
+    $("tHeat").innerHTML = "<thead><tr><th></th>" + TBANDS.map(function (b) { return "<th>" + b[0] + "</th>"; }).join("") + "</tr></thead><tbody>" + DOW.map(function (d, di) {
+      return "<tr><th>" + d.slice(0, 3) + "</th>" + g[di].map(function (v) { return '<td style="background:' + (v ? K.heatColor(v / mx) : "rgba(60,95,143,.15)") + (v ? "" : ";color:#5c6f88") + '">' + v + "</td>"; }).join("") + "</tr>";
+    }).join("") + "</tbody>" + (unk ? '<caption class="muted small" style="caption-side:bottom;text-align:left">' + unk + " record(s) without a readable day or time are not shown.</caption>" : "");
+  }
+  function hfacs(rows) {
+    if (!S.have.hf_cat) return;
+    var lv = ["hf_cat", "hf_fail", "hf_sub"], d = S.hf.length, sub = rows.filter(function (r) { return S.hf.every(function (v, i) { return r[lv[i]] === v; }); });
+    if (d > 0 && !S.have[lv[d]]) { S.hf = S.hf.slice(0, d - 1); return hfacs(rows); }
+    var m = cnt(sub, function (r) { return r[lv[Math.min(d, 2)]] || "(blank)"; }), labels = sortKeys(m).slice(0, 15);
+    K.upsert("cHf", { type: "bar", data: { labels: labels, datasets: [{ label: ["Category", "Failure", "Subfailure"][d], data: labels.map(function (l) { return m[l]; }), backgroundColor: ["#8a9a5b", "#5aa6e6", "#e3b34c"][d] }] },
+      options: (function () { var o = K.chartBase(); o.indexAxis = "y"; o.plugins.legend.display = false; o.scales.x.ticks = { precision: 0 };
+        o.onClick = function (e, els) { if (!els.length || S.hf.length >= 2 || !S.have[lv[S.hf.length + 1]]) return; var l = labels[els[0].index]; if (l === "(blank)") return; S.hf.push(l); hfacs(currentRows()); };
+        o.onHover = function (e, els) { e.native.target.style.cursor = els.length && S.hf.length < 2 ? "pointer" : "default"; }; return o; })() });
+    $("hfCrumbs").innerHTML = '<button type="button" data-d="0">All categories</button>' + S.hf.map(function (v, i) { return '<button type="button" data-d="' + (i + 1) + '">' + esc(v) + "</button>"; }).join("");
+  }
+  function currentRows() { var f = F(); return S.recs.filter(function (r) { return pass(r, f); }); }
+  function cost(rows) {
+    if (!S.have.c_total) return;
+    var fys = K.uniq(rows.map(function (r) { return r.fy; })).sort();
+    var comp = [["c_away", "Days away from work", "#5aa6e6"], ["c_hosp", "Days hospitalized", "#8a9a5b"], ["c_ppd", "Perm. partial disability", "#e3b34c"], ["c_ptd", "Perm. total disability", "#e88a4c"], ["c_fat", "Fatality", "#e0645c"], ["ecod", "Material ECOD", "#b59ad8"]].filter(function (c) { return S.have[c[0]]; });
+    var ds = comp.map(function (c) { return { label: c[1], data: fys.map(function (y) { return K.sum(rows.filter(function (r) { return r.fy === y; }), function (r) { return n(r[c[0]]); }); }), backgroundColor: c[2] }; });
+    var other = fys.map(function (y, i) { var t = K.sum(rows.filter(function (r) { return r.fy === y; }), function (r) { return n(r.c_total); }); return Math.max(0, t - K.sum(ds, function (d) { return d.data[i]; })); });
+    if (other.some(function (v) { return v > 0.5; })) ds.push({ label: "Other / unallocated", data: other, backgroundColor: "#8b9bb0" });
+    var o = stacked(true); o.scales.x.ticks = { callback: function (v) { return K.money(v); } }; o.plugins.tooltip.callbacks = { label: function (c) { return c.dataset.label + ": " + K.money(c.raw); } };
+    K.upsert("cCost", { type: "bar", data: { labels: fys.map(function (y) { return "FY" + String(y).slice(2); }), datasets: ds }, options: o });
+  }
+
+  // ---------- demographics (aggregated, suppressed) ----------
+  function rankGroup(r) {
+    var s = String(r || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!s) return null;
+    if (/^(PVT|PV1|PV2|PFC|SPC|CPL|E[1-4])$/.test(s)) return "E1-E4";
+    if (/^(SGT|SSG|E[56])$/.test(s)) return "E5-E6";
+    if (/^(SFC|MSG|1SG|SGM|CSM|E[789])$/.test(s)) return "E7-E9";
+    if (/^(WO1|CW[2-5]|W[1-5])$/.test(s)) return "Warrant";
+    if (/^(2LT|1LT|CPT|O[1-3])$/.test(s)) return "O1-O3";
+    if (/^(MAJ|LTC|COL|BG|MG|O[4-9])$/.test(s)) return "O4+";
+    if (/^(GS|WG|CIV|CIVILIAN)/.test(s)) return "Civilian";
+    return "Other";
+  }
+  function band(v, cuts) { if (v == null) return null; for (var i = 0; i < cuts.length; i++) if (v <= cuts[i][1]) return cuts[i][0]; return cuts[cuts.length - 1][0]; }
+  var AGEB = [["17-20", 20], ["21-24", 24], ["25-29", 29], ["30-39", 39], ["40+", 999]], YOSB = [["0-2", 2], ["3-5", 5], ["6-10", 10], ["11-20", 20], ["21+", 999]];
+  function demographics(rows) {
+    var supp = 0;
+    function draw(id, key, fn, order) {
+      if (!S.have[key]) return;
+      var m = cnt(rows, function (r) { return fn(r[key]); }), labels = (order || sortKeys(m)).filter(function (k) { return m[k]; });
+      var shown = labels.filter(function (k) { return m[k] >= SUPPRESS; }), hid = labels.length - shown.length; supp += hid;
+      var o = K.chartBase(); o.plugins.legend.display = false; o.scales.y.ticks = { precision: 0 };
+      K.upsert(id, { type: "bar", data: { labels: shown.concat(hid ? ["Suppressed"] : []), datasets: [{ label: "Accidents", data: shown.map(function (k) { return m[k]; }).concat(hid ? [0] : []), backgroundColor: "#8a9a5b" }] }, options: o });
+    }
+    draw("cGender", "gender", function (v) { var s = String(v || "").trim().toUpperCase(); return !s ? null : s[0] === "M" ? "Male" : s[0] === "F" ? "Female" : "Other"; }, ["Male", "Female", "Other"]);
+    draw("cRank", "rank", rankGroup, ["E1-E4", "E5-E6", "E7-E9", "Warrant", "O1-O3", "O4+", "Civilian", "Other"]);
+    draw("cAge", "age_years", function (v) { return band(v, AGEB); }, AGEB.map(function (b) { return b[0]; }));
+    draw("cYos", "yos", function (v) { return band(v, YOSB); }, YOSB.map(function (b) { return b[0]; }));
+    $("suppNote").textContent = supp ? supp + " group(s) with fewer than " + SUPPRESS + " records are suppressed in the current selection." : "No groups suppressed in the current selection.";
+  }
+
+  // ---------- tables / drawer ----------
+  function allTable(rows) {
+    var show = S.showAll ? rows : rows.slice(0, 25);
+    $("tAll").tBodies[0].innerHTML = show.length ? show.map(function (r) {
+      return '<tr data-i="' + S.recs.indexOf(r) + '"><td>' + fd(r.date) + "</td><td>" + esc(r.ccir || r.accident_no || "") + "</td><td>" + esc(r.msc || "") + '</td><td class="hide-sm">' + esc(r.battalion || "") + "</td><td>" + pill(r.cls) + '</td><td class="hide-sm">' + esc(r.subtype || "") + '</td><td class="hide-sm">' + esc(r.cause || "") + '</td><td class="hide-sm">' + esc(r.status || "") + "</td><td>" + (r.c_total != null ? K.money(r.c_total) : "\u2014") + "</td></tr>";
+    }).join("") : '<tr><td colspan="9" class="muted">No accidents match the current filters.</td></tr>';
+    $("btnAll").textContent = S.showAll ? "Show 25" : "Show all " + rows.length;
+    $("btnAll").style.display = rows.length > 25 ? "" : "none";
+  }
+  function openDrawer(r) {
+    $("dTitle").innerHTML = (r.ccir ? "CCIR " + esc(r.ccir) : "Accident " + esc(r.accident_no || "")) + " " + pill(r.cls);
+    var h = [];
+    h.push('<p><span class="rag ' + (r.open ? rag(r) : "green") + '"></span> ' + esc(r.status || "") + (r.open ? " \u00b7 " + ragLabel(r) + (r.isOverdue ? " (" + r.overdue + " days)" : "") : "") + "</p>");
+    if (S.have.summary) h.push('<div class="narr">' + esc(r.summary || "No summary provided.") + "</div>");
+    h.push("<dl>" + A.COLUMNS.filter(function (c) { return c[0] !== "summary" && DEMO_KEYS.indexOf(c[0]) < 0 && (c[0] in r) && r[c[0]] !== undefined && S.have.hasOwnProperty(c[0]); }).map(function (c) {
+      var k = c[0], v = r["_t_" + k];
+      if (k === "due" && r._dueComputed) v = fd(r.due) + " (computed)";
+      if (k === "overdue" && (v === "" || v == null)) v = r.open ? String(r.overdue) + " (computed)" : "";
+      return "<dt>" + (k === "msc" ? "MSC" : esc(c[1])) + "</dt><dd>" + (v === "" || v == null ? '<span class="muted">blank</span>' : esc(v)) + "</dd>";
+    }).join("") + "</dl>");
+    if (DEMO_KEYS.some(function (k) { return S.have[k]; })) h.push('<p class="muted small" style="margin-top:12px">Gender, rank, age and years of service are shown only in aggregate (Demographics panel).</p>');
+    $("dBody").innerHTML = h.join("");
+    $("drawer").classList.add("open"); $("drawer").setAttribute("aria-hidden", "false"); $("scrim").hidden = false; $("dClose").focus();
+  }
+  function closeDrawer() { $("drawer").classList.remove("open"); $("drawer").setAttribute("aria-hidden", "true"); $("scrim").hidden = true; }
+
+  function exportCsv() {
+    var o = trackRows(currentRows());
+    K.downloadCsv("investigation_tracker_" + iso(new Date()) + ".csv", ["RAG", "CCIR #", "ASMIS #", "MSC", "Battalion", "Unit UIC", "Accident Class", "Status", "Accident Date", "Due Date", "Days Overdue", "Accident Age"],
+      o.map(function (r) { return [ragLabel(r), r.ccir || "", r.asmis || "", r.msc || "", r.battalion || "", r.uic || "", r.cls || "", r.status || "", fd(r.date), fd(r.due), r.isOverdue ? r.overdue : 0, r.acc_age]; }));
+  }
+
+  // ---------- wiring ----------
   function init() {
-    K.initCharts(); K.dictTable("dictBody", COLUMNS);
-    ["fBrigade", "fBattalion"].forEach(function (id, i) { $(id).addEventListener("change", function () { if (i === 0) $("fBattalion").value = ""; $("fLocation").value = ""; buildFilters(false); render(); }); });
-    ["fLocation", "fDuty", "fEnd"].forEach(function (id) { $(id).addEventListener("change", render); });
-    $("btnReset").onclick = function () { S.sortKey = "rate"; S.sortAsc = false; buildFilters(true); render(); };
-    $("btnAll").onclick = function () { S.showAll = !S.showAll; render(); };
-    $("btnCsv").onclick = exportCsv;
-    $("btnPrint").onclick = function () { window.print(); };
-    $("btnLoad").onclick = function () { $("loadPanel").hidden = !$("loadPanel").hidden; };
-    $("btnDemo").onclick = function () { setData(DEMO.records, DEMO.strength, "demo"); $("loadMsg").className = "loadmsg okm"; $("loadMsg").textContent = "Demo data restored."; };
-    $("fileInput").onchange = function (e) {
-      var f = e.target.files[0]; if (!f) return; var msg = $("loadMsg"); msg.className = "loadmsg"; msg.textContent = "Reading " + f.name + "\u2026";
-      K.readWorkbook(f, function (err, wb) {
-        try {
-          if (err) throw err;
-          var miss = K.missingCols(wb._first, COLUMNS.filter(function (c) { return c[1]; }).map(function (c) { return c[0]; }));
-          if (miss.length) throw new Error("Missing required column(s): " + miss.join(", ") + ".");
-          setData(wb._first, wb.strength || [], "Your file: " + f.name);
-          msg.className = "loadmsg okm"; msg.textContent = "Loaded " + S.recs.length + " of " + wb._first.length + " rows from " + f.name + ". Data stays in this browser tab.";
-        } catch (e2) { msg.className = "loadmsg err"; msg.textContent = "Could not load file: " + e2.message; }
+    K.initCharts();
+    $("dictBody").innerHTML = A.COLUMNS.map(function (c, i) { return "<tr><td>" + (i + 1) + "</td><td><code>" + esc(c[1]) + "</code>" + (c[0] === "msc" ? " <span class=\"muted\">(shown as MSC; a column named MSC also works)</span>" : "") + "</td><td>" + esc(c[4]) + "</td></tr>"; }).join("");
+    $("btnLoad").addEventListener("click", function () { var p = $("loadPanel"); p.hidden = !p.hidden; if (!p.hidden) p.scrollIntoView({ behavior: "smooth", block: "nearest" }); });
+    $("btnPrint").addEventListener("click", function () { window.print(); });
+    $("btnDemo").addEventListener("click", function () { $("fileInput").value = ""; loadDemo(); });
+    $("fileInput").addEventListener("change", function (e) {
+      var file = e.target.files[0]; if (!file) return;
+      $("loadReport").innerHTML = "<p>Reading " + esc(file.name) + "&hellip;</p>";
+      A.readFile(file, function (err, res) {
+        if (err) { $("loadReport").innerHTML = '<p class="err"><strong>Could not read ' + esc(file.name) + ".</strong> " + esc(err.message || err) + "</p>"; return; }
+        var now = new Date(); loadAoa(res.aoa, new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12), res.strength, "file", file.name, res.sheetName);
       });
-      e.target.value = "";
-    };
-    setData(DEMO.records, DEMO.strength, "demo");
+    });
+    $("fFy").addEventListener("change", function () { var y = +this.value; if (y) { $("fFrom").value = (y - 1) + "-10-01"; $("fTo").value = y + "-09-30"; } else { $("fFrom").value = ""; $("fTo").value = ""; } S.hf = []; render(); });
+    ["fFrom", "fTo"].forEach(function (id) { $(id).addEventListener("change", function () { $("fFy").value = ""; render(); }); });
+    $("fMsc").addEventListener("change", function () { cascade(false); render(); });
+    $("fBn").addEventListener("change", function () { cascade(false); render(); });
+    ["fUic", "fClass", "fStatus", "fDuty", "fOn", "fSub", "fCause"].forEach(function (id) { $(id).addEventListener("change", function () { S.hf = []; render(); }); });
+    $("btnReset").addEventListener("click", function () { S.hf = []; buildFilters(true); ["fFy", "fClass", "fStatus", "fDuty", "fOn", "fSub", "fCause"].forEach(function (id) { $(id).value = ""; }); render(); });
+    $("btnCsv").addEventListener("click", exportCsv);
+    $("btnAll").addEventListener("click", function () { S.showAll = !S.showAll; allTable(currentRows().sort(function (a, b) { return b.date - a.date; })); });
+    ["tTrack", "tAll"].forEach(function (id) { $(id).addEventListener("click", function (e) { var tr = e.target.closest("tr[data-i]"); if (tr) openDrawer(S.recs[+tr.getAttribute("data-i")]); }); });
+    $("hfCrumbs").addEventListener("click", function (e) { var b = e.target.closest("button[data-d]"); if (!b) return; S.hf = S.hf.slice(0, +b.getAttribute("data-d")); hfacs(currentRows()); });
+    $("dClose").addEventListener("click", closeDrawer); $("scrim").addEventListener("click", closeDrawer);
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeDrawer(); });
+    loadDemo();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 })();

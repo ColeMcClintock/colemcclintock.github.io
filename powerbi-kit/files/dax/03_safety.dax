@@ -1,84 +1,145 @@
-// ===== 03_safety.dax : mishaps, near misses, normalized rates =====
-// FactMishap[date] -> 'Date'[Date]; FactStrength[MonthStart] -> 'Date'[Date]
+// ===== 03_safety.dax : ASMIS accidents, investigations, costs, rates =====
+// FactAccident[Accident Date] -> 'Date'[Date]; FactAccident[Battalion] -> DimBattalion[Battalion]
+// Open = Status <> "Final". Overdue = open and past Due Date (Accident Date + 90 days).
 
-Mishaps =
-CALCULATE ( COUNTROWS ( FactMishap ), FactMishap[event_type] = "Mishap" )   // Whole number
+Accidents =
+COUNTROWS ( FactAccident )                                                   // Whole number
 
-Near Misses =
-CALCULATE ( COUNTROWS ( FactMishap ), FactMishap[event_type] = "Near miss" )
+Class A Accidents =
+CALCULATE ( [Accidents], FactAccident[Accident Class] = "A" )
 
-Class A-C Mishaps =
-CALCULATE ( [Mishaps], FactMishap[mishap_class] IN { "A", "B", "C" } )
+Class B Accidents =
+CALCULATE ( [Accidents], FactAccident[Accident Class] = "B" )
+
+Class C Accidents =
+CALCULATE ( [Accidents], FactAccident[Accident Class] = "C" )
+
+Class D Accidents =
+CALCULATE ( [Accidents], FactAccident[Accident Class] = "D" )
+
+Injury Accidents =
+CALCULATE ( [Accidents], FactAccident[Injury Y/N] = "Y" )
+
+Off Duty Accidents =
+CALCULATE ( [Accidents], FactAccident[On Duty] = "N" )
+
+// ---- Investigations ----
+Open Investigations =
+CALCULATE ( [Accidents], FactAccident[Status] <> "Final" )
+
+Overdue Investigations =
+COUNTROWS (
+    FILTER ( FactAccident, FactAccident[Status] <> "Final" && FactAccident[Due Date (Calc)] < TODAY () )
+)
+
+Overdue Investigations % =
+DIVIDE ( [Overdue Investigations], [Open Investigations] )                    // Percentage, 0 dp
+
+Oldest Overdue (days) =
+MAXX (
+    FILTER ( FactAccident, FactAccident[Status] <> "Final" && FactAccident[Due Date (Calc)] < TODAY () ),
+    DATEDIFF ( FactAccident[Due Date (Calc)], TODAY (), DAY )
+)
+
+// Use in a table with one accident per row (e.g. CCIR #) for conditional icons
+Investigation RAG =
+VAR _due = SELECTEDVALUE ( FactAccident[Due Date (Calc)] )
+VAR _status = SELECTEDVALUE ( FactAccident[Status] )
+RETURN
+    SWITCH (
+        TRUE (),
+        ISBLANK ( _due ), BLANK (),
+        _status = "Final", "Final",
+        _due < TODAY (), "Red",
+        _due <= TODAY () + 30, "Amber",
+        "Green"
+    )
+
+Investigation RAG Color =
+SWITCH ( [Investigation RAG], "Red", "#E0645C", "Amber", "#E3B34C", "Green", "#5FBF7F", "#8B9BB0" )
+
+// ---- Costs (blank Material ECOD counts as $0) ----
+Total Accident Cost =
+SUM ( FactAccident[Total Accident Cost] )                                    // Currency
+
+Injury Cost =
+SUM ( FactAccident[Injury Cost] )
+
+Material ECOD =
+SUM ( FactAccident[Material ECOD] )
+
+Accidents With Material Damage =
+CALCULATE ( [Accidents], FactAccident[Material ECOD] > 0 )
+
+Days Away Cost =
+SUM ( FactAccident[Days Away from Work Cost] )
+
+Days Hospitalized Cost =
+SUM ( FactAccident[Days Hospitalized Cost] )
+
+PPD Cost =
+SUM ( FactAccident[Perm. Partial Disability Cost] )
+
+PTD Cost =
+SUM ( FactAccident[Perm. Total Disability Cost] )
+
+Fatality Cost =
+SUM ( FactAccident[Fatality Cost] )
 
 Days Lost =
-SUM ( FactMishap[days_lost] )
+SUM ( FactAccident[Days Lost] )
 
-Mishap Cost =
-SUM ( FactMishap[cost] )                                                       // Currency
+Days Restricted =
+SUM ( FactAccident[Days Restricted] )
 
-Near Miss Ratio =
-DIVIDE ( [Near Misses], [Mishaps] )
-
-// ---- Rolling 12 months ending the latest date in context ----
-Mishaps R12 =
-CALCULATE ( [Mishaps], DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH ) )
-
-Avg Strength R12 =
-VAR _months =
-    CALCULATETABLE ( VALUES ( 'Date'[MonthStart] ), DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH ) )
-RETURN
-    AVERAGEX (
-        _months,
-        VAR _m = 'Date'[MonthStart]
-        RETURN CALCULATE ( SUM ( FactStrength[assigned] ), REMOVEFILTERS ( 'Date' ), 'Date'[MonthStart] = _m )
-    )
-
-Mishap Rate per 1,000 (R12) =
-DIVIDE ( [Mishaps R12], [Avg Strength R12] ) * 1000                            // Decimal, 1 dp
-
-Mishaps R12 PY =
-CALCULATE ( [Mishaps R12], DATEADD ( 'Date'[Date], -12, MONTH ) )
-
-Mishap Rate per 1,000 (R12) PY =
-CALCULATE ( [Mishap Rate per 1,000 (R12)], DATEADD ( 'Date'[Date], -12, MONTH ) )
-
-Mishap Rate YoY Change =
-IF ( NOT ISBLANK ( [Mishap Rate per 1,000 (R12) PY] ), [Mishap Rate per 1,000 (R12)] - [Mishap Rate per 1,000 (R12) PY] )
-
-Mishaps YoY % =
-DIVIDE ( [Mishaps R12] - [Mishaps R12 PY], [Mishaps R12 PY] )
-
-Class A-C R12 =
-CALCULATE ( [Class A-C Mishaps], DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH ) )
-
-Days Lost R12 =
-CALCULATE ( [Days Lost], DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH ) )
-
-Mishap Cost R12 =
-CALCULATE ( [Mishap Cost], DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH ) )
-
+// ---- Time ----
 Days Since Last Class A/B =
-VAR _end = MAX ( 'Date'[Date] )
+VAR _end = MIN ( TODAY (), MAX ( 'Date'[Date] ) )
 VAR _last =
-    CALCULATE ( MAX ( FactMishap[date] ), FactMishap[mishap_class] IN { "A", "B" }, REMOVEFILTERS ( 'Date' ), 'Date'[Date] <= _end )
+    CALCULATE (
+        MAX ( FactAccident[Accident Date] ),
+        FactAccident[Accident Class] IN { "A", "B" },
+        REMOVEFILTERS ( 'Date' ),
+        FactAccident[Accident Date] <= _end
+    )
 RETURN IF ( NOT ISBLANK ( _last ), DATEDIFF ( _last, _end, DAY ) )
 
-// Severity-weighted hotspot score per 1,000 personnel (A 50, B 20, C 5, D 2, near miss 0.5)
-Hotspot Score =
-VAR _sev =
-    CALCULATE (
-        SUMX ( FactMishap, SWITCH ( FactMishap[mishap_class], "A", 50, "B", 20, "C", 5, "D", 2, 0.5 ) ),
-        DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH )
-    )
-RETURN DIVIDE ( _sev, [Avg Strength R12] ) * 1000
+Accidents FYTD =
+CALCULATE ( [Accidents], DATESYTD ( 'Date'[Date], "9-30" ) )
 
-Unit Rate Rank =
-IF ( HASONEVALUE ( DimUnit[unit_name] ), RANKX ( ALLSELECTED ( DimUnit[unit_name] ), [Mishap Rate per 1,000 (R12)], , DESC, DENSE ) )
+Accidents PFYTD =
+CALCULATE ( [Accidents], DATESYTD ( DATEADD ( 'Date'[Date], -1, YEAR ), "9-30" ) )
 
+Accidents FYTD vs PFYTD =
+[Accidents FYTD] - [Accidents PFYTD]
+
+// ---- Rates (needs DimBattalion[Assigned]) ----
+Assigned Strength =
+SUM ( DimBattalion[Assigned] )
+
+Days In Range =
+VAR _first = MAX ( MIN ( 'Date'[Date] ), CALCULATE ( MIN ( FactAccident[Accident Date] ), REMOVEFILTERS () ) )
+VAR _last  = MIN ( MAX ( 'Date'[Date] ), TODAY () )
+RETURN MAX ( 0, DATEDIFF ( _first, _last, DAY ) + 1 )
+
+Accidents per 1,000 (annualized) =
+DIVIDE ( [Accidents], [Assigned Strength] ) * 1000 * DIVIDE ( 365.25, [Days In Range] )     // Decimal, 2 dp
+
+Class A-C per 1,000 (annualized) =
+DIVIDE ( [Class A Accidents] + [Class B Accidents] + [Class C Accidents], [Assigned Strength] ) * 1000 * DIVIDE ( 365.25, [Days In Range] )
+
+// ---- Demographics: show only groups of 3 or more ----
+Accidents (suppressed <3) =
+VAR _n = [Accidents]
+RETURN IF ( _n >= 3, _n )
+
+// ---- Narrative (no personal or demographic details) ----
 Safety Summary =
-"12 months ending " & [As Of Month] & ": " & FORMAT ( [Mishaps R12], "0" ) & " mishaps ("
-    & FORMAT ( [Mishap Rate per 1,000 (R12)], "0.0" ) & " per 1,000), "
-    & FORMAT ( [Days Lost R12], "#,0" ) & " lost workdays, "
-    & FORMAT ( [Mishap Cost R12], "$#,0,K" ) & " in losses. "
-    & IF ( ISBLANK ( [Days Since Last Class A/B] ), "No Class A/B on record.",
-        FORMAT ( [Days Since Last Class A/B], "#,0" ) & " days since the last Class A/B." )
+VAR _n = [Accidents]
+VAR _ab = [Class A Accidents] + [Class B Accidents]
+RETURN
+    FORMAT ( _n, "0" ) & " accidents (" & FORMAT ( _ab, "0" ) & " Class A/B), total cost "
+        & FORMAT ( [Total Accident Cost], "$#,0" ) & ". "
+        & FORMAT ( [Open Investigations], "0" ) & " investigations open, "
+        & FORMAT ( [Overdue Investigations], "0" ) & " past the 90-day suspense. "
+        & IF ( NOT ISBLANK ( [Days Since Last Class A/B] ), FORMAT ( [Days Since Last Class A/B], "0" ) & " days since the last Class A/B.", "" )

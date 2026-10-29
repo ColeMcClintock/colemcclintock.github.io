@@ -12,16 +12,39 @@ KIT = os.path.join(ROOT, "powerbi-kit")
 FILES = os.path.join(KIT, "files")
 DATA = os.path.join(FILES, "data")
 
+def write_define_all():
+    """Combine every measure in 01-04 into one DEFINE block for DAX query view."""
+    import re
+    out = ["// ===== 99_define_all.dax =====",
+           "// Paste into DAX query view, then use 'Update model with changes' (or copy measures individually).",
+           "// Requires the measures table named _Measures.", "DEFINE"]
+    n = 0
+    for fn in ("01_common.dax", "02_readiness.dax", "03_safety.dax", "04_finance.dax"):
+        lines = open(os.path.join(FILES, "dax", fn), encoding="utf-8").read().splitlines()
+        cur = None
+        for ln in lines:
+            m = re.match(r"^([^\s/][^=]*?) =\s*$", ln)
+            if m and not re.match(r"^(VAR|RETURN)\b", ln):
+                cur = m.group(1).strip(); n += 1
+                out.append(f"    MEASURE _Measures[{cur}] =")
+            elif cur and ln.strip():
+                out.append("        " + ln)
+    open(os.path.join(FILES, "dax", "99_define_all.dax"), "w", encoding="utf-8").write("\n".join(out) + "\n")
+    print(n, "measures in 99_define_all.dax")
+
 def main():
     os.makedirs(DATA, exist_ok=True)
     src = {
         "readiness_monthly.csv": "dashboards/readiness/data/readiness_monthly.csv",
         "events.csv": "dashboards/readiness/data/events.csv",
-        "mishaps.csv": "dashboards/safety/data/mishaps.csv",
-        "strength.csv": "dashboards/safety/data/strength.csv",
+        "asmis_sample.csv": "dashboards/safety/data/asmis_sample.csv",
+        "asmis_sample.xlsx": "dashboards/safety/data/asmis_sample.xlsx",
+        "strength_by_battalion.csv": "dashboards/safety/data/strength_by_battalion.csv",
         "status_of_funds.csv": "dashboards/finance/data/status_of_funds.csv",
         "ufr.csv": "dashboards/finance/data/ufr.csv",
     }
+    for old in ("mishaps.csv", "strength.csv"):
+        if os.path.exists(os.path.join(DATA, old)): os.remove(os.path.join(DATA, old))
     for dst, s in src.items():
         shutil.copyfile(os.path.join(ROOT, s), os.path.join(DATA, dst))
     units = json.load(open(os.path.join(ROOT, "data", "units.json")))["units"]
@@ -35,12 +58,13 @@ A .pbix file is not included; the kit rebuilds it.
 
 theme/   report themes (dark for screen, light for briefings/print)
 m/       Power Query (M) scripts: parameter, loader, date table, dims, facts, unpivots, folder load
-dax/     measures library (readiness, safety, finance, titles) + one DEFINE file
+dax/     measures library (readiness, safety/ASMIS, finance, titles) + one DEFINE file
 model/   star-schema.svg (relationships)
 docs/    build-steps.md, report-layout.md
-data/    fictional CSVs used by the web dashboards
+data/    fictional CSVs used by the web dashboards; asmis_sample.xlsx/.csv mirror the ASMIS export layout
 """
     open(os.path.join(FILES, "README.txt"), "w").write(readme)
+    write_define_all()
     # snippet content for the page
     entries = []
     for group in ("theme", "dax", "m", "docs", "model"):

@@ -7,6 +7,7 @@
 <link rel="icon" href="../../assets/img/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../../assets/css/site.css">
 <link rel="stylesheet" href="../../assets/css/dash.css">
+<link rel="stylesheet" href="safety.css">
 </head>
 <body>
 <header class="site">
@@ -21,36 +22,46 @@
     <div>
       <div class="eyebrow">Iowa Army National Guard &middot; State Safety Office</div>
       <h1>Safety &amp; Mishaps Dashboard</h1>
-      <div class="asof"><strong id="windowLabel">&mdash;</strong> &middot; <span id="scopeLabel">All units</span><span id="sourceLabel"></span></div>
+      <div class="asof"><strong id="asofLabel">&mdash;</strong> &middot; <span id="scopeLabel">All accidents</span><span id="sourceLabel"></span></div>
     </div>
     <div class="actions no-print">
-      <button class="btn ghost" id="btnLoad" type="button">Load your own data</button>
+      <button class="btn" id="btnLoad" type="button">Load ASMIS export</button>
       <button class="btn ghost" id="btnPrint" type="button">Print / PDF</button>
     </div>
   </div>
 
   <div class="loadpanel no-print" id="loadPanel" hidden>
     <div>
-      <h3>Load your own data (stays on this device)</h3>
-      <p>Choose a <strong>.csv</strong> or <strong>.xlsx</strong> file of mishap and near-miss records that follows the column template. The file is read by your browser only; nothing is uploaded.</p>
-      <p><a class="btn" href="safety_template.csv" download>&#8681; Download template CSV</a>
-         <label class="btn ghost filebtn">Choose file&hellip;<input type="file" id="fileInput" accept=".csv,.xlsx,.xls"></label>
-         <button class="btn ghost" id="btnDemo" type="button">Restore demo data</button></p>
-      <div id="loadMsg" class="loadmsg" role="status"></div>
+      <h3>Load an ASMIS export (stays on this device)</h3>
+      <p>Choose the Excel (<strong>.xlsx</strong>) or <strong>.csv</strong> accident export. The file is read by this browser tab only; nothing is uploaded, stored, or sent anywhere. Close or reload the tab to clear it.</p>
+      <p>
+        <label class="btn filebtn">Choose file&hellip;<input type="file" id="fileInput" accept=".xlsx,.xls,.csv"></label>
+        <a class="btn ghost" href="asmis_template.xlsx" download>&#8681; Blank template (.xlsx)</a>
+        <a class="btn ghost" href="asmis_template.csv" download>&#8681; Blank template (.csv)</a>
+        <button class="btn ghost" id="btnDemo" type="button">Restore demo data</button>
+      </p>
+      <p class="muted small">Optional: add a sheet named <code>Strength</code> with columns <code>Battalion</code>, <code>Assigned</code> (and <code>MSC</code>) to show accidents per 1,000 personnel.</p>
+      <div id="loadReport" class="loadreport" role="status"></div>
     </div>
     <details>
-      <summary>Column template</summary>
-      <table class="dict"><thead><tr><th>Column</th><th>Required</th><th>Description</th></tr></thead><tbody id="dictBody"></tbody></table>
-      <p class="muted small">Rates need a strength denominator: fill <code>unit_strength</code>, or add a sheet named <code>strength</code> with columns month, unit_id, assigned.</p>
+      <summary>Column guide (45 columns, export order)</summary>
+      <div class="tablewrap"><table class="dict"><thead><tr><th>#</th><th>Column</th><th>Used for</th></tr></thead><tbody id="dictBody"></tbody></table></div>
     </details>
   </div>
 
-  <div class="filters no-print" role="group" aria-label="Filters">
-    <label>Brigade<select id="fBrigade"></select></label>
-    <label>Battalion<select id="fBattalion"></select></label>
-    <label>Location<select id="fLocation"></select></label>
-    <label>Duty status<select id="fDuty"><option value="">On &amp; off duty</option><option>On-duty</option><option>Off-duty</option></select></label>
-    <label>12 months ending<select id="fEnd"></select></label>
+  <div class="filters no-print" role="group" aria-label="Filters" id="filters">
+    <label>Fiscal year<select id="fFy"></select></label>
+    <label>From<input type="date" id="fFrom"></label>
+    <label>To<input type="date" id="fTo"></label>
+    <label>MSC<select id="fMsc"></select></label>
+    <label>Battalion<select id="fBn"></select></label>
+    <label>Unit UIC<select id="fUic"></select></label>
+    <label>Class<select id="fClass"></select></label>
+    <label>Status<select id="fStatus"></select></label>
+    <label>Duty status<select id="fDuty"></select></label>
+    <label>On duty<select id="fOn"></select></label>
+    <label>Accident subtype<select id="fSub"></select></label>
+    <label>Cause subtype<select id="fCause"></select></label>
     <button class="btn ghost" id="btnReset" type="button">Reset</button>
   </div>
 
@@ -59,53 +70,100 @@
   <section class="panel summary">
     <h2>Safety Officer summary</h2>
     <p id="summary">Loading&hellip;</p>
-    <p class="muted small">Auto-generated from the filtered data each time a filter changes.</p>
+    <p class="muted small">Auto-generated from the filtered data. Excludes personal and demographic details.</p>
+  </section>
+
+  <section class="panel" data-req="status,date">
+    <div class="tablehead">
+      <h2>Investigation tracker</h2>
+      <div class="no-print"><button class="btn" id="btnCsv" type="button">&#8681; Export CSV</button></div>
+    </div>
+    <div class="row r2b" style="margin-top:10px">
+      <div><h3 class="sub">Status pipeline</h3><div class="chartbox short"><canvas id="cPipe"></canvas></div></div>
+      <div><h3 class="sub">Open investigations by age</h3><div class="chartbox short"><canvas id="cAging"></canvas></div></div>
+    </div>
+    <p class="muted small">Open = any status other than Final. Due date = accident date + 90 days. Red = overdue; amber = due within 30 days; green = on time. Click a row for the full record.</p>
+    <div class="tablewrap scrolly"><table class="units clickable" id="tTrack"><thead><tr><th>RAG</th><th>CCIR #</th><th class="hide-sm">ASMIS #</th><th>MSC</th><th class="hide-sm">Battalion</th><th>Class</th><th>Status</th><th>Accident date</th><th class="hide-sm">Due date</th><th>Days overdue</th></tr></thead><tbody></tbody></table></div>
   </section>
 
   <div class="row r2">
-    <section class="panel"><h2>Mishaps by month vs prior year</h2><div class="chartbox"><canvas id="cTrend"></canvas></div></section>
-    <section class="panel"><h2>Mishap class mix</h2><div class="chartbox"><canvas id="cClass"></canvas></div></section>
+    <section class="panel" data-req="date,cls"><h2>Accidents by month and class</h2><div class="chartbox"><canvas id="cMonthly"></canvas></div></section>
+    <section class="panel" data-req="date"><h2>Fiscal year comparison (cumulative)</h2><div class="chartbox"><canvas id="cFy"></canvas></div><p class="muted small" id="fyNote"></p></section>
   </div>
 
-  <div class="row r2b">
-    <section class="panel"><h2>Mishaps by category and class</h2><div class="chartbox tall"><canvas id="cCat"></canvas></div></section>
-    <section class="panel"><h2>Top root-cause factors</h2><div class="chartbox tall"><canvas id="cCause"></canvas></div></section>
+  <div class="row r3b">
+    <section class="panel" data-req="subtype"><h2>Accident subtype</h2><div class="chartbox"><canvas id="cSub"></canvas></div></section>
+    <section class="panel" data-req="cause"><h2>Cause subtype</h2><div class="chartbox"><canvas id="cCause"></canvas></div></section>
+    <section class="panel" data-req="msc"><h2>MSC</h2><div class="chartbox"><canvas id="cMsc"></canvas></div></section>
   </div>
 
-  <section class="panel">
-    <h2>Seasonal pattern: mishaps by calendar month and category</h2>
-    <p class="muted small">All 24 months in the selected scope, mishaps only (near misses excluded). Darker red = more events.</p>
-    <div class="tablewrap"><table class="heat" id="tHeat"></table></div>
-    <div class="callout" id="seasonal"></div>
+  <div class="row r2">
+    <section class="panel" data-req="battalion"><h2>Battalion</h2><div class="chartbox tall"><canvas id="cBn"></canvas></div><p class="muted small" id="bnNote"></p></section>
+    <section class="panel">
+      <div class="row r2b nomb">
+        <div data-req="duty_status"><h3 class="sub">Duty status</h3><div class="chartbox short"><canvas id="cDuty"></canvas></div></div>
+        <div data-req="on_duty"><h3 class="sub">On / off duty</h3><div class="chartbox short"><canvas id="cOn"></canvas></div></div>
+      </div>
+      <div data-req="dow"><h3 class="sub">Day of week</h3><div class="chartbox short"><canvas id="cDow"></canvas></div></div>
+    </section>
+  </div>
+
+  <div class="row r2">
+    <section class="panel" data-req="dow,tod">
+      <h2>When accidents happen (day &times; time of day)</h2>
+      <div class="tablewrap"><table class="heat" id="tHeat"></table></div>
+    </section>
+    <section class="panel" data-req="hf_cat">
+      <div class="tablehead"><h2>HFACS drill-down</h2><div class="crumbs" id="hfCrumbs"></div></div>
+      <p class="muted small">Click a bar to drill from Category to Failure to Subfailure.</p>
+      <div class="chartbox"><canvas id="cHf"></canvas></div>
+    </section>
+  </div>
+
+  <section class="panel" data-req="c_total">
+    <h2>Cost composition by fiscal year</h2>
+    <div class="chartbox"><canvas id="cCost"></canvas></div>
   </section>
 
-  <section class="panel">
-    <div class="tablehead">
-      <h2>Unit ranking (rate per 1,000 personnel)</h2>
-      <div class="no-print"><button class="btn ghost" id="btnAll" type="button">Show all</button> <button class="btn" id="btnCsv" type="button">&#8681; Export CSV</button></div>
+  <section class="panel" id="demoPanel" data-req-any="gender,rank,age_years,yos">
+    <h2>Demographics (aggregated)</h2>
+    <p class="muted small">Counts only. Any group with fewer than 3 records in the current selection is suppressed to protect privacy. Not included in the summary.</p>
+    <div class="row r4">
+      <div data-req="gender"><h3 class="sub">Gender</h3><div class="chartbox short"><canvas id="cGender"></canvas></div></div>
+      <div data-req="rank"><h3 class="sub">Rank group</h3><div class="chartbox short"><canvas id="cRank"></canvas></div></div>
+      <div data-req="age_years"><h3 class="sub">Age</h3><div class="chartbox short"><canvas id="cAge"></canvas></div></div>
+      <div data-req="yos"><h3 class="sub">Years of service</h3><div class="chartbox short"><canvas id="cYos"></canvas></div></div>
     </div>
-    <p class="muted small">Normalized by average assigned strength over the 12-month window so large and small units compare fairly. Click a column header to sort.</p>
-    <div class="tablewrap"><table class="units" id="tUnits"><thead></thead><tbody></tbody></table></div>
+    <p class="muted small" id="suppNote"></p>
   </section>
 
   <section class="panel">
-    <h2>Composite risk hotspots (battalion &times; category)</h2>
-    <p class="muted small">Severity-weighted score per 1,000 personnel (Class A 50, B 20, C 5, D 2, near miss 0.5) with flags for repeat, rising, or severe events and low near-miss reporting.</p>
-    <div class="tablewrap"><table class="units" id="tHot"><thead><tr><th>#</th><th>Battalion</th><th>Category</th><th>Score</th><th>Mishaps</th><th>Near misses</th><th>Days lost</th><th>Cost</th><th>Flags</th></tr></thead><tbody></tbody></table></div>
+    <div class="tablehead"><h2>All accidents in selection</h2><div class="no-print"><button class="btn ghost" id="btnAll" type="button">Show all</button></div></div>
+    <p class="muted small">Most recent first. Click a row for the full record, including the summary narrative.</p>
+    <div class="tablewrap"><table class="units clickable" id="tAll"><thead><tr><th>Accident date</th><th>CCIR #</th><th>MSC</th><th class="hide-sm">Battalion</th><th>Class</th><th class="hide-sm">Subtype</th><th class="hide-sm">Cause</th><th class="hide-sm">Status</th><th>Total cost</th></tr></thead><tbody></tbody></table></div>
   </section>
 
   <details class="panel method">
     <summary><h2>How the numbers are calculated</h2></summary>
     <ul>
-      <li><strong>Window:</strong> the 12 months ending in the selected month, compared with the 12 months before it.</li>
-      <li><strong>Mishap rate per 1,000</strong> = Class A&ndash;D mishaps in the window &divide; average assigned strength &times; 1,000. Near misses are not counted as mishaps.</li>
-      <li><strong>Mishap classes</strong> use illustrative cost bands: Class A $2.5M or more (or fatality / permanent total disability), Class B $600K to under $2.5M (or permanent partial disability), Class C $60K to under $600K (or a lost workday), Class D $25K to under $60K. Thresholds here are for demonstration.</li>
-      <li><strong>Days lost</strong> are lost workdays; <strong>cost</strong> includes property damage and injury cost.</li>
-      <li><strong>Days since last Class A/B</strong> counts from the most recent Class A or B in scope to the last day of the window.</li>
-      <li><strong>Near-miss ratio</strong> = near misses reported per mishap. Higher ratios usually mean a healthier reporting culture.</li>
+      <li><strong>Tech</strong> in the export is shown as <strong>MSC</strong> (major subordinate command, the level above battalion). A column named MSC is also accepted.</li>
+      <li><strong>Open investigation</strong> = Status other than Final. <strong>Overdue</strong> = open and more than 90 days past the accident date (Due Date = Accident Date + 90). The export's Days Overdue is used when present; otherwise it is computed from the dates.</li>
+      <li><strong>Costs</strong>: Injury Cost = days away + hospitalized + permanent partial + permanent total disability + fatality costs. Material ECOD = equipment and material damage; a blank ECOD counts as $0 in totals and as "no material damage" in counts.</li>
+      <li><strong>Days lost</strong> uses the export's Days Lost column.</li>
+      <li><strong>Fiscal year</strong> is the federal year, 1 October to 30 September (FY26 = Oct 2025 to Sep 2026).</li>
+      <li><strong>Accidents per 1,000</strong> (annualized) appears only when a Strength sheet is loaded: accidents &divide; assigned strength &times; 1,000 &times; 12 &divide; months in the date range.</li>
+      <li><strong>Days since last Class A/B</strong> counts to the export date (demo) or today (your file).</li>
+      <li>Reported Via and Mistake Type are read but not charted. Gender, rank, age and years of service appear only as aggregated counts; groups under 3 records are suppressed, and they are left out of the record detail view and the summary.</li>
     </ul>
   </details>
 </main>
+
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="Accident detail">
+  <div class="drawer-head"><h2 id="dTitle">Accident</h2><button class="btn ghost" id="dClose" type="button" aria-label="Close">&times;</button></div>
+  <p class="muted small">Local view only. Nothing is sent anywhere.</p>
+  <div id="dBody"></div>
+</aside>
+<div class="scrim" id="scrim" hidden></div>
 
 <footer class="site">
   <div class="wrap">
@@ -118,6 +176,7 @@
 <script src="../../assets/vendor/xlsx.full.min.js"></script>
 <script src="../../assets/js/dashkit.js"></script>
 <script src="data/data.js"></script>
+<script src="asmis-loader.js"></script>
 <script src="safety.js"></script>
 </body>
 </html>
