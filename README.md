@@ -1,6 +1,6 @@
 # Cole McClintock: Data Analytics Portfolio
 
-Live site: **https://mcclintockdigital.github.io/portfolio/**
+Live site: **https://colemcclintock.github.io/**
 
 Data analytics and automation portfolio: interactive dashboards and tools that run in the browser and work offline.
 
