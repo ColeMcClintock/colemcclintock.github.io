@@ -1,0 +1,26 @@
+// ===== 01_common.dax : titles, labels, helpers =====
+// Data shown is fictional for demonstration.
+
+As Of Month =
+FORMAT ( MAX ( 'Date'[Date] ), "mmm yyyy" )
+
+Selected Scope =
+VAR _bde = IF ( ISFILTERED ( DimUnit[brigade] ), SELECTEDVALUE ( DimUnit[brigade], "Multiple brigades" ) )
+VAR _bn  = IF ( ISFILTERED ( DimUnit[battalion] ), SELECTEDVALUE ( DimUnit[battalion], "Multiple battalions" ) )
+VAR _loc = IF ( ISFILTERED ( DimUnit[location] ), SELECTEDVALUE ( DimUnit[location], "Multiple locations" ) )
+VAR _parts = CONCATENATEX ( FILTER ( { _bde, _bn, _loc }, NOT ISBLANK ( [Value] ) ), [Value], " > " )
+RETURN IF ( _parts = "", "All units statewide", _parts )
+
+Title Readiness =
+"Readiness Command Dashboard | " & [Selected Scope] & " | as of " & [As Of Month]
+
+Title Safety =
+"Safety & Mishaps | 12 months ending " & [As Of Month] & " | " & [Selected Scope]
+
+Title Finance =
+VAR _fy = SELECTEDVALUE ( 'Date'[Fiscal Year], "All fiscal years" )
+VAR _appn = SELECTEDVALUE ( DimProgram[appropriation], "All appropriations" )
+RETURN "Status of Funds | " & _fy & " as of " & [As Of Month] & " | " & _appn
+
+Last Refresh Note =
+"Data shown is fictional for demonstration."

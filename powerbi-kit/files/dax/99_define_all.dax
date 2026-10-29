@@ -1,0 +1,234 @@
+// ===== 99_define_all.dax =====
+// Paste into DAX query view, then use 'Update model with changes' (or copy measures individually).
+// Requires the measures table named _Measures.
+DEFINE
+    MEASURE _Measures[As Of Month] =
+        FORMAT ( MAX ( 'Date'[Date] ), "mmm yyyy" )
+    MEASURE _Measures[Selected Scope] =
+        VAR _bde = IF ( ISFILTERED ( DimUnit[brigade] ), SELECTEDVALUE ( DimUnit[brigade], "Multiple brigades" ) )
+        VAR _bn  = IF ( ISFILTERED ( DimUnit[battalion] ), SELECTEDVALUE ( DimUnit[battalion], "Multiple battalions" ) )
+        VAR _loc = IF ( ISFILTERED ( DimUnit[location] ), SELECTEDVALUE ( DimUnit[location], "Multiple locations" ) )
+        VAR _parts = CONCATENATEX ( FILTER ( { _bde, _bn, _loc }, NOT ISBLANK ( [Value] ) ), [Value], " > " )
+        RETURN IF ( _parts = "", "All units statewide", _parts )
+    MEASURE _Measures[Title Readiness] =
+        "Readiness Command Dashboard | " & [Selected Scope] & " | as of " & [As Of Month]
+    MEASURE _Measures[Title Safety] =
+        "Safety & Mishaps | 12 months ending " & [As Of Month] & " | " & [Selected Scope]
+    MEASURE _Measures[Title Finance] =
+        VAR _fy = SELECTEDVALUE ( 'Date'[Fiscal Year], "All fiscal years" )
+        VAR _appn = SELECTEDVALUE ( DimProgram[appropriation], "All appropriations" )
+        RETURN "Status of Funds | " & _fy & " as of " & [As Of Month] & " | " & _appn
+    MEASURE _Measures[Last Refresh Note] =
+        "Data shown is fictional for demonstration."
+    MEASURE _Measures[Assigned] =
+        SUM ( FactReadiness[assigned] )                                   // Whole number
+    MEASURE _Measures[Authorized] =
+        SUM ( FactReadiness[authorized] )                                 // Whole number
+    MEASURE _Measures[Strength %] =
+        DIVIDE ( [Assigned], [Authorized] )                               // Percentage, 1 dp
+    MEASURE _Measures[MOSQ %] =
+        DIVIDE ( SUMX ( FactReadiness, FactReadiness[mosq_pct] * FactReadiness[assigned] ), [Assigned] ) / 100
+    MEASURE _Measures[Medically Ready %] =
+        DIVIDE ( SUM ( FactReadiness[mrc1] ) + SUM ( FactReadiness[mrc2] ), [Assigned] )
+    MEASURE _Measures[Equipment On-Hand %] =
+        DIVIDE ( SUMX ( FactReadiness, FactReadiness[equip_on_hand_pct] * FactReadiness[authorized] ), [Authorized] ) / 100
+    MEASURE _Measures[Equipment OR %] =
+        DIVIDE ( SUMX ( FactReadiness, FactReadiness[equip_or_pct] * FactReadiness[authorized] ), [Authorized] ) / 100
+    MEASURE _Measures[Individual Training %] =
+        DIVIDE ( SUMX ( FactReadiness, FactReadiness[ind_training_pct] * FactReadiness[assigned] ), [Assigned] ) / 100
+    MEASURE _Measures[Collective Training %] =
+        DIVIDE ( SUMX ( FactReadiness, FactReadiness[coll_training_pct] * FactReadiness[assigned] ), [Assigned] ) / 100
+    MEASURE _Measures[Units Reporting] =
+        DISTINCTCOUNT ( FactReadiness[unit_id] )
+    MEASURE _Measures[Units C1-C2] =
+        CALCULATE ( [Units Reporting], FactReadiness[readiness_rating] IN { "C1", "C2" } )
+    MEASURE _Measures[Units C1-C2 %] =
+        DIVIDE ( [Units C1-C2], [Units Reporting] )
+        
+        // ---- Month-over-month (requires a contiguous, marked 'Date' table) ----
+    MEASURE _Measures[Strength % PM] =
+        CALCULATE ( [Strength %], DATEADD ( 'Date'[Date], -1, MONTH ) )
+    MEASURE _Measures[Strength % MoM] =
+        IF ( NOT ISBLANK ( [Strength % PM] ), [Strength %] - [Strength % PM] )   // format as 0.0% ; shows points
+    MEASURE _Measures[Medically Ready % MoM] =
+        VAR _pm = CALCULATE ( [Medically Ready %], DATEADD ( 'Date'[Date], -1, MONTH ) )
+        RETURN IF ( NOT ISBLANK ( _pm ), [Medically Ready %] - _pm )
+    MEASURE _Measures[Equipment OR % MoM] =
+        VAR _pm = CALCULATE ( [Equipment OR %], DATEADD ( 'Date'[Date], -1, MONTH ) )
+        RETURN IF ( NOT ISBLANK ( _pm ), [Equipment OR %] - _pm )
+    MEASURE _Measures[Strength % YoY] =
+        VAR _py = CALCULATE ( [Strength %], SAMEPERIODLASTYEAR ( 'Date'[Date] ) )
+        RETURN IF ( NOT ISBLANK ( _py ), [Strength %] - _py )
+        
+        // ---- Attention score & ranking (same standards as the web dashboard) ----
+    MEASURE _Measures[VAR _gap] =
+        MAX ( 0, 0.90 - [Strength %] ) + MAX ( 0, 0.85 - [MOSQ %] ) + MAX ( 0, 0.85 - [Medically Ready %] )
+                + MAX ( 0, 0.90 - [Equipment On-Hand %] ) + MAX ( 0, 0.85 - [Equipment OR %] )
+                + MAX ( 0, 0.85 - [Individual Training %] ) + MAX ( 0, 0.80 - [Collective Training %] )
+        VAR _rating = SELECTEDVALUE ( FactReadiness[readiness_rating] )
+        VAR _penalty = SWITCH ( _rating, "C3", 5, "C4", 12, 0 )
+        RETURN IF ( NOT ISBLANK ( [Assigned] ), _gap * 100 + _penalty )
+    MEASURE _Measures[Unit Attention Rank] =
+        IF (
+            HASONEVALUE ( DimUnit[unit_name] ),
+            RANKX ( ALLSELECTED ( DimUnit[unit_name] ), [Attention Score], , DESC, DENSE )
+        )
+    MEASURE _Measures[VAR _t] =
+        {
+                ( "Strength", 0.90 - [Strength %] ), ( "MOSQ", 0.85 - [MOSQ %] ), ( "Medical", 0.85 - [Medically Ready %] ),
+                ( "Equip on-hand", 0.90 - [Equipment On-Hand %] ), ( "Equip OR", 0.85 - [Equipment OR %] ),
+                ( "Indiv. training", 0.85 - [Individual Training %] ), ( "Coll. training", 0.80 - [Collective Training %] )
+            }
+        VAR _top = TOPN ( 1, _t, [Value2], DESC )
+        RETURN IF ( MAXX ( _top, [Value2] ) > 0, MAXX ( _top, [Value1] ), "Meets standards" )
+        
+        // Conditional-format helper: 1 = good, 0 = watch, -1 = below standard
+    MEASURE _Measures[Strength Status] =
+        SWITCH ( TRUE (), [Strength %] >= 0.90, 1, [Strength %] >= 0.83, 0, -1 )
+    MEASURE _Measures[Mishaps] =
+        CALCULATE ( COUNTROWS ( FactMishap ), FactMishap[event_type] = "Mishap" )   // Whole number
+    MEASURE _Measures[Near Misses] =
+        CALCULATE ( COUNTROWS ( FactMishap ), FactMishap[event_type] = "Near miss" )
+    MEASURE _Measures[Class A-C Mishaps] =
+        CALCULATE ( [Mishaps], FactMishap[mishap_class] IN { "A", "B", "C" } )
+    MEASURE _Measures[Days Lost] =
+        SUM ( FactMishap[days_lost] )
+    MEASURE _Measures[Mishap Cost] =
+        SUM ( FactMishap[cost] )                                                       // Currency
+    MEASURE _Measures[Near Miss Ratio] =
+        DIVIDE ( [Near Misses], [Mishaps] )
+        
+        // ---- Rolling 12 months ending the latest date in context ----
+    MEASURE _Measures[Mishaps R12] =
+        CALCULATE ( [Mishaps], DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH ) )
+    MEASURE _Measures[VAR _months] =
+        CALCULATETABLE ( VALUES ( 'Date'[MonthStart] ), DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH ) )
+        RETURN
+            AVERAGEX (
+                _months,
+                VAR _m = 'Date'[MonthStart]
+                RETURN CALCULATE ( SUM ( FactStrength[assigned] ), REMOVEFILTERS ( 'Date' ), 'Date'[MonthStart] = _m )
+            )
+    MEASURE _Measures[Mishap Rate per 1,000 (R12)] =
+        DIVIDE ( [Mishaps R12], [Avg Strength R12] ) * 1000                            // Decimal, 1 dp
+    MEASURE _Measures[Mishaps R12 PY] =
+        CALCULATE ( [Mishaps R12], DATEADD ( 'Date'[Date], -12, MONTH ) )
+    MEASURE _Measures[Mishap Rate per 1,000 (R12) PY] =
+        CALCULATE ( [Mishap Rate per 1,000 (R12)], DATEADD ( 'Date'[Date], -12, MONTH ) )
+    MEASURE _Measures[Mishap Rate YoY Change] =
+        IF ( NOT ISBLANK ( [Mishap Rate per 1,000 (R12) PY] ), [Mishap Rate per 1,000 (R12)] - [Mishap Rate per 1,000 (R12) PY] )
+    MEASURE _Measures[Mishaps YoY %] =
+        DIVIDE ( [Mishaps R12] - [Mishaps R12 PY], [Mishaps R12 PY] )
+    MEASURE _Measures[Class A-C R12] =
+        CALCULATE ( [Class A-C Mishaps], DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH ) )
+    MEASURE _Measures[Days Lost R12] =
+        CALCULATE ( [Days Lost], DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH ) )
+    MEASURE _Measures[Mishap Cost R12] =
+        CALCULATE ( [Mishap Cost], DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH ) )
+    MEASURE _Measures[Days Since Last Class A/B] =
+        VAR _end = MAX ( 'Date'[Date] )
+    MEASURE _Measures[VAR _last] =
+        CALCULATE ( MAX ( FactMishap[date] ), FactMishap[mishap_class] IN { "A", "B" }, REMOVEFILTERS ( 'Date' ), 'Date'[Date] <= _end )
+        RETURN IF ( NOT ISBLANK ( _last ), DATEDIFF ( _last, _end, DAY ) )
+        
+        // Severity-weighted hotspot score per 1,000 personnel (A 50, B 20, C 5, D 2, near miss 0.5)
+    MEASURE _Measures[VAR _sev] =
+        CALCULATE (
+                SUMX ( FactMishap, SWITCH ( FactMishap[mishap_class], "A", 50, "B", 20, "C", 5, "D", 2, 0.5 ) ),
+                DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH )
+            )
+        RETURN DIVIDE ( _sev, [Avg Strength R12] ) * 1000
+    MEASURE _Measures[Unit Rate Rank] =
+        IF ( HASONEVALUE ( DimUnit[unit_name] ), RANKX ( ALLSELECTED ( DimUnit[unit_name] ), [Mishap Rate per 1,000 (R12)], , DESC, DENSE ) )
+    MEASURE _Measures[Safety Summary] =
+        "12 months ending " & [As Of Month] & ": " & FORMAT ( [Mishaps R12], "0" ) & " mishaps ("
+            & FORMAT ( [Mishap Rate per 1,000 (R12)], "0.0" ) & " per 1,000), "
+            & FORMAT ( [Days Lost R12], "#,0" ) & " lost workdays, "
+            & FORMAT ( [Mishap Cost R12], "$#,0,K" ) & " in losses. "
+            & IF ( ISBLANK ( [Days Since Last Class A/B] ), "No Class A/B on record.",
+                FORMAT ( [Days Since Last Class A/B], "#,0" ) & " days since the last Class A/B." )
+    MEASURE _Measures[AFP] =
+        CALCULATE ( SUM ( FactFunds[afp] ), REMOVEFILTERS ( 'Date' ), VALUES ( 'Date'[Fiscal Year] ) )   // Currency
+    MEASURE _Measures[Allotted FYTD] =
+        CALCULATE ( SUM ( FactFunds[allotment] ), DATESYTD ( 'Date'[Date], "9/30" ) )
+    MEASURE _Measures[Committed FYTD] =
+        CALCULATE ( SUM ( FactFunds[commitments] ), DATESYTD ( 'Date'[Date], "9/30" ) )
+    MEASURE _Measures[Obligations FYTD] =
+        CALCULATE ( SUM ( FactFunds[obligations] ), DATESYTD ( 'Date'[Date], "9/30" ) )
+    MEASURE _Measures[Disbursements FYTD] =
+        CALCULATE ( SUM ( FactFunds[disbursements] ), DATESYTD ( 'Date'[Date], "9/30" ) )
+    MEASURE _Measures[Plan FYTD] =
+        CALCULATE ( SUM ( FactFunds[plan_obligations] ), DATESYTD ( 'Date'[Date], "9/30" ) )
+    MEASURE _Measures[TDY FYTD] =
+        CALCULATE ( SUM ( FactFunds[tdy_obligations] ), DATESYTD ( 'Date'[Date], "9/30" ) )
+    MEASURE _Measures[Obligation Rate] =
+        DIVIDE ( [Obligations FYTD], [AFP] )                                          // Percentage
+    MEASURE _Measures[Plan Rate] =
+        DIVIDE ( [Plan FYTD], [AFP] )
+    MEASURE _Measures[Variance to Plan (pts)] =
+        [Obligation Rate] - [Plan Rate]                                               // format 0.0%
+    MEASURE _Measures[Variance to Plan ($)] =
+        [Obligations FYTD] - [Plan FYTD]
+    MEASURE _Measures[Disbursement Rate] =
+        DIVIDE ( [Disbursements FYTD], [Obligations FYTD] )
+    MEASURE _Measures[Unobligated Balance] =
+        [AFP] - [Obligations FYTD]
+    MEASURE _Measures[Allotted Not Obligated] =
+        [Allotted FYTD] - [Obligations FYTD]
+    MEASURE _Measures[Open Commitments] =
+        MAX ( 0, [Committed FYTD] - [Obligations FYTD] )
+    MEASURE _Measures[Burn Rate (3-mo avg)] =
+        VAR _end = MAX ( 'Date'[Date] )
+        VAR _fyStart = DATE ( YEAR ( EDATE ( _end, 3 ) ) - 1, 10, 1 )
+        VAR _win = FILTER ( DATESINPERIOD ( 'Date'[Date], _end, -3, MONTH ), 'Date'[Date] >= _fyStart )
+        VAR _n = COUNTROWS ( CALCULATETABLE ( VALUES ( 'Date'[MonthStart] ), _win ) )
+        RETURN DIVIDE ( CALCULATE ( SUM ( FactFunds[obligations] ), _win ), _n )
+    MEASURE _Measures[Months Remaining in FY] =
+        MOD ( 9 - MONTH ( MAX ( 'Date'[Date] ) ), 12 )
+        
+        // Plan-based projection: remaining plan x adjusted pace (same logic as the web dashboard)
+    MEASURE _Measures[Projected EOY Obligations] =
+        VAR _elapsed = 12 - [Months Remaining in FY]
+    MEASURE _Measures[VAR _rows] =
+        ADDCOLUMNS (
+                SUMMARIZE ( FactFunds, FactFunds[program_code], FactFunds[organization] ),
+                "@afp", [AFP], "@obl", [Obligations FYTD], "@plan", [Plan FYTD]
+            )
+        RETURN
+            SUMX (
+                _rows,
+                VAR _pace0 = IF ( [@plan] > 0, MIN ( 1.15, MAX ( 0.5, DIVIDE ( [@obl], [@plan] ) ) ), 1 )
+                VAR _pace = 1 + ( _pace0 - 1 ) * 0.6 * MIN ( 1, _elapsed / 6 )
+                RETURN MIN ( [@afp] * 1.05, [@obl] + MAX ( 0, [@afp] - [@plan] ) * _pace )
+            )
+    MEASURE _Measures[Projected EOY %] =
+        DIVIDE ( [Projected EOY Obligations], [AFP] )
+    MEASURE _Measures[Projected Unobligated at EOY] =
+        MAX ( 0, [AFP] - [Projected EOY Obligations] )
+    MEASURE _Measures[Is One-Year Money] =
+        IF ( SELECTEDVALUE ( DimProgram[appropriation] ) IN { "NGPA", "OMNG", "STATE" }, 1, 0 )
+    MEASURE _Measures[Use-or-Lose Flag] =
+        VAR _rem = [Months Remaining in FY]
+        RETURN
+            SWITCH (
+                TRUE (),
+                _rem = 0 && [Obligation Rate] >= 0.99, "Closed",
+                [Is One-Year Money] = 1 && _rem = 0, "Expired unobligated",
+                [Is One-Year Money] = 1 && _rem <= 3 && [Projected EOY %] < 0.97 && [Projected Unobligated at EOY] > 25000, "Use-or-lose risk",
+                [Variance to Plan (pts)] < -0.05, "Behind plan",
+                [Variance to Plan (pts)] > 0.05, "Ahead of plan",
+                "On track"
+            )
+    MEASURE _Measures[Variance Color] =
+        SWITCH ( TRUE (), [Variance to Plan (pts)] < -0.05, "#E0645C", [Variance to Plan (pts)] < -0.02, "#E3B34C", "#5FBF7F" )   // use as field-value font/background color
+    MEASURE _Measures[Program Variance Rank] =
+        IF ( HASONEVALUE ( DimProgram[program_code] ), RANKX ( ALLSELECTED ( DimProgram[program_code] ), [Variance to Plan ($)], , ASC, DENSE ) )
+    MEASURE _Measures[Open UFR Amount] =
+        CALCULATE ( SUM ( FactUFR[amount] ), FactUFR[status] <> "Funded" )
+    MEASURE _Measures[Resource Manager Summary] =
+        "As of " & [As Of Month] & ": obligated " & FORMAT ( [Obligations FYTD], "$#,0.0,,M" ) & " of "
+            & FORMAT ( [AFP], "$#,0.0,,M" ) & " (" & FORMAT ( [Obligation Rate], "0.0%" ) & ") vs plan "
+            & FORMAT ( [Plan Rate], "0.0%" ) & ". Projected EOY execution " & FORMAT ( [Projected EOY %], "0.0%" )
+            & "; open UFRs " & FORMAT ( [Open UFR Amount], "$#,0.0,,M" ) & "."
+EVALUATE
+    { [As Of Month] }

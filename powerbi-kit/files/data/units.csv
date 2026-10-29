@@ -1,0 +1,32 @@
+unit_id,unit_name,battalion,battalion_short,brigade,branch,location,armory,lat,lon,authorized
+2-512th-HHC,"HHC, 2-512th IN",2-512th Infantry Bn,2-512th IN,58th Infantry Brigade Combat Team,INF,Des Moines,Des Moines Readiness Center,41.56,-93.62,140
+2-512th-A,"A Co, 2-512th IN",2-512th Infantry Bn,2-512th IN,58th Infantry Brigade Combat Team,INF,Boone,Boone Readiness Center,42.091,-93.848,150
+2-512th-B,"B Co, 2-512th IN",2-512th Infantry Bn,2-512th IN,58th Infantry Brigade Combat Team,INF,Ames,Ames Readiness Center,42.053,-93.616,165
+2-512th-C,"C Co, 2-512th IN",2-512th Infantry Bn,2-512th IN,58th Infantry Brigade Combat Team,INF,Marshalltown,Marshalltown Readiness Center,42.07,-92.903,128
+2-512th-D,"D Co (Wpns), 2-512th IN",2-512th Infantry Bn,2-512th IN,58th Infantry Brigade Combat Team,INF,Carroll,Carroll Readiness Center,42.03,-94.904,135
+445th-HHT,"HHT, 445th CAV",445th Cavalry Squadron,445th CAV,58th Infantry Brigade Combat Team,CAV,Sioux City,Sioux City Readiness Center,42.525,-96.404,185
+445th-A,"A Trp, 445th CAV",445th Cavalry Squadron,445th CAV,58th Infantry Brigade Combat Team,CAV,Storm Lake,Storm Lake Readiness Center,42.654,-95.233,135
+445th-B,"B Trp, 445th CAV",445th Cavalry Squadron,445th CAV,58th Infantry Brigade Combat Team,CAV,Spencer,Spencer Readiness Center,43.128,-95.1,140
+445th-C,"C Trp, 445th CAV",445th Cavalry Squadron,445th CAV,58th Infantry Brigade Combat Team,CAV,Fort Dodge,Fort Dodge Readiness Center,42.524,-94.13,110
+1-627th-HHB,"HHB, 1-627th FA",1-627th Field Artillery Bn,1-627th FA,58th Infantry Brigade Combat Team,FA,Council Bluffs,Council Bluffs Readiness Center,41.278,-95.893,170
+1-627th-A,"A Btry, 1-627th FA",1-627th Field Artillery Bn,1-627th FA,58th Infantry Brigade Combat Team,FA,Red Oak,Red Oak Readiness Center,40.993,-95.259,135
+1-627th-B,"B Btry, 1-627th FA",1-627th Field Artillery Bn,1-627th FA,58th Infantry Brigade Combat Team,FA,Creston,Creston Readiness Center,41.022,-94.343,140
+1-627th-G,"G FSC, 1-627th FA",1-627th Field Artillery Bn,1-627th FA,58th Infantry Brigade Combat Team,FA,Council Bluffs,Council Bluffs Readiness Center,41.257,-95.893,165
+371st-HHC,"HHC, 371st BSB",371st Brigade Support Bn,371st BSB,58th Infantry Brigade Combat Team,BSB,Des Moines,Des Moines Readiness Center,41.619,-93.626,185
+371st-A,"A Co (Dist), 371st BSB",371st Brigade Support Bn,371st BSB,58th Infantry Brigade Combat Team,BSB,Ottumwa,Ottumwa Readiness Center,41.012,-92.408,150
+371st-B,"B Co (Maint), 371st BSB",371st Brigade Support Bn,371st BSB,58th Infantry Brigade Combat Team,BSB,Oskaloosa,Oskaloosa Readiness Center,41.305,-92.601,95
+371st-C,"C Co (Med), 371st BSB",371st Brigade Support Bn,371st BSB,58th Infantry Brigade Combat Team,BSB,Iowa City,Iowa City Readiness Center,41.666,-91.509,95
+829th-HSC,"HSC, 829th EN",829th Engineer Bn,829th EN,219th Sustainment Brigade,EN,Cedar Rapids,Cedar Rapids Readiness Center,42.017,-91.668,140
+829th-A,"A Co (Sapper), 829th EN",829th Engineer Bn,829th EN,219th Sustainment Brigade,EN,Waterloo,Waterloo Readiness Center,42.507,-92.346,120
+829th-B,"B Co (Vert), 829th EN",829th Engineer Bn,829th EN,219th Sustainment Brigade,EN,Decorah,Decorah Readiness Center,43.299,-91.812,110
+829th-C,"C Co (Horiz), 829th EN",829th Engineer Bn,829th EN,219th Sustainment Brigade,EN,Mason City,Mason City Readiness Center,43.16,-93.203,165
+572nd-HHD,"HHD, 572nd TC",572nd Transportation Bn,572nd TC,219th Sustainment Brigade,TC,Davenport,Davenport Readiness Center,41.537,-90.543,170
+572nd-A,"A Co (Truck), 572nd TC",572nd Transportation Bn,572nd TC,219th Sustainment Brigade,TC,Muscatine,Muscatine Readiness Center,41.425,-91.026,135
+572nd-B,"B Co (Truck), 572nd TC",572nd Transportation Bn,572nd TC,219th Sustainment Brigade,TC,Clinton,Clinton Readiness Center,41.844,-90.178,165
+572nd-C,"C Co (HET), 572nd TC",572nd Transportation Bn,572nd TC,219th Sustainment Brigade,TC,Burlington,Burlington Readiness Center,40.834,-91.118,128
+2-473rd-HHC,"HHC, 2-473rd AV",2-473rd Aviation Bn,2-473rd AV,96th Troop Command,AV,Des Moines,Des Moines Readiness Center,41.574,-93.638,140
+2-473rd-A,"A Co (Lift), 2-473rd AV",2-473rd Aviation Bn,2-473rd AV,96th Troop Command,AV,Waterloo,Waterloo Readiness Center,42.462,-92.309,165
+2-473rd-B,"B Co (AVIM), 2-473rd AV",2-473rd Aviation Bn,2-473rd AV,96th Troop Command,AV,Des Moines,Des Moines Readiness Center,41.614,-93.586,140
+857th-HHD,"HHD, 857th SC",857th Signal Bn,857th SC,96th Troop Command,SC,Dubuque,Dubuque Readiness Center,42.534,-90.679,185
+857th-A,"A Co, 857th SC",857th Signal Bn,857th SC,96th Troop Command,SC,Iowa City,Iowa City Readiness Center,41.657,-91.509,165
+857th-B,"B Co, 857th SC",857th Signal Bn,857th SC,96th Troop Command,SC,Cedar Rapids,Cedar Rapids Readiness Center,42.005,-91.665,95

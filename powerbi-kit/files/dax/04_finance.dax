@@ -1,0 +1,111 @@
+// ===== 04_finance.dax : status of funds =====
+// FactFunds[MonthStart] -> 'Date'[Date]. Fiscal year ends 30 Sep ("9/30").
+// Monthly amounts are for that month only; AFP is entered once per program/org/FY.
+
+AFP =
+CALCULATE ( SUM ( FactFunds[afp] ), REMOVEFILTERS ( 'Date' ), VALUES ( 'Date'[Fiscal Year] ) )   // Currency
+
+Allotted FYTD =
+CALCULATE ( SUM ( FactFunds[allotment] ), DATESYTD ( 'Date'[Date], "9/30" ) )
+
+Committed FYTD =
+CALCULATE ( SUM ( FactFunds[commitments] ), DATESYTD ( 'Date'[Date], "9/30" ) )
+
+Obligations FYTD =
+CALCULATE ( SUM ( FactFunds[obligations] ), DATESYTD ( 'Date'[Date], "9/30" ) )
+
+Disbursements FYTD =
+CALCULATE ( SUM ( FactFunds[disbursements] ), DATESYTD ( 'Date'[Date], "9/30" ) )
+
+Plan FYTD =
+CALCULATE ( SUM ( FactFunds[plan_obligations] ), DATESYTD ( 'Date'[Date], "9/30" ) )
+
+TDY FYTD =
+CALCULATE ( SUM ( FactFunds[tdy_obligations] ), DATESYTD ( 'Date'[Date], "9/30" ) )
+
+Obligation Rate =
+DIVIDE ( [Obligations FYTD], [AFP] )                                          // Percentage
+
+Plan Rate =
+DIVIDE ( [Plan FYTD], [AFP] )
+
+Variance to Plan (pts) =
+[Obligation Rate] - [Plan Rate]                                               // format 0.0%
+
+Variance to Plan ($) =
+[Obligations FYTD] - [Plan FYTD]
+
+Disbursement Rate =
+DIVIDE ( [Disbursements FYTD], [Obligations FYTD] )
+
+Unobligated Balance =
+[AFP] - [Obligations FYTD]
+
+Allotted Not Obligated =
+[Allotted FYTD] - [Obligations FYTD]
+
+Open Commitments =
+MAX ( 0, [Committed FYTD] - [Obligations FYTD] )
+
+Burn Rate (3-mo avg) =
+VAR _end = MAX ( 'Date'[Date] )
+VAR _fyStart = DATE ( YEAR ( EDATE ( _end, 3 ) ) - 1, 10, 1 )
+VAR _win = FILTER ( DATESINPERIOD ( 'Date'[Date], _end, -3, MONTH ), 'Date'[Date] >= _fyStart )
+VAR _n = COUNTROWS ( CALCULATETABLE ( VALUES ( 'Date'[MonthStart] ), _win ) )
+RETURN DIVIDE ( CALCULATE ( SUM ( FactFunds[obligations] ), _win ), _n )
+
+Months Remaining in FY =
+MOD ( 9 - MONTH ( MAX ( 'Date'[Date] ) ), 12 )
+
+// Plan-based projection: remaining plan x adjusted pace (same logic as the web dashboard)
+Projected EOY Obligations =
+VAR _elapsed = 12 - [Months Remaining in FY]
+VAR _rows =
+    ADDCOLUMNS (
+        SUMMARIZE ( FactFunds, FactFunds[program_code], FactFunds[organization] ),
+        "@afp", [AFP], "@obl", [Obligations FYTD], "@plan", [Plan FYTD]
+    )
+RETURN
+    SUMX (
+        _rows,
+        VAR _pace0 = IF ( [@plan] > 0, MIN ( 1.15, MAX ( 0.5, DIVIDE ( [@obl], [@plan] ) ) ), 1 )
+        VAR _pace = 1 + ( _pace0 - 1 ) * 0.6 * MIN ( 1, _elapsed / 6 )
+        RETURN MIN ( [@afp] * 1.05, [@obl] + MAX ( 0, [@afp] - [@plan] ) * _pace )
+    )
+
+Projected EOY % =
+DIVIDE ( [Projected EOY Obligations], [AFP] )
+
+Projected Unobligated at EOY =
+MAX ( 0, [AFP] - [Projected EOY Obligations] )
+
+Is One-Year Money =
+IF ( SELECTEDVALUE ( DimProgram[appropriation] ) IN { "NGPA", "OMNG", "STATE" }, 1, 0 )
+
+Use-or-Lose Flag =
+VAR _rem = [Months Remaining in FY]
+RETURN
+    SWITCH (
+        TRUE (),
+        _rem = 0 && [Obligation Rate] >= 0.99, "Closed",
+        [Is One-Year Money] = 1 && _rem = 0, "Expired unobligated",
+        [Is One-Year Money] = 1 && _rem <= 3 && [Projected EOY %] < 0.97 && [Projected Unobligated at EOY] > 25000, "Use-or-lose risk",
+        [Variance to Plan (pts)] < -0.05, "Behind plan",
+        [Variance to Plan (pts)] > 0.05, "Ahead of plan",
+        "On track"
+    )
+
+Variance Color =
+SWITCH ( TRUE (), [Variance to Plan (pts)] < -0.05, "#E0645C", [Variance to Plan (pts)] < -0.02, "#E3B34C", "#5FBF7F" )   // use as field-value font/background color
+
+Program Variance Rank =
+IF ( HASONEVALUE ( DimProgram[program_code] ), RANKX ( ALLSELECTED ( DimProgram[program_code] ), [Variance to Plan ($)], , ASC, DENSE ) )
+
+Open UFR Amount =
+CALCULATE ( SUM ( FactUFR[amount] ), FactUFR[status] <> "Funded" )
+
+Resource Manager Summary =
+"As of " & [As Of Month] & ": obligated " & FORMAT ( [Obligations FYTD], "$#,0.0,,M" ) & " of "
+    & FORMAT ( [AFP], "$#,0.0,,M" ) & " (" & FORMAT ( [Obligation Rate], "0.0%" ) & ") vs plan "
+    & FORMAT ( [Plan Rate], "0.0%" ) & ". Projected EOY execution " & FORMAT ( [Projected EOY %], "0.0%" )
+    & "; open UFRs " & FORMAT ( [Open UFR Amount], "$#,0.0,,M" ) & "."

@@ -1,0 +1,87 @@
+// ===== 02_readiness.dax : personnel / equipment / training readiness =====
+// Facts are monthly (FactReadiness[MonthStart] -> 'Date'[Date]). Select ONE month for cards.
+
+Assigned =
+SUM ( FactReadiness[assigned] )                                   // Whole number
+
+Authorized =
+SUM ( FactReadiness[authorized] )                                 // Whole number
+
+Strength % =
+DIVIDE ( [Assigned], [Authorized] )                               // Percentage, 1 dp
+
+MOSQ % =
+DIVIDE ( SUMX ( FactReadiness, FactReadiness[mosq_pct] * FactReadiness[assigned] ), [Assigned] ) / 100
+
+Medically Ready % =
+DIVIDE ( SUM ( FactReadiness[mrc1] ) + SUM ( FactReadiness[mrc2] ), [Assigned] )
+
+Equipment On-Hand % =
+DIVIDE ( SUMX ( FactReadiness, FactReadiness[equip_on_hand_pct] * FactReadiness[authorized] ), [Authorized] ) / 100
+
+Equipment OR % =
+DIVIDE ( SUMX ( FactReadiness, FactReadiness[equip_or_pct] * FactReadiness[authorized] ), [Authorized] ) / 100
+
+Individual Training % =
+DIVIDE ( SUMX ( FactReadiness, FactReadiness[ind_training_pct] * FactReadiness[assigned] ), [Assigned] ) / 100
+
+Collective Training % =
+DIVIDE ( SUMX ( FactReadiness, FactReadiness[coll_training_pct] * FactReadiness[assigned] ), [Assigned] ) / 100
+
+Units Reporting =
+DISTINCTCOUNT ( FactReadiness[unit_id] )
+
+Units C1-C2 =
+CALCULATE ( [Units Reporting], FactReadiness[readiness_rating] IN { "C1", "C2" } )
+
+Units C1-C2 % =
+DIVIDE ( [Units C1-C2], [Units Reporting] )
+
+// ---- Month-over-month (requires a contiguous, marked 'Date' table) ----
+Strength % PM =
+CALCULATE ( [Strength %], DATEADD ( 'Date'[Date], -1, MONTH ) )
+
+Strength % MoM =
+IF ( NOT ISBLANK ( [Strength % PM] ), [Strength %] - [Strength % PM] )   // format as 0.0% ; shows points
+
+Medically Ready % MoM =
+VAR _pm = CALCULATE ( [Medically Ready %], DATEADD ( 'Date'[Date], -1, MONTH ) )
+RETURN IF ( NOT ISBLANK ( _pm ), [Medically Ready %] - _pm )
+
+Equipment OR % MoM =
+VAR _pm = CALCULATE ( [Equipment OR %], DATEADD ( 'Date'[Date], -1, MONTH ) )
+RETURN IF ( NOT ISBLANK ( _pm ), [Equipment OR %] - _pm )
+
+Strength % YoY =
+VAR _py = CALCULATE ( [Strength %], SAMEPERIODLASTYEAR ( 'Date'[Date] ) )
+RETURN IF ( NOT ISBLANK ( _py ), [Strength %] - _py )
+
+// ---- Attention score & ranking (same standards as the web dashboard) ----
+Attention Score =
+VAR _gap =
+    MAX ( 0, 0.90 - [Strength %] ) + MAX ( 0, 0.85 - [MOSQ %] ) + MAX ( 0, 0.85 - [Medically Ready %] )
+        + MAX ( 0, 0.90 - [Equipment On-Hand %] ) + MAX ( 0, 0.85 - [Equipment OR %] )
+        + MAX ( 0, 0.85 - [Individual Training %] ) + MAX ( 0, 0.80 - [Collective Training %] )
+VAR _rating = SELECTEDVALUE ( FactReadiness[readiness_rating] )
+VAR _penalty = SWITCH ( _rating, "C3", 5, "C4", 12, 0 )
+RETURN IF ( NOT ISBLANK ( [Assigned] ), _gap * 100 + _penalty )
+
+Unit Attention Rank =
+IF (
+    HASONEVALUE ( DimUnit[unit_name] ),
+    RANKX ( ALLSELECTED ( DimUnit[unit_name] ), [Attention Score], , DESC, DENSE )
+)
+
+Top Driver =
+VAR _t =
+    {
+        ( "Strength", 0.90 - [Strength %] ), ( "MOSQ", 0.85 - [MOSQ %] ), ( "Medical", 0.85 - [Medically Ready %] ),
+        ( "Equip on-hand", 0.90 - [Equipment On-Hand %] ), ( "Equip OR", 0.85 - [Equipment OR %] ),
+        ( "Indiv. training", 0.85 - [Individual Training %] ), ( "Coll. training", 0.80 - [Collective Training %] )
+    }
+VAR _top = TOPN ( 1, _t, [Value2], DESC )
+RETURN IF ( MAXX ( _top, [Value2] ) > 0, MAXX ( _top, [Value1] ), "Meets standards" )
+
+// Conditional-format helper: 1 = good, 0 = watch, -1 = below standard
+Strength Status =
+SWITCH ( TRUE (), [Strength %] >= 0.90, 1, [Strength %] >= 0.83, 0, -1 )

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Power BI Starter Kit | Cole McClintock</title>
+<link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/site.css">
+<link rel="stylesheet" href="../assets/css/dash.css">
+<link rel="stylesheet" href="kit.css">
+</head>
+<body>
+<header class="site">
+  <div class="wrap topnav">
+    <a class="brand" href="../index.html"><span class="mark">CM</span><span>Cole McClintock</span></a>
+    <nav><a href="../index.html#projects">&larr; All projects</a></nav>
+  </div>
+</header>
+
+<main class="wrap dash">
+  <div class="titlebar">
+    <div>
+      <div class="eyebrow">Power BI &middot; DAX &middot; Power Query (M)</div>
+      <h1>Power BI Starter Kit</h1>
+      <div class="asof">Theme, measures, queries, data model, and a page-by-page build plan for the three dashboards on this site.</div>
+    </div>
+    <div class="actions">
+      <a class="btn" href="powerbi-starter-kit.zip" download>&#8681; Download the kit (ZIP)</a>
+    </div>
+  </div>
+
+  <div class="callout" style="margin:0 0 16px">
+    <strong>No .pbix file is included.</strong> A .pbix can only be produced in Power BI Desktop, so the kit contains everything needed to rebuild the report instead: about 30&ndash;60 minutes following <a href="#build">the build steps</a>. The same fictional CSVs that drive the web dashboards are bundled for import.
+  </div>
+
+  <section class="kitgrid" id="inside"></section>
+
+  <section class="panel" id="theme">
+    <h2>Report theme</h2>
+    <p class="muted small">Validated against Microsoft's Power BI report theme JSON schema (2.159). Dark for screens; light for briefing slides and print. Import with View &rsaquo; Themes &rsaquo; Browse for themes.</p>
+    <div class="swatches" id="swatches"></div>
+  </section>
+
+  <section class="panel" id="snippets">
+    <div class="tablehead"><h2>Snippets</h2><div class="tabs" id="tabs" role="tablist"></div></div>
+    <div class="viewer">
+      <ul class="filelist" id="fileList"></ul>
+      <div class="codepane">
+        <div class="codebar"><span id="fileName" class="mono"></span>
+          <span><button class="btn ghost" id="btnCopy" type="button">Copy</button> <a class="btn ghost" id="btnDl" download>Download</a></span></div>
+        <pre class="code" id="code" tabindex="0"></pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="model">
+    <h2>Data model (star schema)</h2>
+    <img src="files/model/star-schema.svg" alt="Star schema: FactReadiness, FactMishap, FactStrength, FactMedical, FactFunds, FactUFR and FactEvents related to Date, DimUnit, DimProgram and DimOrganization" class="schema">
+  </section>
+
+  <div class="row r2b">
+    <section class="panel md" id="layout"></section>
+    <section class="panel md" id="build"></section>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <div>&copy; 2026 Cole McClintock &middot; <a href="../index.html">Portfolio home</a></div>
+    <div class="disclaimer">Data shown is fictional for demonstration. Not an official Iowa National Guard product.</div>
+  </div>
+</footer>
+<script src="kit-content.js"></script>
+<script src="kit.js"></script>
+</body>
+</html>

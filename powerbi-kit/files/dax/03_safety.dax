@@ -1,0 +1,84 @@
+// ===== 03_safety.dax : mishaps, near misses, normalized rates =====
+// FactMishap[date] -> 'Date'[Date]; FactStrength[MonthStart] -> 'Date'[Date]
+
+Mishaps =
+CALCULATE ( COUNTROWS ( FactMishap ), FactMishap[event_type] = "Mishap" )   // Whole number
+
+Near Misses =
+CALCULATE ( COUNTROWS ( FactMishap ), FactMishap[event_type] = "Near miss" )
+
+Class A-C Mishaps =
+CALCULATE ( [Mishaps], FactMishap[mishap_class] IN { "A", "B", "C" } )
+
+Days Lost =
+SUM ( FactMishap[days_lost] )
+
+Mishap Cost =
+SUM ( FactMishap[cost] )                                                       // Currency
+
+Near Miss Ratio =
+DIVIDE ( [Near Misses], [Mishaps] )
+
+// ---- Rolling 12 months ending the latest date in context ----
+Mishaps R12 =
+CALCULATE ( [Mishaps], DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH ) )
+
+Avg Strength R12 =
+VAR _months =
+    CALCULATETABLE ( VALUES ( 'Date'[MonthStart] ), DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH ) )
+RETURN
+    AVERAGEX (
+        _months,
+        VAR _m = 'Date'[MonthStart]
+        RETURN CALCULATE ( SUM ( FactStrength[assigned] ), REMOVEFILTERS ( 'Date' ), 'Date'[MonthStart] = _m )
+    )
+
+Mishap Rate per 1,000 (R12) =
+DIVIDE ( [Mishaps R12], [Avg Strength R12] ) * 1000                            // Decimal, 1 dp
+
+Mishaps R12 PY =
+CALCULATE ( [Mishaps R12], DATEADD ( 'Date'[Date], -12, MONTH ) )
+
+Mishap Rate per 1,000 (R12) PY =
+CALCULATE ( [Mishap Rate per 1,000 (R12)], DATEADD ( 'Date'[Date], -12, MONTH ) )
+
+Mishap Rate YoY Change =
+IF ( NOT ISBLANK ( [Mishap Rate per 1,000 (R12) PY] ), [Mishap Rate per 1,000 (R12)] - [Mishap Rate per 1,000 (R12) PY] )
+
+Mishaps YoY % =
+DIVIDE ( [Mishaps R12] - [Mishaps R12 PY], [Mishaps R12 PY] )
+
+Class A-C R12 =
+CALCULATE ( [Class A-C Mishaps], DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH ) )
+
+Days Lost R12 =
+CALCULATE ( [Days Lost], DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH ) )
+
+Mishap Cost R12 =
+CALCULATE ( [Mishap Cost], DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH ) )
+
+Days Since Last Class A/B =
+VAR _end = MAX ( 'Date'[Date] )
+VAR _last =
+    CALCULATE ( MAX ( FactMishap[date] ), FactMishap[mishap_class] IN { "A", "B" }, REMOVEFILTERS ( 'Date' ), 'Date'[Date] <= _end )
+RETURN IF ( NOT ISBLANK ( _last ), DATEDIFF ( _last, _end, DAY ) )
+
+// Severity-weighted hotspot score per 1,000 personnel (A 50, B 20, C 5, D 2, near miss 0.5)
+Hotspot Score =
+VAR _sev =
+    CALCULATE (
+        SUMX ( FactMishap, SWITCH ( FactMishap[mishap_class], "A", 50, "B", 20, "C", 5, "D", 2, 0.5 ) ),
+        DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -12, MONTH )
+    )
+RETURN DIVIDE ( _sev, [Avg Strength R12] ) * 1000
+
+Unit Rate Rank =
+IF ( HASONEVALUE ( DimUnit[unit_name] ), RANKX ( ALLSELECTED ( DimUnit[unit_name] ), [Mishap Rate per 1,000 (R12)], , DESC, DENSE ) )
+
+Safety Summary =
+"12 months ending " & [As Of Month] & ": " & FORMAT ( [Mishaps R12], "0" ) & " mishaps ("
+    & FORMAT ( [Mishap Rate per 1,000 (R12)], "0.0" ) & " per 1,000), "
+    & FORMAT ( [Days Lost R12], "#,0" ) & " lost workdays, "
+    & FORMAT ( [Mishap Cost R12], "$#,0,K" ) & " in losses. "
+    & IF ( ISBLANK ( [Days Since Last Class A/B] ), "No Class A/B on record.",
+        FORMAT ( [Days Since Last Class A/B], "#,0" ) & " days since the last Class A/B." )

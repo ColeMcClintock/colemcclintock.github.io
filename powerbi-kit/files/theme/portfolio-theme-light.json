@@ -1,0 +1,169 @@
+{
+  "name": "Cole McClintock Portfolio - Light (briefing/print)",
+  "dataColors": [
+    "#5AA6E6",
+    "#A9B97A",
+    "#E3B34C",
+    "#5FBF7F",
+    "#B48EE0",
+    "#E08AB4",
+    "#D6C48F",
+    "#E0645C",
+    "#7FC8C2",
+    "#8A9A5B"
+  ],
+  "foreground": "#1B2A41",
+  "foregroundNeutralSecondary": "#5B6B80",
+  "foregroundNeutralTertiary": "#8A97A8",
+  "background": "#FFFFFF",
+  "backgroundLight": "#F2F4F7",
+  "backgroundNeutral": "#D5DCE6",
+  "secondaryBackground": "#F2F4F7",
+  "tableAccent": "#8A9A5B",
+  "good": "#5FBF7F",
+  "neutral": "#E3B34C",
+  "bad": "#E0645C",
+  "maximum": "#E0645C",
+  "center": "#E3B34C",
+  "minimum": "#5FBF7F",
+  "null": "#9FB0C6",
+  "hyperlink": "#4F5C2C",
+  "visitedHyperlink": "#8A9A5B",
+  "textClasses": {
+    "callout": {
+      "fontSize": 28,
+      "fontFace": "Segoe UI Semibold",
+      "color": "#1B2A41"
+    },
+    "title": {
+      "fontSize": 12,
+      "fontFace": "Segoe UI Semibold",
+      "color": "#1B2A41"
+    },
+    "header": {
+      "fontSize": 12,
+      "fontFace": "Segoe UI Semibold",
+      "color": "#1B2A41"
+    },
+    "label": {
+      "fontSize": 10,
+      "fontFace": "Segoe UI",
+      "color": "#5B6B80"
+    }
+  },
+  "visualStyles": {
+    "*": {
+      "*": {
+        "background": [
+          {
+            "show": true,
+            "color": {
+              "solid": {
+                "color": "#F2F4F7"
+              }
+            },
+            "transparency": 0
+          }
+        ],
+        "border": [
+          {
+            "show": true,
+            "color": {
+              "solid": {
+                "color": "#D5DCE6"
+              }
+            },
+            "radius": 8
+          }
+        ],
+        "title": [
+          {
+            "show": true,
+            "fontColor": {
+              "solid": {
+                "color": "#1B2A41"
+              }
+            },
+            "fontSize": 12,
+            "fontFamily": "Segoe UI Semibold"
+          }
+        ],
+        "dropShadow": [
+          {
+            "show": false
+          }
+        ]
+      }
+    },
+    "page": {
+      "*": {
+        "background": [
+          {
+            "color": {
+              "solid": {
+                "color": "#FFFFFF"
+              }
+            },
+            "transparency": 0
+          }
+        ],
+        "outspace": [
+          {
+            "color": {
+              "solid": {
+                "color": "#FFFFFF"
+              }
+            },
+            "transparency": 0
+          }
+        ]
+      }
+    },
+    "card": {
+      "*": {
+        "labels": [
+          {
+            "color": {
+              "solid": {
+                "color": "#1B2A41"
+              }
+            },
+            "fontSize": 26
+          }
+        ],
+        "categoryLabels": [
+          {
+            "color": {
+              "solid": {
+                "color": "#5B6B80"
+              }
+            },
+            "fontSize": 10
+          }
+        ]
+      }
+    },
+    "slicer": {
+      "*": {
+        "items": [
+          {
+            "fontColor": {
+              "solid": {
+                "color": "#1B2A41"
+              }
+            }
+          }
+        ],
+        "header": [
+          {
+            "fontColor": {
+              "solid": {
+                "color": "#4F5C2C"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
