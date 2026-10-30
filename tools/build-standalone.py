@@ -14,7 +14,6 @@ import base64, csv, io, os, re, zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "downloads")
-SITE = "https://colemcclintock.github.io/"
 MIME = {".csv": "text/csv;charset=utf-8", ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ".svg": "image/svg+xml", ".png": "image/png"}
 
@@ -34,7 +33,7 @@ def data_uri(path):
 
 def common_rewrites(html):
     html = re.sub(r'<html lang="en">', '<html lang="en" data-standalone>', html, count=1)
-    html = re.sub(r'href="\.\./\.\./index\.html(#[^"]*)?"', lambda m: f'href="{SITE}{m.group(1) or ""}"', html)
+    html = re.sub(r'<a [^>]*href="\.\./\.\./index\.html[^"]*"[^>]*>.*?</a>', "", html)   # no links back to the hosting site
     html = re.sub(r'href="\.\./\.\./downloads/[^"]+"', 'href="#"', html)
     return html
 
@@ -60,16 +59,17 @@ def build_single(page_dir, html):
         return f'href="{data_uri(p)}"{dl}{rest}'
     html = re.sub(r'href="([\w\-]+\.(?:csv|xlsx))"([^>]*)', tmpl, html)
     html = common_rewrites(html)
-    assert not re.search(r'<(script|link)[^>]+(src|href)="(?!data:|https?://colemcclintock|#)', html), "unresolved local reference"
+    assert not re.search(r'<(script|link)[^>]+(src|href)="(?!data:|#)', html), "unresolved local reference"
+    assert not re.search(r'https?://', re.sub(r'<script>.*?</script>|<style>.*?</style>', '', html, flags=re.S)), "external URL in offline build"
     assert ('<script id="safety' + 'Saved"') not in html, "embedded data found in a public build"
-    return "<!-- Offline copy built by tools/build-standalone.py from the portfolio source. -->\n" + html
+    return "<!-- Offline copy of the dashboard. Runs entirely in the browser; makes no network requests. -->\n" + html
 
 def folder_files(page_dir, html):
     """Returns (index_html, {zip_path: source_path}) for the folder version."""
     files = {}
     def rel(m):
         attr, path = m.group(1), m.group(2)
-        if path.startswith(("http", "#", "data:", "mailto:")) or path.startswith("../../index.html") or path.startswith("../../downloads"):
+        if path.startswith(("http", "#", "data:", "mailto:")) or path.startswith("../../downloads"):
             return m.group(0)
         src = os.path.normpath(os.path.join(page_dir, path))
         if not os.path.isfile(src): return m.group(0)
@@ -120,7 +120,7 @@ SAVE_BLOCK = """SAVE A COPY WITH YOUR DATA BUILT IN (so others can open it witho
   2. Click "Save with data". The browser downloads SAFETY-REAL-DATA-<date>.html (for example
      SAFETY-REAL-DATA-29Oct26.html) with the de-duplicated records inside it. Nothing is uploaded.
   3. Put that file ONLY in the restricted SharePoint folder (unique permissions, access requests on).
-     It contains real data: do not email it, post it, or put it in GitHub or any shared/public location.
+     It contains real data: do not email it, post it, or put it in any code repository, website, or shared/public location.
   4. To update it: open the saved file, click "Load files" (or "Add more files") with the newer exports,
      then "Save with data" again and replace the old file in the restricted folder.
   The saved file shows a red "Contains real data" banner with the save date/time and source file names.
@@ -128,14 +128,23 @@ SAVE_BLOCK = """SAVE A COPY WITH YOUR DATA BUILT IN (so others can open it witho
 
 """
 
+NAME_RE = re.compile(r"mcclintock|\bcole\b|github", re.I)
+
+def check_clean(label, text):
+    # vendored library license comments (e.g. Chart.js color helper URL) are allowed
+    scrub = re.sub(r"/\*!?[^*]*\*+(?:[^/*][^*]*\*+)*/", "", text)
+    m = NAME_RE.search(scrub)
+    assert not m, f"{label}: personal/portfolio reference found: {scrub[max(0, m.start()-40):m.end()+40]!r}"
+    return text
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     for name, cfg in PAGES.items():
         page_dir = os.path.join(ROOT, cfg["dir"])
         html = read(os.path.join(page_dir, "index.html"))
-        single = build_single(page_dir, html)
+        single = check_clean(name, build_single(page_dir, html))
         with open(os.path.join(OUT, name + ".html"), "w", encoding="utf-8") as f: f.write(single)
-        idx, files = folder_files(page_dir, html)
+        idx, files = folder_files(page_dir, html); check_clean(name + " folder", idx)
         zpath = os.path.join(OUT, name + ".zip")
         is_safety = cfg.get("guide")
         with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:

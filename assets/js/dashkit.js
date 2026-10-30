@@ -1,4 +1,4 @@
-/* Shared helpers for the portfolio dashboards. Browser-only; no network calls. */
+/* Shared helpers for the dashboards. Browser-only; no network calls. */
 (function (w) {
   "use strict";
   var MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
