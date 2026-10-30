@@ -141,6 +141,14 @@
     if ((m = s.match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*([ap]\.?m\.?)?/i))) { var h = +m[1]; if (m[3]) { var pm = /p/i.test(m[3]); h = h % 12 + (pm ? 12 : 0); } return h <= 23 ? h : null; }
     if ((m = s.match(/^(\d{3,4})(?:\s*hrs?)?$/i))) { var hh = Math.floor(+m[1] / 100); return hh <= 23 ? hh : null; }
     if ((m = s.match(/^(\d{1,2})\s*([ap])\.?m\.?$/i))) { var h2 = +m[1] % 12 + (/p/i.test(m[2]) ? 12 : 0); return h2; }
+    if (/^\d*\.\d+$/.test(s)) return parseTime(+s);   // Excel time serial as text (e.g. Power Automate: "0.302083")
+    return null;
+  }
+  // Excel time serial ("0.302083") or Power Automate ISO time ("1899-12-30T07:15:00.000Z") -> "0715"; else null
+  function serialTime(v) {
+    var s = String(v).trim(), m;
+    if ((m = s.match(/^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})/))) return m[1] + m[2];
+    if (typeof v === "number" || /^\d*\.\d+$/.test(s)) { var f = +s % 1, mins = Math.round(f * 1440) % 1440; return f >= 0 && (typeof v !== "number" || f > 0) ? pad(Math.floor(mins / 60)) + pad(mins % 60) : null; }
     return null;
   }
   function fmtDate(d) { if (!d) return ""; return pad(d.getDate()) + "-" + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()] + "-" + String(d.getFullYear()).slice(2); }
@@ -202,7 +210,7 @@
         else if (t === "time") out = parseTime(v);
         else out = blankish(v) ? null : (text(v) || null);
         rec[k] = out;
-        rec["_t_" + k] = (t === "date" && out) ? fmtDate(out) : (t === "money" && out != null) ? "$" + out.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : text(v);
+        rec["_t_" + k] = (t === "date" && out) ? fmtDate(out) : (t === "time" && out != null && serialTime(v)) ? serialTime(v) : (t === "money" && out != null) ? "$" + out.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : text(v);
       });
       if (!rec.date) { rep.badDate.push({ row: r + 1, value: blankish(raw.date) ? "" : text(raw.date) }); continue; }
       if (rec.cls === "Unclassified") rep.unclassified++;

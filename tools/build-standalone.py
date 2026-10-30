@@ -6,11 +6,16 @@ For each dashboard this writes:
   downloads/<name>.html  one self-contained HTML file (CSS, JS, Chart.js, SheetJS, fictional demo data and
                          template files inlined). Double-click to run; makes no network requests.
   downloads/<name>.zip   folder version (index.html + assets) + the single file + templates + README
+  downloads/safety-dashboard-template.html   Power Automate template (placeholders the flow fills with Excel rows)
+  downloads/safety-powerautomate-kit.zip     template + setup guide (md + printable html) + MishapTracker table template
+  downloads/safety-powerautomate-guide.html  the setup guide on its own
 
 Run from the repo root:  python3 tools/build-standalone.py
 Standard-library Python only.
 """
-import base64, csv, io, os, re, zipfile
+import base64, csv, io, os, re, sys, zipfile
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "powerautomate"))
+import mdlite
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "downloads")
@@ -137,6 +142,93 @@ def check_clean(label, text):
     assert not m, f"{label}: personal/portfolio reference found: {scrub[max(0, m.start()-40):m.end()+40]!r}"
     return text
 
+ZIP_DATE = (2026, 1, 1, 0, 0, 0)   # fixed so rebuilding without changes gives identical zips
+class Zip(zipfile.ZipFile):
+    def writestr(self, name, data, *a, **k):
+        if isinstance(name, str): name = zipfile.ZipInfo(name, ZIP_DATE); name.compress_type = zipfile.ZIP_DEFLATED; name.external_attr = 0o644 << 16
+        return super().writestr(name, data, *a, **k)
+    def write(self, src, arc=None, *a, **k):
+        return self.writestr(arc or os.path.basename(src), read(src, "rb"))
+
+def asciify(html):
+    """Template is pure ASCII so the flow's base64ToString / string round-trip can never mangle characters.
+    Non-ASCII inside <script> becomes \\uXXXX, inside <style> a CSS escape, elsewhere an HTML character reference."""
+    def js(t): return "".join(c if ord(c) < 128 else "".join("\\u%04x" % u for u in _utf16(c)) for c in t)
+    def css(t): return "".join(c if ord(c) < 128 else "\\%x " % ord(c) for c in t)
+    def txt(t): return "".join(c if ord(c) < 128 else "&#x%x;" % ord(c) for c in t)
+    out, pos = [], 0
+    for m in re.finditer(r"(<script\b[^>]*>)(.*?)(</script>)|(<style\b[^>]*>)(.*?)(</style>)", html, re.S):
+        out.append(txt(html[pos:m.start()]))
+        out.append(m.group(1) + js(m.group(2)) + m.group(3) if m.group(1) else m.group(4) + css(m.group(5)) + m.group(6))
+        pos = m.end()
+    out.append(txt(html[pos:]))
+    return "".join(out)
+def _utf16(c):
+    o = ord(c)
+    if o < 0x10000: return [o]
+    o -= 0x10000; return [0xD800 + (o >> 10), 0xDC00 + (o & 0x3FF)]
+
+PA_DATA, PA_TS = "__PA_" + "DATA__", "__PA_" + "REFRESHED__"
+def build_pa_template(single):
+    """Power Automate template: the single-file Safety dashboard plus two placeholders the flow replaces.
+    Data goes in a raw-text <plaintext> element at the very end of the file: nothing after it is ever parsed as markup,
+    so even unescaped '</script>' inside the JSON cannot break the page or run code."""
+    t = asciify(single)
+    t = t.replace("<!-- Offline copy of the dashboard. Runs entirely in the browser; makes no network requests. -->",
+                  "<!-- Safety dashboard: Power Automate template. A scheduled flow replaces the two placeholders (refresh time in the head, "
+                  "Excel rows at the very end) and saves the result as SAFETY-REAL-DATA.html. Untouched, it shows fictional demo data. "
+                  "Runs entirely in the browser; makes no network requests. -->", 1)
+    t = t.replace('<meta charset="utf-8">', '<meta charset="utf-8">\n<meta name="pa-refreshed" content="' + PA_TS + '">', 1)
+    i = t.rfind("</body>"); assert i > 0
+    t = t[:i].rstrip() + '\n<plaintext id="embedded' + '-data" hidden>' + PA_DATA + "\n"
+    assert t.count(PA_DATA) == 1 and t.count(PA_TS) == 1, "each placeholder must appear exactly once"
+    assert all(ord(c) < 128 for c in t), "template must be ASCII"
+    assert t.endswith(PA_DATA + "\n")
+    return t
+
+PA_README = """SAFETY DASHBOARD - POWER AUTOMATE AUTO-REFRESH KIT
+Everything here is fictional demo data until your flow fills it in. No personal or external links.
+
+WHAT'S HERE
+  dashboard-template.html            Upload to the restricted SharePoint library (the flow reads it; never edit it there).
+  POWER-AUTOMATE-SETUP-GUIDE.html    Step-by-step build guide (open in Edge; Print / PDF button at the top).
+  POWER-AUTOMATE-SETUP-GUIDE.md      Same guide as plain text.
+  EXPRESSIONS.txt                    Every expression to copy and paste into the flow.
+  templates/asmis_tracker_table.xlsx Blank tracker already formatted as a Table named MishapTracker.
+
+IN SHORT
+  1. In every tracker and the roll-up: Ctrl+T, Table Name = MishapTracker, save as .xlsx.
+  2. Upload dashboard-template.html, plus a copy renamed SAFETY-REAL-DATA.html, to the restricted library.
+  3. Build the scheduled flow in the guide (Recurrence 0600/1200 Central -> list .xlsx files -> List rows (MishapTracker)
+     -> append {file, rows} -> Get file content (template) -> Compose replace -> Update file SAFETY-REAL-DATA.html).
+  4. Point the home page Quick links button at SAFETY-REAL-DATA.html (Copy link > People with existing access).
+
+SAFETY-REAL-DATA.html contains real records: keep it only in the restricted library. Never email or post it.
+"""
+
+def expressions_txt(md):
+    rows = re.findall(r"^\| ([^|]+?) \| `(.+)` \|$", md.split("## Quick copy sheet", 1)[1].split("## Payload", 1)[0], re.M)
+    return "POWER AUTOMATE EXPRESSIONS - copy each into the Expression (fx) box of the named field\n\n" + "\n\n".join(f"{k}:\n  {v}" for k, v in rows) + "\n"
+
+def build_pa_kit(single_safety):
+    tmpl = check_clean("pa template", build_pa_template(single_safety))
+    md = read(os.path.join(ROOT, "tools", "powerautomate", "SETUP-GUIDE.md"))
+    guide = check_clean("pa guide", mdlite.render(md, "Power Automate setup guide - Safety dashboard auto-refresh"))
+    for label, txt in (("pa guide md", md), ("pa guide html", guide)):
+        check_clean(label, txt); assert not re.search(r"https?://", txt), label + ": external URL"
+    exprs = expressions_txt(md); assert exprs.count("\n\n") >= 8, "expression sheet parse"
+    with open(os.path.join(OUT, "safety-dashboard-template.html"), "w", encoding="ascii", newline="\n") as f: f.write(tmpl)
+    with open(os.path.join(OUT, "safety-powerautomate-guide.html"), "w", encoding="utf-8") as f: f.write(guide)
+    zpath = os.path.join(OUT, "safety-powerautomate-kit.zip"); d = "safety-powerautomate-kit/"
+    with Zip(zpath, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(d + "dashboard-template.html", tmpl)
+        z.writestr(d + "POWER-AUTOMATE-SETUP-GUIDE.html", guide)
+        z.writestr(d + "POWER-AUTOMATE-SETUP-GUIDE.md", md)
+        z.writestr(d + "EXPRESSIONS.txt", exprs)
+        z.writestr(d + "README.txt", PA_README)
+        z.write(os.path.join(ROOT, "dashboards", "safety", "asmis_tracker_table.xlsx"), d + "templates/asmis_tracker_table.xlsx")
+    print(f"safety PA kit: template {len(tmpl)//1024} KB, zip {os.path.getsize(zpath)//1024} KB")
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     for name, cfg in PAGES.items():
@@ -147,7 +239,7 @@ def main():
         idx, files = folder_files(page_dir, html); check_clean(name + " folder", idx)
         zpath = os.path.join(OUT, name + ".zip")
         is_safety = cfg.get("guide")
-        with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
+        with Zip(zpath, "w", zipfile.ZIP_DEFLATED) as z:
             z.writestr(f"{name}/{name}.html", single)
             z.writestr(f"{name}/folder-version/index.html", idx)
             for zp, src in sorted(files.items()):
@@ -163,6 +255,7 @@ def main():
                 guide_line="  COLUMN-GUIDE.csv     Every column, whether it is required, and what it drives.\n" if is_safety else "",
                 multi_line="  - You can load several files at once (e.g. one tracker per fiscal year plus a roll-up).\n    Rows are combined and duplicate accidents are removed; \"Show duplicates removed\" lists them.\n" if is_safety else ""))
         print(f"{name}: html {len(single)//1024} KB, zip {os.path.getsize(zpath)//1024} KB, {len(files)} folder files")
+        if is_safety: build_pa_kit(single)
 
 if __name__ == "__main__":
     main()

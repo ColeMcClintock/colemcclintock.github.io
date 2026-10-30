@@ -86,3 +86,6 @@ body.present .realbanner span{font-size:.74rem}
 @media print{.realbanner{display:flex!important;position:static;background:#fff;color:#8f1d1d;border:2px solid #8f1d1d;box-shadow:none}.realbanner span{color:#8f1d1d}}
 body.present .realbanner{flex-wrap:nowrap;white-space:nowrap}
 body.present .realbanner span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+#embedded-data{display:none!important}
+.realbanner.pa-error{background:#5c1010;border-color:#ffb3ad}
+.realbanner.pa-error span{color:#fff;font-weight:600}

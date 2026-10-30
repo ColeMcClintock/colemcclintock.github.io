@@ -100,7 +100,7 @@
     var str = null; ok.forEach(function (e) { if (e.strength) str = e.strength; });
     applyData(d.records, str, today(), "file");
   }
-  function clearFiles() { S.files = []; S.dupes = []; S.failed = null; $("fileInput").value = ""; $("addInput").value = ""; if (!(SAVED && loadSaved())) loadDemo(); setExpanded(false); }
+  function clearFiles() { S.files = []; S.dupes = []; S.failed = null; $("fileInput").value = ""; $("addInput").value = ""; if (!(SAVED && loadSaved()) && !(PA && loadPA())) loadDemo(); setExpanded(false); }
   function showDemo() { S.files = []; S.dupes = []; S.failed = null; $("fileInput").value = ""; $("addInput").value = ""; loadDemo(); setExpanded(false); }
 
   // ---------- save with data (one self-contained HTML file with the loaded records embedded) ----------
@@ -127,6 +127,72 @@
     $("realBanner").hidden = false;
     $("realBannerMeta").textContent = "Data as of " + fmtStamp(sa) + " \u00b7 " + K.fmt(SAVED.rows.length) + " records from " + SAVED.files.length + " source file" + (SAVED.files.length === 1 ? "" : "s") + ": " + SAVED.files.join(", ");
     $("realBannerMeta").title = SAVED.files.join("\n");
+  }
+  // ---------- automatic refresh (Power Automate template) ----------
+  // The template ends with a raw-text element holding a placeholder. A scheduled flow replaces the placeholder with
+  // the rows from Excel Online "List rows present in a table": [{file, modified, rows:[{header: value}]}] or a flat row array.
+  // Tokens are built from pieces so the flow's replace() only ever matches the single placeholder in the markup.
+  var PA_ID = "embedded" + "-data", PA_TOKEN = "__PA_" + "DATA__", PA_TS_TOKEN = "__PA_" + "REFRESHED__", PA = null;
+  var PA_SKIP = /^(@odata\.|itemInternalId$)/i;           // connector bookkeeping keys, not tracker columns
+  function readPA() {
+    var el = document.getElementById(PA_ID); if (!el) return null;
+    var s = String(el.textContent || "").trim();
+    if (!s || s.slice(0, PA_TOKEN.length) === PA_TOKEN) return null;                   // untouched template: demo data
+    var meta = document.querySelector('meta[name="pa-refreshed"]'), ts = meta ? String(meta.getAttribute("content") || "").trim() : "";
+    var out = { refreshed: ts && ts !== PA_TS_TOKEN ? ts : "", sources: [], error: null };
+    try {
+      var a = s.search(/[\[{]/), b = Math.max(s.lastIndexOf("]"), s.lastIndexOf("}"));  // tolerate stray text around the JSON
+      if (a < 0 || b < a) throw new Error("no JSON found");
+      var o = JSON.parse(s.slice(a, b + 1));
+      if (typeof o === "string") o = JSON.parse(o);                                        // double-encoded by the flow
+      out.sources = paSources(o);
+      if (!out.sources.length) throw new Error("no rows found");
+    } catch (e) { out.error = (e && e.message) || String(e); }
+    return out;
+  }
+  function isObj(x) { return x && typeof x === "object" && !Array.isArray(x); }
+  function paSources(o) {
+    if (isObj(o)) o = Array.isArray(o.files) ? o.files : Array.isArray(o.value) && !Array.isArray(o.rows) ? [{ rows: o.value }] : [o];
+    if (!Array.isArray(o)) return [];
+    var srcs = [], flat = [];
+    o.forEach(function (x) {
+      if (!isObj(x)) return;
+      var rows = Array.isArray(x.rows) ? x.rows : Array.isArray(x.value) ? x.value : null;
+      if (rows) srcs.push({ file: x.file || x.name || x.FileName || "", modified: x.modified || x.Modified || "", rows: rows });
+      else flat.push(x);
+    });
+    if (flat.length) srcs.push({ file: "Automatic refresh", modified: "", rows: flat });
+    srcs.forEach(function (x, i) { x.file = String(x.file || "Source " + (i + 1)); });
+    return srcs;
+  }
+  function paAoa(rows) { // row objects -> [headers, ...rows]; header order = first appearance
+    var hs = [], seen = Object.create(null);
+    rows = rows.filter(isObj);
+    rows.forEach(function (r) { Object.keys(r).forEach(function (k) { if (PA_SKIP.test(k) || seen[k]) return; seen[k] = 1; hs.push(k); }); });
+    return [hs].concat(rows.map(function (r) { return hs.map(function (h) { var v = r[h]; return v == null ? "" : isObj(v) || Array.isArray(v) ? JSON.stringify(v) : v; }); }));
+  }
+  function loadPA() {
+    if (!PA || PA.error) return false;
+    var entries = PA.sources.map(function (src) {
+      var p = A.parseTable(paAoa(src.rows), today());
+      p.records.forEach(function (r) { r._src = src.file; });
+      return { name: src.file, sheetName: src.file, lastModified: Date.parse(src.modified) || 0, order: S.fileOrder++, rep: p.report, records: p.records, strength: null, automatic: true };
+    });
+    if (!entries.some(usable)) { S.files = []; S.dupes = []; S.failed = entries; PA.error = "none of the " + entries.length + " source table(s) had readable rows"; return false; }
+    S.failed = null; S.files = entries; combine(); renderReport();
+    return true;
+  }
+  function showPABanner() {
+    var names = PA.sources.map(function (x) { return x.file; });
+    $("realBanner").hidden = false;
+    if (PA.error) {
+      $("realBanner").classList.add("pa-error");
+      $("realBannerMeta").textContent = "Automatic refresh data could not be read (" + PA.error + "). The charts below show FICTIONAL demo data. Check the flow's run history.";
+      setBar("err", "Automatic refresh data could not be read \u00b7 showing fictional demo data", 1);
+      return;
+    }
+    $("realBannerMeta").textContent = "Data refreshed " + (PA.refreshed || "(time not recorded)") + " (automatic) \u00b7 " + K.fmt(S.recs.length) + " records from " + names.length + " source file" + (names.length === 1 ? "" : "s") + ": " + names.join(", ");
+    $("realBannerMeta").title = names.join("\n");
   }
   function safeJson(o) { // JSON that cannot end its script element or break the HTML parser
     return JSON.stringify(o).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
@@ -652,8 +718,10 @@
       if ($("drawer").classList.contains("open")) closeDrawer();
       else if (document.body.classList.contains("present")) setPresent(false);
     });
-    SAVED = readSaved();
-    if (SAVED) { showBanner(); document.title = "REAL DATA \u00b7 " + document.title; loadSaved(); } else loadDemo();
+    SAVED = readSaved(); PA = SAVED ? null : readPA();
+    if (SAVED) { showBanner(); document.title = "REAL DATA \u00b7 " + document.title; loadSaved(); }
+    else if (PA) { document.title = "REAL DATA \u00b7 " + document.title; if (!loadPA()) loadDemo(); showPABanner(); }
+    else loadDemo();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 })();
