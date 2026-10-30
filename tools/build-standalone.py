@@ -7,6 +7,7 @@ For each dashboard this writes:
                          template files inlined). Double-click to run; makes no network requests.
   downloads/<name>.zip   folder version (index.html + assets) + the single file + templates + README
   downloads/safety-dashboard-template.html   Power Automate template (placeholders the flow fills with Excel rows)
+  downloads/finance-dashboard-template.html  same for the Status of Funds dashboard
   downloads/safety-powerautomate-kit.zip     template + setup guide (md + printable html) + MishapTracker table template
   downloads/safety-powerautomate-guide.html  the setup guide on its own
 
@@ -24,9 +25,10 @@ MIME = {".csv": "text/csv;charset=utf-8", ".xlsx": "application/vnd.openxmlforma
 
 PAGES = {
     "safety-dashboard": dict(dir="dashboards/safety", title="Safety & Mishaps Dashboard",
-                             templates=["asmis_template.xlsx", "asmis_template.csv"], guide=True),
+                             templates=["asmis_template.xlsx", "asmis_template.csv"], guide=True, save_prefix="SAFETY"),
     "readiness-dashboard": dict(dir="dashboards/readiness", title="Readiness Command Dashboard", templates=["readiness_template.csv"]),
-    "finance-dashboard": dict(dir="dashboards/finance", title="Status of Funds Dashboard", templates=["finance_template.csv"]),
+    "finance-dashboard": dict(dir="dashboards/finance", title="Status of Funds Dashboard",
+                              templates=["funds_template.xlsx", "funds_template.csv"], save_prefix="FUNDS", pa_template=True),
 }
 
 def read(p, mode="r"):
@@ -66,7 +68,8 @@ def build_single(page_dir, html):
     html = common_rewrites(html)
     assert not re.search(r'<(script|link)[^>]+(src|href)="(?!data:|#)', html), "unresolved local reference"
     assert not re.search(r'https?://', re.sub(r'<script>.*?</script>|<style>.*?</style>', '', html, flags=re.S)), "external URL in offline build"
-    assert ('<script id="safety' + 'Saved"') not in html, "embedded data found in a public build"
+    for sid in ("safety", "finance"):
+        assert ('<script id="' + sid + 'Saved"') not in html, "embedded data found in a public build"
     return "<!-- Offline copy of the dashboard. Runs entirely in the browser; makes no network requests. -->\n" + html
 
 def folder_files(page_dir, html):
@@ -121,9 +124,9 @@ DATA HANDLING
 """
 
 SAVE_BLOCK = """SAVE A COPY WITH YOUR DATA BUILT IN (so others can open it without loading files)
-  1. Open {name}.html and load your trackers (all FYs plus the roll-up). Check the load report.
-  2. Click "Save with data". The browser downloads SAFETY-REAL-DATA-<date>.html (for example
-     SAFETY-REAL-DATA-29Oct26.html) with the de-duplicated records inside it. Nothing is uploaded.
+  1. Open {name}.html and load your files. Check the load report.
+  2. Click "Save with data". The browser downloads {prefix}-REAL-DATA-<date>.html (for example
+     {prefix}-REAL-DATA-29Oct26.html) with the loaded records inside it. Nothing is uploaded.
   3. Put that file ONLY in the restricted SharePoint folder (unique permissions, access requests on).
      It contains real data: do not email it, post it, or put it in any code repository, website, or shared/public location.
   4. To update it: open the saved file, click "Load files" (or "Add more files") with the newer exports,
@@ -169,15 +172,20 @@ def _utf16(c):
     o -= 0x10000; return [0xD800 + (o >> 10), 0xDC00 + (o & 0x3FF)]
 
 PA_DATA, PA_TS = "__PA_" + "DATA__", "__PA_" + "REFRESHED__"
-def build_pa_template(single):
+PA_COMMENTS = {
+    "safety": "<!-- Safety dashboard: Power Automate template. A scheduled flow replaces the two placeholders (refresh time in the head, "
+              "Excel rows at the very end) and saves the result as SAFETY-REAL-DATA.html. Untouched, it shows fictional demo data. "
+              "Runs entirely in the browser; makes no network requests. -->",
+    "finance": "<!-- Status of Funds dashboard: Power Automate template. A scheduled flow replaces the two placeholders (refresh time in the head, "
+               "Excel rows at the very end) and saves the result over the dashboard file in the restricted library. Untouched, it shows "
+               "fictional demo data. Runs entirely in the browser; makes no network requests. -->",
+}
+def build_pa_template(single, kind="safety"):
     """Power Automate template: the single-file Safety dashboard plus two placeholders the flow replaces.
     Data goes in a raw-text <plaintext> element at the very end of the file: nothing after it is ever parsed as markup,
     so even unescaped '</script>' inside the JSON cannot break the page or run code."""
     t = asciify(single)
-    t = t.replace("<!-- Offline copy of the dashboard. Runs entirely in the browser; makes no network requests. -->",
-                  "<!-- Safety dashboard: Power Automate template. A scheduled flow replaces the two placeholders (refresh time in the head, "
-                  "Excel rows at the very end) and saves the result as SAFETY-REAL-DATA.html. Untouched, it shows fictional demo data. "
-                  "Runs entirely in the browser; makes no network requests. -->", 1)
+    t = t.replace("<!-- Offline copy of the dashboard. Runs entirely in the browser; makes no network requests. -->", PA_COMMENTS[kind], 1)
     t = t.replace('<meta charset="utf-8">', '<meta charset="utf-8">\n<meta name="pa-refreshed" content="' + PA_TS + '">', 1)
     i = t.rfind("</body>"); assert i > 0
     t = t[:i].rstrip() + '\n<plaintext id="embedded' + '-data" hidden>' + PA_DATA + "\n"
@@ -250,12 +258,16 @@ def main():
                 z.write(os.path.join(page_dir, t), f"{name}/folder-version/{t}")   # keeps the in-page template links working
             if is_safety:
                 z.writestr(f"{name}/COLUMN-GUIDE.csv", column_guide(page_dir))
-            z.writestr(f"{name}/README - How to use at work.txt", README.replace("{save_block}", SAVE_BLOCK.replace("{name}", name) if is_safety else "").format(
+            z.writestr(f"{name}/README - How to use at work.txt", README.replace("{save_block}", SAVE_BLOCK.replace("{name}", name).replace("{prefix}", cfg["save_prefix"]) if cfg.get("save_prefix") else "").format(
                 title=cfg["title"], name=name,
                 guide_line="  COLUMN-GUIDE.csv     Every column, whether it is required, and what it drives.\n" if is_safety else "",
                 multi_line="  - You can load several files at once (e.g. one tracker per fiscal year plus a roll-up).\n    Rows are combined and duplicate accidents are removed; \"Show duplicates removed\" lists them.\n" if is_safety else ""))
         print(f"{name}: html {len(single)//1024} KB, zip {os.path.getsize(zpath)//1024} KB, {len(files)} folder files")
         if is_safety: build_pa_kit(single)
+        if cfg.get("pa_template"):
+            tmpl = check_clean(name + " pa template", build_pa_template(single, "finance"))
+            with open(os.path.join(OUT, name + "-template.html"), "w", encoding="ascii", newline="\n") as f: f.write(tmpl)
+            print(f"{name} PA template: {len(tmpl)//1024} KB")
 
 if __name__ == "__main__":
     main()

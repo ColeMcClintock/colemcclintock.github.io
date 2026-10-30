@@ -1,0 +1,54 @@
+/* Status of Funds dashboard (same look as the Safety dashboard) */
+.kpis{grid-template-columns:repeat(4,1fr)}
+.kpi .val{font-size:1.75rem}
+.kpi.obl{--st:#5aa6e6}.kpi.com{--st:#e3b34c}
+.chartbox.tall{height:340px}
+.chartnote{margin:-6px 0 16px}
+.dash .row>*{min-width:0}
+.filters label{min-width:140px}
+.loadbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 12px;margin:0 0 12px;font-size:.88rem}
+.loadbar .lb-icon{font-weight:700;color:var(--good)}
+.loadbar.warn .lb-icon{color:var(--warn)} .loadbar.err .lb-icon{color:var(--bad)} .loadbar.busy .lb-icon{color:var(--info)}
+.loadbar .lb-text{color:#dbe4ef}
+.loadbar .lb-badge{background:rgba(227,179,76,.16);border:1px solid rgba(227,179,76,.5);color:#f0d595;border-radius:999px;padding:1px 9px;font-size:.78rem;font-weight:700}
+.loadbar .lb-actions{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.loadbar.dragging,.loadpanel.dragging{outline:2px dashed var(--olive);outline-offset:2px}
+.loadbar [hidden],.loadpanel [hidden]{display:none!important}
+.btn.sm{padding:4px 10px;font-size:.82rem}
+.btn.save:disabled{opacity:.45;cursor:not-allowed}
+.loadpanel{margin-top:-4px}
+#loadPanel{grid-template-columns:1fr}
+.loadreport{font-size:.88rem;margin-top:8px}
+.loadreport .ok{color:var(--good)}.loadreport .err{color:var(--bad)}.loadreport .warn,.loadreport span.warn{color:var(--warn)}
+.loadreport code{color:var(--sand);font-size:.82rem}
+.loadreport .combined{border-top:1px solid var(--line);margin-top:8px;padding-top:6px}
+.filerep{border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin:6px 0;background:var(--bg2)}
+.filerep summary{cursor:pointer;font-weight:600}
+.filerep h4{margin:0 0 4px}
+.tabletools{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tabletools input[type=search]{background:var(--bg2);border:1px solid var(--line);color:inherit;border-radius:8px;padding:6px 10px;font:inherit;font-size:.88rem;width:260px;max-width:100%}
+.searchnote{color:var(--olive);font-weight:600}
+.tablewrap.scrolly{max-height:520px;overflow-y:auto}
+.tablewrap.scrolly thead th{position:sticky;top:0;background:var(--panel);z-index:1}
+#tDocs td{white-space:nowrap;font-variant-numeric:tabular-nums}
+#tDocs td.num,#tDocs th.num{text-align:right}
+#tDocs tfoot td{font-weight:700;border-top:2px solid var(--line);padding:8px}
+#tDocs td.neg{color:#f2a19b}
+.realbanner{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;background:#8f1d1d;border:1px solid #e0645c;color:#fff;border-radius:10px;padding:8px 14px;margin:0 0 12px;font-size:.9rem;box-shadow:0 2px 10px rgba(0,0,0,.35)}
+.realbanner[hidden]{display:none}
+.realbanner span{color:#ffd9d6;font-size:.84rem}
+.realbanner.pa-error{background:#5c1010;border-color:#ffb3ad}
+.realbanner.pa-error span{color:#fff;font-weight:600}
+#embedded-data{display:none!important}
+body.present .chrome,body.present header.site,body.present #btnPrint,body.present .chartnote{display:none!important}
+body.present #btnPresent{background:var(--olive);color:#0a1424}
+body.present .realbanner{padding:3px 12px;font-size:.78rem;border-radius:6px;margin-bottom:8px;flex-wrap:nowrap;white-space:nowrap}
+body.present .realbanner span{font-size:.74rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:1100px){.kpis{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.tabletools input[type=search]{width:100%}}
+@media print{
+  .loadbar,.loadpanel{display:none!important}
+  .kpis{grid-template-columns:repeat(4,1fr)}
+  .tablewrap.scrolly{max-height:none;overflow:visible}
+  .realbanner{display:flex!important;position:static;background:#fff;color:#8f1d1d;border:2px solid #8f1d1d;box-shadow:none}.realbanner span{color:#8f1d1d}
+}

@@ -12,7 +12,7 @@ if [ -n "$bad" ]; then
   printf '  %s\n' $bad >&2; fail=1
 fi
 for f in $names; do
-  if git show ":$f" 2>/dev/null | grep -Eq '<script id="safety''Saved" type="application/json">\{"v":'; then
+  if git show ":$f" 2>/dev/null | grep -Eq '<script id="(safety|finance)''Saved" type="application/json">\{"v":'; then
     echo "BLOCKED: $f contains an embedded data block (saved with data)." >&2; fail=1
   fi
   if git show ":$f" 2>/dev/null | grep -q '<plaintext id="embedded''-data"' && \

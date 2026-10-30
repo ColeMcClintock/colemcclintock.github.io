@@ -32,7 +32,7 @@ Views: filters (fiscal year/date range, MSC, battalion, UIC, class, status, duty
 Blank templates: [`asmis_template.xlsx`](dashboards/safety/asmis_template.xlsx), [`asmis_template.csv`](dashboards/safety/asmis_template.csv). Fictional sample in the same layout: [`data/asmis_sample.xlsx`](dashboards/safety/data/asmis_sample.xlsx).
 
 ### Status of Funds Dashboard
-FY26 (Oct 2025 to Sep 2026) and FY27 to date by appropriation (NGPA, OMNG, MCNG, State) and fictional program codes: Annual Funding Program, allotments, commitments, obligations, disbursements, unobligated balance, obligation rate vs spend plan, burn rate, projected end-of-year execution, a program variance table with conditional formatting and use-or-lose flags, TDY spend, unfunded requirements, and a resource manager summary. A "How the numbers work" section explains each term.
+Reads the GFEBS funds management export (Excel or CSV, any number of columns) and uses nine of them, renamed: Document Number, Commitment Item, Functional Area, Appropriation, Fiscal Year, Obligation, Commitments, Sag and MDEP. Lines whose Commitment Item is ALLOBJ are removed before anything is counted, and personal identifier columns are skipped without being read. KPI totals, breakdowns by fiscal year, appropriation, Sag, MDEP, functional area and commitment item (top 10 + Other, click to filter), a searchable, sortable line table with CSV export, multi-file load, Save with data, and a Power Automate template (`downloads/finance-dashboard-template.html`, expressions in `downloads/funds-flow.html`). Demo data is fictional (`data-generation/generate_funds_data.py`); `tools/test-finance.py` runs the headless-Chrome checks. The older fictional program-level CSVs remain in `dashboards/finance/data/` for the Power BI kit.
 
 ### Power BI Starter Kit
 Two schema-validated report themes, a DAX measures library (readiness; ASMIS overdue investigations, days since last Class A/B, cost totals and accidents per 1,000; obligation and burn rates, EOY projection, variance, ranking, dynamic titles), Power Query (M) scripts (parameter, loader, an ASMIS export query that cleans headers, renames Tech to MSC and parses DD-Mon-YY dates and currency, folder load, date table, dims, facts, unpivots), a star-schema diagram, a page-by-page report layout, step-by-step build instructions, and the fictional CSVs. A `.pbix` is not included because it can only be built in Power BI Desktop; the kit rebuilds it in about 30-60 minutes. Download: [`powerbi-kit/powerbi-starter-kit.zip`](powerbi-kit/powerbi-starter-kit.zip).
@@ -83,7 +83,7 @@ assets/vendor/                   Chart.js 4.4.4 (MIT), SheetJS CE 0.20.3 (Apache
 data/units.json                  shared fictional unit roster
 dashboards/readiness/            Readiness Command Dashboard (+ template CSV, data/)
 dashboards/safety/               Safety & Mishaps Dashboard (ASMIS loader, templates, data/)
-dashboards/finance/              Status of Funds Dashboard (+ template CSV, data/)
+dashboards/finance/              Status of Funds Dashboard (+ funds_template.xlsx/.csv, data/)
 powerbi-kit/                     Power BI Starter Kit page, files/, and the kit ZIP
 data-generation/                 seeded Python scripts that build all demo data and the kit
 tools/                           build-standalone.py (offline copies in downloads/)
@@ -105,7 +105,8 @@ Re-run it after changing any dashboard file.
 ```bash
 python3 data-generation/generate_readiness_data.py
 python3 data-generation/generate_asmis_data.py        # needs openpyxl (pip install openpyxl) for the .xlsx sample/template
-python3 data-generation/generate_finance_data.py
+python3 data-generation/generate_finance_data.py      # fictional program-level CSVs used by the Power BI kit
+python3 data-generation/generate_funds_data.py        # Status of Funds demo data + templates (needs openpyxl)
 python3 data-generation/generate_asmis_fy_trackers.py # fictional FY22-FY26 trackers + roll-up for multi-file/de-dup testing
 python3 data-generation/build_powerbi_kit.py      # refreshes the kit CSVs, snippets and ZIP
 python3 tools/build-standalone.py                  # rebuilds downloads/ (offline copies)
