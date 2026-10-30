@@ -1113,6 +1113,17 @@ window.ASMIS_DATA = {"exportDate":"2026-10-29","headers":["Accident #","CCIR #",
   // Tokens are built from pieces so the flow's replace() only ever matches the single placeholder in the markup.
   var PA_ID = "embedded" + "-data", PA_TOKEN = "__PA_" + "DATA__", PA_TS_TOKEN = "__PA_" + "REFRESHED__", PA = null;
   var PA_SKIP = /^(@odata\.|itemInternalId$)/i;           // connector bookkeeping keys, not tracker columns
+  function jsonEnd(s, a) {
+    var depth = 0, inStr = false, esc = false;
+    for (var i = a; i < s.length; i++) {
+      var c = s.charCodeAt(i);
+      if (inStr) { if (esc) esc = false; else if (c === 92) esc = true; else if (c === 34) inStr = false; continue; }
+      if (c === 34) inStr = true;
+      else if (c === 91 || c === 123) depth++;
+      else if (c === 93 || c === 125) { depth--; if (depth === 0) return i; }
+    }
+    return -1;
+  }
   function readPA() {
     var el = document.getElementById(PA_ID); if (!el) return null;
     var s = String(el.textContent || "").trim();
@@ -1120,8 +1131,11 @@ window.ASMIS_DATA = {"exportDate":"2026-10-29","headers":["Accident #","CCIR #",
     var meta = document.querySelector('meta[name="pa-refreshed"]'), ts = meta ? String(meta.getAttribute("content") || "").trim() : "";
     var out = { refreshed: ts && ts !== PA_TS_TOKEN ? ts : "", sources: [], error: null };
     try {
-      var a = s.search(/[\[{]/), b = Math.max(s.lastIndexOf("]"), s.lastIndexOf("}"));  // tolerate stray text around the JSON
-      if (a < 0 || b < a) throw new Error("no JSON found");
+      var a = s.search(/[\[{]/);                                                          // tolerate stray text around the JSON
+      if (a < 0) throw new Error("no JSON found");
+      var b = jsonEnd(s, a);                                                               // end of the first complete JSON value (ignores anything SharePoint or the browser appends after it)
+      if (b < 0) b = Math.max(s.lastIndexOf("]"), s.lastIndexOf("}"));
+      if (b < a) throw new Error("no JSON found");
       var o = JSON.parse(s.slice(a, b + 1));
       if (typeof o === "string") o = JSON.parse(o);                                        // double-encoded by the flow
       out.sources = paSources(o);
