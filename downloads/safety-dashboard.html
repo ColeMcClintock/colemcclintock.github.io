@@ -727,7 +727,7 @@ window.ASMIS_DATA = {"exportDate":"2026-10-29","headers":["Accident #","CCIR #",
   var BYKEY = {}; COLUMNS.forEach(function (c) { BYKEY[c[0]] = c; });
 
   function norm(h) {
-    return String(h == null ? "" : h).replace(/\u00a0/g, " ").replace(/\*/g, "").replace(/#/g, " no ")
+    return String(h == null ? "" : h).replace(/_x([0-9a-fA-F]{4})_/g, function (m, x) { return String.fromCharCode(parseInt(x, 16)); }).replace(/\u00a0/g, " ").replace(/\*/g, "").replace(/#/g, " no ")
       .replace(/\(.*?\)/g, " ").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   }
   var ALIAS = {};
