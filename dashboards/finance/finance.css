@@ -69,3 +69,17 @@ body.present .realbanner span{font-size:.74rem;flex:1;min-width:0;overflow:hidde
 @media(max-width:1300px){.kpis{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:640px){.kpis{grid-template-columns:repeat(2,1fr)}}
 @media print{.kpis{grid-template-columns:repeat(6,1fr)}.kpi .val{font-size:1.3rem}}
+/* spending trend */
+h3.sub{font-size:.9rem;margin:10px 0 6px;color:#c9d6e6}
+.trendtools label{display:flex;gap:6px;align-items:center;font-size:.85rem}
+.trendtools select{background:var(--bg2);border:1px solid var(--line);color:inherit;border-radius:8px;padding:4px 8px;font:inherit;font-size:.85rem}
+.trendrow>div{min-width:0}
+.pacegrid{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px}
+.pbar{display:grid;grid-template-columns:130px 1fr 52px;align-items:center;gap:10px}
+.pbar .plbl{font-size:.85rem;color:#c9d6e6}.pbar .pval{font-weight:700;text-align:right}
+.track{height:14px;background:var(--bg2);border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.fill{height:100%}.fill.spent{background:#5aa6e6}.fill.year{background:#9aa7b8}
+.pstat{margin:8px 0 2px;font-size:.88rem}.pstat.ahead strong{color:#e3b34c}.pstat.behind strong{color:#5aa6e6}.pstat.on strong{color:var(--good)}
+.hint{font-size:.85rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 0}
+.hint[hidden]{display:none}
+@media(max-width:900px){.pacegrid{grid-template-columns:1fr}}

@@ -46,6 +46,19 @@
     if (!m) return s;
     return m[1].length === 2 ? "20" + m[1] : m[1];
   }
+  // Fiscal month: 1 = Oct ... 12 = Sep (federal fiscal year). Accepts 1, "01", "1.0", "P01", "Per 1", "1 - Oct", "Oct", "October".
+  var FY_MON = ["Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"];
+  var MON_FM = { oct: 1, nov: 2, dec: 3, jan: 4, feb: 5, mar: 6, apr: 7, may: 8, jun: 9, jul: 10, aug: 11, sep: 12 };
+  function fmNum(v) { // 1..12, null for blank, NaN for unreadable
+    if (blankish(v)) return null;
+    if (typeof v === "number") return v === Math.round(v) && v >= 1 && v <= 12 ? v : NaN;
+    var s = txt(v).toLowerCase(), m = s.match(/^(?:p|per|period|fm|m)?\s*0*(\d{1,2})(?:\.0+)?(?:\s*[-\u2013:.]?\s*[a-z]{3,9}\.?)?$/);
+    if (m) { var x = +m[1]; return x >= 1 && x <= 12 ? x : NaN; }
+    m = s.match(/^([a-z]{3})[a-z]*\.?$/);
+    return m && MON_FM[m[1]] ? MON_FM[m[1]] : NaN;
+  }
+  function fmLabel(x) { return x ? x + " - " + FY_MON[x - 1] : ""; }
+  function fiscalNow(d) { var m = d.getMonth(); return { fy: String(d.getFullYear() + (m >= 9 ? 1 : 0)), fm: (m + 3) % 12 + 1 }; }
   function isAllobj(v) { return typeof v === "string" && txt(v).toUpperCase() === "ALLOBJ"; }
   function kn(d, v) { // join key for one dimension value
     var s = (d === "fy" ? fyText(v) : idText(v)).toUpperCase().replace(/\s+/g, "");
@@ -109,21 +122,23 @@
     ["res", "Reservations", ["reservations", "reservation"], "money"]
   ];
   var KEY_ORDER = ["fy", "appn", "sag", "mdep", "fa", "ci"], AMTS = ["tdp", "afp", "res"];
-  var FLABEL = {}; FCOLS.forEach(function (c) { FLABEL[c[0]] = c[1]; });
+  var FLABEL = {}; FCOLS.forEach(function (c) { FLABEL[c[0]] = c[1]; }); FLABEL.fm = "Fiscal Month";
   var FALIAS = aliasMap(FCOLS), FUND_AMT = ["tdp", "afp", "reservations", "reservation"];
+  var PLAN_AMT = ["plannedamount", "planamount", "plannedamt", "planned", "spendplan", "plan", "plannedspend", "planamt"];
   var EXPORT_ONLY = ["contractdocno", "commitmentitemfipex", "obligationamtcum", "commitmentamtcum", "disbursementamtcum", "documentnumber", "obligation", "disbursement"];
   function keyLabel(keys) { return keys.map(function (k) { return FLABEL[k]; }).join(" + "); }
 
-  // Which kind of table is this: "export" or "funding"? Uses the best header row in the first 20 rows.
+  // Which kind of table is this: "export", "funding" or "plan" (spend plan)? Uses the best header row in the first 20 rows.
   function classify(src, exportAlias) {
     var best = { kind: null, score: 0 };
     for (var r = 0; r < Math.min(src.rows, 20); r++) {
-      var ex = 0, exOnly = 0, fa = 0;
+      var ex = 0, exOnly = 0, fa = 0, pl = 0;
       for (var c = 0; c < src.cols; c++) {
         var h = src.get(r, c); if (h == null || h === "") continue; var nh = norm(h);
-        if (exportAlias[nh]) ex++; if (EXPORT_ONLY.indexOf(nh) >= 0) exOnly++; if (FUND_AMT.indexOf(nh) >= 0) fa++;
+        if (exportAlias[nh]) ex++; if (EXPORT_ONLY.indexOf(nh) >= 0) exOnly++; if (FUND_AMT.indexOf(nh) >= 0) fa++; if (PLAN_AMT.indexOf(nh) >= 0) pl++;
       }
       if (fa && !exOnly && fa + 1 > best.score) best = { kind: "funding", score: fa + 1 };
+      else if (pl && !exOnly && !fa && pl + 1 > best.score) best = { kind: "plan", score: pl + 1 };
       else if (exOnly && ex > best.score) best = { kind: "export", score: ex };
     }
     return best;
@@ -286,7 +301,7 @@
   w.FundsLib = {
     BLANK: BLANK, PAGE: PAGE, MAXROWS: MAXROWS,
     decodeX: decodeX, norm: norm, isPii: isPii, aliasMap: aliasMap, txt: txt, blankish: blankish, parseAmt: parseAmt, idText: idText, fyText: fyText,
-    isAllobj: isAllobj, kn: kn, n: n, full: full, plural: plural, cmpVal: cmpVal, isObj: isObj,
+    isAllobj: isAllobj, FY_MON: FY_MON, fmNum: fmNum, fmLabel: fmLabel, fiscalNow: fiscalNow, kn: kn, n: n, full: full, plural: plural, cmpVal: cmpVal, isObj: isObj,
     aoaSource: aoaSource, sheetSource: sheetSource, rowsSource: rowsSource, mapHeaders: mapHeaders, badNum: badNum,
     FCOLS: FCOLS, FLABEL: FLABEL, KEY_ORDER: KEY_ORDER, keyLabel: keyLabel, classify: classify, parseFunding: parseFunding, buildFund: buildFund,
     account: account, joined: joined, reportLines: reportLines, fileLines: fileLines,

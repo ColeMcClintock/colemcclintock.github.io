@@ -2,7 +2,7 @@
    Funding (TDP, AFP, Reservations) comes from a separate funding file: see funding.js (loaded first). */
 (function () {
   "use strict";
-  var K = window.DashKit, L = window.FundsLib, $ = K.$, esc = K.esc;
+  var K = window.DashKit, L = window.FundsLib, TR = window.FundsTrend, $ = K.$, esc = K.esc;
   var n = L.n, full = L.full, plural = L.plural, cmpVal = L.cmpVal, idText = L.idText, BLANK = L.BLANK, PAGE = L.PAGE, MAXROWS = L.MAXROWS;
 
   // Export columns: [key, shown as, header aliases (normalized: lowercase letters and digits only), type, used for]
@@ -11,30 +11,31 @@
     ["ci", "Commitment Item", ["commitmentitemfipex", "commitmentitem"], "text", "Chart, filter; ALLOBJ lines removed"],
     ["fa", "Functional Area", ["functionalareafarea", "functionalarea"], "text", "Chart, filter, funding match"],
     ["appn", "Appropriation", ["appropriationtype", "appropriation"], "text", "Chart, filter"],
-    ["fy", "Fiscal Year", ["fiscalyear"], "fy", "Chart, filter, funding match"],
+    ["fy", "Fiscal Year", ["fiscalyear"], "fy", "Chart, filter, funding match, trend year"],
+    ["fm", "Fiscal Month", ["fiscalmonth", "fiscalmonthno", "fiscalmonthnumber", "fiscalmo", "fiscalperiod", "fiscalper"], "fm", "Trend charts, filter (1 = Oct ... 12 = Sep)"],
     ["obl", "Obligation", ["obligationamtcum", "obligation", "obligations"], "money", "KPI, charts, Balance"],
     ["com", "Commitments", ["commitmentamtcum", "commitments"], "money", "Line table and CSV only"],
     ["disb", "Disbursement", ["disbursementamtcum", "disbursement", "disbursements"], "money", "KPI, charts, Balance"],
     ["sag", "Sag", ["sag"], "text", "Chart, filter, funding match"],
     ["mdep", "MDEP", ["mdep"], "text", "Chart, filter, funding match"]
   ];
-  var EXPORT_NAME = { doc: "contract_doc_no", ci: "commitment_item_fipex", fa: "functional_area_farea", appn: "appropriation_type", fy: "fiscal_year", obl: "obligation_amt_cum", com: "commitment_amt_cum", disb: "disbursement_amt_cum", sag: "sag", mdep: "mdep" };
+  var EXPORT_NAME = { doc: "contract_doc_no", ci: "commitment_item_fipex", fa: "functional_area_farea", appn: "appropriation_type", fy: "fiscal_year", fm: "fiscal_month", obl: "obligation_amt_cum", com: "commitment_amt_cum", disb: "disbursement_amt_cum", sag: "sag", mdep: "mdep" };
   var LABEL = {}; COLS.forEach(function (c) { LABEL[c[0]] = c[1]; });
   var ALIAS = L.aliasMap(COLS);
-  var DIMS = [["fy", "fFy", "cFy", "All years"], ["appn", "fAppn", "cAppn", "All"], ["sag", "fSag", "cSag", "All"], ["mdep", "fMdep", "cMdep", "All"], ["fa", "fFa", "cFa", "All"], ["ci", "fCi", "cCi", "All"]];
+  var DIMS = [["fy", "fFy", "cFy", "All years"], ["appn", "fAppn", "cAppn", "All"], ["sag", "fSag", "cSag", "All"], ["mdep", "fMdep", "cMdep", "All"], ["fa", "fFa", "cFa", "All"], ["ci", "fCi", "cCi", "All"], ["fm", "fFm", null, "All months"]];
   var DIM_KEYS = DIMS.map(function (d) { return d[0]; });
-  var TEXT_KEYS = ["doc", "ci", "fa", "appn", "fy", "sag", "mdep"];
+  var TEXT_KEYS = ["doc", "ci", "fa", "appn", "fy", "fm", "sag", "mdep"];
   var TOPN = 10, C_TDP = "#c9a27e", C_OBL = "#5aa6e6", C_DISB = "#a9c16a", C_RES = "#e3b34c", C_BAL = "#5fbf7f";
   var MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-  var S = { files: [], failed: null, fileOrder: 0, recs: [], fund: null, source: "demo", allobj: 0, showAll: false, sort: { k: "obl", dir: -1 }, shown: [] };
+  var S = { files: [], failed: null, fileOrder: 0, recs: [], fund: null, plan: null, source: "demo", allobj: 0, showAll: false, sort: { k: "obl", dir: -1 }, shown: [] };
 
   // ---------- export parsing (only header cells and the mapped columns are ever read) ----------
   function parseExport(src) {
     var hm = L.mapHeaders(src, ALIAS), map = hm.map;
     var rep = { kind: "export", headerRow: hm.hi + 1, matched: COLS.filter(function (c) { return map[c[0]] != null; }).map(function (c) { return c[1]; }),
       missing: COLS.filter(function (c) { return map[c[0]] == null; }).map(function (c) { return EXPORT_NAME[c[0]] + " (" + c[1] + ")"; }),
-      extra: hm.extra, dupes: hm.dupes, pii: hm.pii, rowsRead: 0, rowsLoaded: 0, blankRows: 0, allobj: 0, badNumber: 0, badNumberExamples: [], fatal: null };
+      extra: hm.extra, dupes: hm.dupes, pii: hm.pii, rowsRead: 0, rowsLoaded: 0, blankRows: 0, allobj: 0, badNumber: 0, badNumberExamples: [], badMonth: 0, badMonthExamples: [], fatal: null };
     if (map.ci == null) { rep.fatal = "No Commitment Item column (commitment_item_fipex) was found, so ALLOBJ lines cannot be removed. The file was not loaded."; return { records: [], report: rep }; }
     if (map.obl == null && map.disb == null && map.com == null) { rep.fatal = "No obligation_amt_cum or disbursement_amt_cum column was found, so there is nothing to total. The file was not loaded."; return { records: [], report: rep }; }
     var keys = Object.keys(map), out = [];
@@ -45,6 +46,9 @@
       rep.rowsRead++;
       if (L.isAllobj(raw.ci)) { rep.allobj++; continue; }                            // removed completely
       var rec = { _row: rr + 1, doc: idText(raw.doc), ci: idText(raw.ci), fa: idText(raw.fa), appn: idText(raw.appn), fy: L.fyText(raw.fy), sag: idText(raw.sag), mdep: idText(raw.mdep) };
+      var fmn = "fm" in raw ? L.fmNum(raw.fm) : null;
+      if (fmn !== null && isNaN(fmn)) { rep.badMonth++; if (rep.badMonthExamples.length < 5) rep.badMonthExamples.push({ row: rr + 1, value: L.txt(raw.fm) }); fmn = null; }
+      rec.fmn = fmn; rec.fm = L.fmLabel(fmn);
       ["obl", "com", "disb"].forEach(function (k) {
         var x = k in raw ? L.parseAmt(raw[k]) : null;
         if (x !== null && isNaN(x)) { L.badNum(rep, rr + 1, EXPORT_NAME[k], raw[k]); x = null; }
@@ -55,7 +59,7 @@
     rep.rowsLoaded = out.length;
     return { records: out, report: rep };
   }
-  function parseAs(kind, src) { return kind === "funding" ? L.parseFunding(src) : parseExport(src); }
+  function parseAs(kind, src) { return kind === "funding" ? L.parseFunding(src) : kind === "plan" ? TR.parsePlan(src) : parseExport(src); }
   function readFile(file, force, cb) {
     var reader = new FileReader(), isCsv = /\.csv$/i.test(file.name);
     reader.onload = function (e) {
@@ -68,7 +72,7 @@
           if (!best[kind] || c.score > best[kind].score) best[kind] = { score: c.score, name: nm, src: src };
         });
         var out = Object.keys(best).map(function (kind) { var b = best[kind]; return { kind: kind, sheetName: isCsv ? file.name : b.name, res: parseAs(kind, b.src) }; });
-        if (!out.length) throw new Error(force === "funding" ? "No TDP, AFP or Reservations column was found." : "Neither a funds export (commitment_item_fipex, obligation_amt_cum, ...) nor a funding file (TDP, AFP, Reservations) header row was found.");
+        if (!out.length) throw new Error(force === "funding" ? "No TDP, AFP or Reservations column was found." : force === "plan" ? "No Planned Amount column was found." : "No funds export (commitment_item_fipex, obligation_amt_cum, ...), funding file (TDP, AFP, Reservations) or spend plan (Fiscal Month, Planned Amount) header row was found.");
         cb(null, out);
       } catch (err) { cb(err); }
     };
@@ -90,24 +94,25 @@
   function exportsOk() { return S.files.filter(function (e) { return usable(e) && e.kind === "export"; }); }
 
   // ---------- data install ----------
-  function applyData(recs, fund, source) {
+  function applyData(recs, fund, plan, source) {
     recs.forEach(function (r, i) { r._i = i; });
-    S.recs = recs; S.fund = fund; S.source = source; S.showAll = false; setDisclaimer(source === "file");
+    S.recs = recs; S.fund = fund; S.plan = plan; S.source = source; S.showAll = false; setDisclaimer(source === "file");
     buildFilters(true); render();
     $("btnAdd").hidden = $("btnClear").hidden = source !== "file";
     var sv = $("btnSave"); sv.disabled = source !== "file";
-    sv.title = source === "file" ? "Download one offline HTML file with the " + K.fmt(recs.length) + " loaded lines" + (fund ? " and " + plural(fund.rows.length, "funding row") : "") + " built in (real data: handle per policy)" : "Load your files first";
+    sv.title = source === "file" ? "Download one offline HTML file with the " + K.fmt(recs.length) + " loaded lines" + (fund ? ", " + plural(fund.rows.length, "funding row") : "") + (plan ? ", " + plural(plan.rows.length, "spend plan row") : "") + " built in (real data: handle per policy)" : "Load your files first";
   }
   function loadDemo() {
     var D = window.FUNDS_DEMO, p = parseExport(L.aoaSource([D.headers].concat(D.rows))), fp = L.parseFunding(L.aoaSource([D.funding.headers].concat(D.funding.rows)));
+    var pp = TR.parsePlan(L.aoaSource([D.plan.headers].concat(D.plan.rows)));
     S.files = []; S.failed = null; S.allobj = p.report.allobj;
-    applyData(p.records, L.buildFund([{ name: "Demo funding", rep: fp.report, rows: fp.rows }], p.records), "demo"); renderReport();
+    applyData(p.records, L.buildFund([{ name: "Demo funding", rep: fp.report, rows: fp.rows }], p.records), TR.buildPlan([{ name: "Demo spend plan", rows: pp.rows }]), "demo"); renderReport();
   }
 
   // ---------- multi-file loading (each file's kind is detected from its headers) ----------
   function entryFrom(name, sheetName, kind, res) {
     var e = { name: name, kind: kind, sheetName: sheetName, rep: res.report, order: S.fileOrder++ };
-    if (kind === "funding") e.rows = res.rows; else { e.records = res.records; e.records.forEach(function (r) { r._src = name; }); }
+    if (kind !== "export") e.rows = res.rows; else { e.records = res.records; e.records.forEach(function (r) { r._src = name; }); }
     return e;
   }
   function readFiles(list, force, cb) {
@@ -123,12 +128,13 @@
       });
     })();
   }
-  function usable(e) { return !e.error && !e.rep.fatal && !e.dupOf && (e.kind === "funding" ? e.rows.length > 0 : e.records.length > 0); }
+  function usable(e) { return !e.error && !e.rep.fatal && !e.dupOf && (e.kind !== "export" ? e.rows.length > 0 : e.records.length > 0); }
   function sig(e) { // identical content = same file loaded twice
     var h = 0, s = e.kind === "funding" ? e.rows.map(function (r) { return [r.fy, r.appn, r.sag, r.mdep, r.fa, r.ci, r.tdp, r.afp, r.res].join("|"); }).join("\n")
-      : e.records.map(function (r) { return [r.doc, r.ci, r.fa, r.appn, r.fy, r.obl, r.com, r.disb, r.sag, r.mdep].join("|"); }).join("\n");
+      : e.kind === "plan" ? e.rows.map(function (r) { return [r.fy, r.fa, r.acct, r.fm, r.amt].join("|"); }).join("\n")
+      : e.records.map(function (r) { return [r.doc, r.ci, r.fa, r.appn, r.fy, r.fm, r.obl, r.com, r.disb, r.sag, r.mdep].join("|"); }).join("\n");
     for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-    return e.kind + (e.kind === "funding" ? e.rows.length : e.records.length) + ":" + h;
+    return e.kind + (e.kind !== "export" ? e.rows.length : e.records.length) + ":" + h;
   }
   // "Load files" replaces loaded files of the kinds it brings (a new export keeps the funding file and vice versa); "Add" keeps everything.
   function loadFiles(list, append, force) {
@@ -146,9 +152,9 @@
     var ok = S.files.filter(usable), recs = [];
     ok.filter(function (e) { return e.kind === "export"; }).forEach(function (e) { for (var i = 0; i < e.records.length; i++) recs.push(e.records[i]); });
     S.allobj = ok.reduce(function (t, e) { return t + (e.kind === "export" ? e.rep.allobj : 0); }, 0);
-    applyData(recs, L.buildFund(ok.filter(function (e) { return e.kind === "funding"; }), recs), "file");
+    applyData(recs, L.buildFund(ok.filter(function (e) { return e.kind === "funding"; }), recs), TR.buildPlan(ok.filter(function (e) { return e.kind === "plan"; })), "file");
   }
-  function resetInputs() { ["fileInput", "addInput", "fundInput"].forEach(function (id) { $(id).value = ""; }); }
+  function resetInputs() { ["fileInput", "addInput", "fundInput", "planInput"].forEach(function (id) { $(id).value = ""; }); }
   function clearFiles() { S.files = []; S.failed = null; resetInputs(); if (!(SAVED && loadSaved()) && !(PA && loadPA())) loadDemo(); setExpanded(false); }
   function showDemo() { S.files = []; S.failed = null; resetInputs(); loadDemo(); setExpanded(false); }
 
@@ -168,25 +174,30 @@
       var fp = L.parseFunding(L.aoaSource([D.funding.headers].concat(D.funding.rows)));
       S.files.push({ name: "Saved funding data (" + plural(D.funding.files.length, "source file") + ")", kind: "funding", srcNames: D.funding.files, rep: fp.report, rows: fp.rows, embedded: true, order: S.fileOrder++ });
     }
+    if (D.plan) {
+      var pp = TR.parsePlan(L.aoaSource([D.plan.headers].concat(D.plan.rows)));
+      S.files.push({ name: "Saved spend plan (" + plural(D.plan.files.length, "source file") + ")", kind: "plan", srcNames: D.plan.files, rep: pp.report, rows: pp.rows, embedded: true, order: S.fileOrder++ });
+    }
     S.failed = null; combine(); renderReport();
     return true;
   }
   function showBanner() {
-    var sa = new Date(SAVED.savedAt), names = SAVED.files.concat(SAVED.funding ? SAVED.funding.files : []);
+    var sa = new Date(SAVED.savedAt), names = SAVED.files.concat(SAVED.funding ? SAVED.funding.files : [], SAVED.plan ? SAVED.plan.files : []);
     $("realBanner").hidden = false;
-    $("realBannerMeta").textContent = "Data as of " + fmtStamp(sa) + " \u00b7 " + K.fmt(SAVED.rows.length) + " lines" + (SAVED.funding ? " + " + plural(SAVED.funding.rows.length, "funding row") : "") + " from " + plural(names.length, "source file") + ": " + names.join(", ");
+    $("realBannerMeta").textContent = "Data as of " + fmtStamp(sa) + " \u00b7 " + K.fmt(SAVED.rows.length) + " lines" + (SAVED.funding ? " + " + plural(SAVED.funding.rows.length, "funding row") : "") + (SAVED.plan ? " + " + plural(SAVED.plan.rows.length, "plan row") : "") + " from " + plural(names.length, "source file") + ": " + names.join(", ");
     $("realBannerMeta").title = names.join("\n");
   }
   function safeJson(o) { return JSON.stringify(o).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029"); }
   function snapshot() {
     var o = { v: 1, savedAt: new Date().toISOString(), files: srcNames("export"), allobjRemoved: S.allobj,
       headers: COLS.map(function (c) { return c[1]; }),
-      rows: S.recs.map(function (r) { return COLS.map(function (c) { var v = r[c[0]]; return v == null ? "" : c[3] === "money" ? v : String(v); }); }),
+      rows: S.recs.map(function (r) { return COLS.map(function (c) { var v = r[c[0]]; return v == null ? "" : c[3] === "money" ? v : c[3] === "fm" ? (r.fmn || "") : String(v); }); }),
       src: S.recs.map(function (r) { return r._src || ""; }) };
     if (S.fund) {
       var cols = S.fund.keys.concat(S.fund.hasAcct ? ["acct"] : [], S.fund.amts);
       o.funding = { files: srcNames("funding"), headers: cols.map(function (k) { return L.FLABEL[k]; }), rows: S.fund.rows.map(function (r) { return cols.map(function (k) { var v = r[k]; return v == null ? "" : v; }); }) };
     }
+    if (S.plan) o.plan = { files: srcNames("plan"), headers: TR.PCOLS.map(function (c) { return c[1]; }), rows: S.plan.rows.map(function (r) { return [r.fy, r.fa, r.acct, r.fm, r.amt == null ? "" : r.amt]; }) };
     return o;
   }
   function pageSource(cb) {
@@ -273,7 +284,7 @@
     if (!PA || PA.error) return false;
     var entries = PA.sources.map(function (src) {
       var s = L.rowsSource(src.rows), kind = L.classify(s, ALIAS).kind;
-      if (!kind) return { name: src.file, kind: "unknown", error: "headers match neither the funds export nor a funding table", order: S.fileOrder++ };
+      if (!kind) return { name: src.file, kind: "unknown", error: "headers match none of: funds export, funding table, spend plan", order: S.fileOrder++ };
       var e = entryFrom(src.file, src.file, kind, parseAs(kind, s)); e.automatic = true; return e;
     });
     if (!entries.some(usable)) { S.files = []; S.failed = entries; PA.error = "none of the " + entries.length + " source table(s) had readable rows"; return false; }
@@ -289,7 +300,7 @@
       setBar("err", "Automatic refresh data could not be read \u00b7 showing fictional demo data", 1);
       return;
     }
-    $("realBannerMeta").textContent = "Data refreshed " + (PA.refreshed || "(time not recorded)") + " (automatic) \u00b7 " + K.fmt(S.recs.length) + " lines" + (S.fund ? " + " + plural(S.fund.rows.length, "funding row") : "") + " from " + plural(names.length, "table") + ": " + names.join(", ");
+    $("realBannerMeta").textContent = "Data refreshed " + (PA.refreshed || "(time not recorded)") + " (automatic) \u00b7 " + K.fmt(S.recs.length) + " lines" + (S.fund ? " + " + plural(S.fund.rows.length, "funding row") : "") + (S.plan ? " + " + plural(S.plan.rows.length, "plan row") : "") + " from " + plural(names.length, "table") + ": " + names.join(", ");
     $("realBannerMeta").title = names.join("\n");
   }
 
@@ -299,13 +310,14 @@
     if (e.error) return { html: '<p class="err">Could not read this file: ' + esc(e.error) + "</p>", warns: 1 };
     if (rep.fatal) return { html: '<p class="err">' + esc(rep.fatal) + "</p>" + (rep.missing.length ? '<p class="muted">Missing: ' + codes(rep.missing) + "</p>" : ""), warns: 1 };
     if (e.dupOf) return { html: '<p class="warn">Same content as ' + esc(e.dupOf) + "; skipped so its amounts are not counted twice.</p>", warns: 1 };
-    if (e.kind === "funding") { var fl = L.fileLines(e, codes); h.push(fl.html); warns += fl.warns; }
+    if (e.kind === "funding" || e.kind === "plan") { var fl = (e.kind === "plan" ? TR : L).fileLines(e, codes); h.push(fl.html); warns += fl.warns; }
     else {
       h.push('<p class="' + (rep.rowsLoaded ? "ok" : "err") + '">Funds export: loaded ' + plural(rep.rowsLoaded, "line") + " of " + K.fmt(rep.rowsRead) + " read (header row " + rep.headerRow + ")." + (rep.blankRows ? ' <span class="muted">' + K.fmt(rep.blankRows) + " blank row(s) ignored.</span>" : "") + "</p>");
       h.push('<p class="ok"><strong>' + plural(rep.allobj, "ALLOBJ line") + " removed</strong> (not counted anywhere).</p>");
       var ok = rep.matched.length === COLS.length;
       h.push('<p class="' + (ok ? "ok" : "warn") + '">' + rep.matched.length + " of " + COLS.length + " columns matched.</p>");
       if (!ok) { warns++; h.push('<p class="warn">Missing: ' + codes(rep.missing) + "</p>"); }
+      if (rep.badMonth) { warns++; h.push('<p class="warn">' + rep.badMonth + " fiscal month value(s) are not 1&ndash;12 or a month name and were treated as blank. Examples: " + rep.badMonthExamples.map(function (x) { return "row " + x.row + " = &ldquo;" + esc(x.value) + "&rdquo;"; }).join("; ") + ".</p>"); }
     }
     if (rep.pii) h.push('<p class="muted">' + plural(rep.pii, "personal identifier column") + " skipped without reading.</p>");
     if (rep.extra.length) h.push('<details class="muted"><summary>' + plural(rep.extra.length, "other column") + " ignored</summary><p class=\"muted\">" + codes(rep.extra) + "</p></details>");
@@ -323,21 +335,21 @@
       return;
     }
     if (S.source === "demo") {
-      el.innerHTML = '<p class="muted">Showing the built-in fictional demo data: ' + plural(S.recs.length, "line") + " in the funds export layout (" + plural(S.allobj, "ALLOBJ line") + " removed) and a fictional funding file with " + plural(S.fund ? S.fund.rows.length : 0, "row") + " matched on " + esc(S.fund ? L.keyLabel(S.fund.keys) : "") + ". Choose your export and funding file, or drop them here.</p>";
+      el.innerHTML = '<p class="muted">Showing the built-in fictional demo data (with a fictional spend plan): ' + plural(S.recs.length, "line") + " in the funds export layout (" + plural(S.allobj, "ALLOBJ line") + " removed) and a fictional funding file with " + plural(S.fund ? S.fund.rows.length : 0, "row") + " matched on " + esc(S.fund ? L.keyLabel(S.fund.keys) : "") + ". Choose your export and funding file, or drop them here.</p>";
       setBar("ok", "Demo data (fictional) \u00b7 " + plural(S.recs.length, "line") + " \u00b7 " + plural(S.allobj, "ALLOBJ line") + " removed \u00b7 demo funding file", 0);
       return;
     }
     S.files.forEach(function (e) {
       var fl = fileLines(e); warns += fl.warns;
-      var cnt = e.kind === "funding" ? plural(e.rows ? e.rows.length : 0, "row") : plural(e.records ? e.records.length : 0, "line");
-      var head = esc(e.name) + " \u00b7 " + (e.kind === "funding" ? "funding" : e.kind === "export" ? "export" : "unknown") + (usable(e) ? " \u00b7 " + cnt : " \u00b7 not loaded") + (fl.warns ? ' \u00b7 <span class="warn">' + fl.warns + " warning" + (fl.warns === 1 ? "" : "s") + "</span>" : "");
+      var cnt = e.kind !== "export" ? plural(e.rows ? e.rows.length : 0, "row") : plural(e.records ? e.records.length : 0, "line");
+      var head = esc(e.name) + " \u00b7 " + (e.kind === "funding" ? "funding" : e.kind === "plan" ? "spend plan" : e.kind === "export" ? "export" : "unknown") + (usable(e) ? " \u00b7 " + cnt : " \u00b7 not loaded") + (fl.warns ? ' \u00b7 <span class="warn">' + fl.warns + " warning" + (fl.warns === 1 ? "" : "s") + "</span>" : "");
       h.push('<details class="filerep"' + (fl.warns || S.files.length === 1 ? " open" : "") + "><summary>" + head + "</summary>" + fl.html + "</details>");
     });
     var ex = exportsOk(), fu = L.reportLines(S.fund, S.recs, DIM_KEYS); warns += fu.warns;
-    h.push('<div class="combined"><p class="ok"><strong>Combined: ' + plural(S.recs.length, "line") + " from " + plural(ex.length, "export file") + "</strong> \u00b7 " + plural(S.allobj, "ALLOBJ line") + " removed.</p>" + (ex.length ? "" : '<p class="warn">No funds export loaded yet: Obligation and Disbursement are $0. Load the export with &ldquo;Add more files&rdquo;.</p>') + fu.html + "</div>");
+    h.push('<div class="combined"><p class="ok"><strong>Combined: ' + plural(S.recs.length, "line") + " from " + plural(ex.length, "export file") + "</strong> \u00b7 " + plural(S.allobj, "ALLOBJ line") + " removed.</p>" + (ex.length ? "" : '<p class="warn">No funds export loaded yet: Obligation and Disbursement are $0. Load the export with &ldquo;Add more files&rdquo;.</p>') + fu.html + (S.plan ? '<p class="ok">Spend plan: ' + plural(S.plan.rows.length, "row") + " from " + esc(S.plan.files.join(", ")) + ".</p>" : '<p class="muted">No spend plan loaded (optional): the trend chart shows actuals and the straight-line pace only.</p>') + "</div>");
     if (!ex.length) warns++;
     el.innerHTML = h.join("");
-    setBar(warns ? "warn" : "ok", (ex.length === 1 ? ex[0].name : plural(ex.length, "export")) + " \u00b7 " + plural(S.recs.length, "line") + " \u00b7 " + plural(S.allobj, "ALLOBJ line") + " removed \u00b7 " + (S.fund ? "funding: " + S.fund.files.join(", ") : "no funding file"), warns);
+    setBar(warns ? "warn" : "ok", (ex.length === 1 ? ex[0].name : plural(ex.length, "export")) + " \u00b7 " + plural(S.recs.length, "line") + " \u00b7 " + plural(S.allobj, "ALLOBJ line") + " removed \u00b7 " + (S.fund ? "funding: " + S.fund.files.join(", ") : "no funding file") + (S.plan ? " \u00b7 plan: " + S.plan.files.join(", ") : ""), warns);
   }
   function setBar(state, textLine, warns) {
     $("loadBar").className = "loadbar no-print chrome" + (state === "ok" ? "" : " " + state);
@@ -384,10 +396,16 @@
     $("asofLabel").textContent = plural(rows.length, "line") + " \u00b7 " + plural(docCount(rows), "document");
     $("scopeLabel").textContent = scope.length ? scope.join(" \u00b7 ") : "All funds";
     $("sourceLabel").textContent = S.source === "file" ? " \u00b7 " + (SAVED && S.files[0] && S.files[0].embedded ? "Saved data" : PA && S.files[0] && S.files[0].automatic ? "Automatic refresh" : "Your " + (ex.length === 1 ? "file: " + ex[0].name : plural(ex.length, "export file"))) + (S.fund ? " + funding" : "") : " \u00b7 Demo data";
-    kpis(rows, j); summary(rows, f, j); position(rows, j);
+    kpis(rows, j); summary(rows, f, j); position(rows, j); trend(f);
     DIMS.forEach(function (d) { chart(d, rows, j); });
     L.table.render(S.fund, j);
     S.base = rows; table();
+  }
+  function trend(f) {
+    var f2 = {}; Object.keys(f).forEach(function (k) { f2[k] = k === "fy" || k === "fm" ? "" : f[k]; });
+    var scope = S.recs.filter(function (r) { return pass(r, f2); }), filtered = DIM_KEYS.some(function (k) { return f2[k]; });
+    S.trend = TR.render({ rows: scope, f: f, fund: S.fund, plan: S.plan, filtered: filtered, source: S.source,
+      joinedFor: function (fy) { var f3 = {}; Object.keys(f2).forEach(function (k) { f3[k] = f2[k]; }); f3.fy = fy; return L.joined(S.fund, scope.filter(function (r) { return r.fy === fy; }), f3, DIM_KEYS); } });
   }
   function docCount(rows) { var s = Object.create(null), c = 0; rows.forEach(function (r) { if (r.doc && !s[r.doc]) { s[r.doc] = 1; c++; } }); return c; }
   function kpi(lbl, val, sub, cls, title) { return '<div class="kpi' + (cls ? " " + cls : "") + '"' + (title ? ' title="' + esc(title) + '"' : "") + '><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div><div class="sub">' + (sub || "&nbsp;") + "</div></div>"; }
@@ -444,6 +462,7 @@
     $("posNote").textContent = t ? (t.bal < 0 ? "Over TDP by " + full(-t.bal) + "." : full(t.bal) + " left (" + (t.tdp ? Math.round(t.bal / t.tdp * 100) : 0) + "% of TDP).") : "Load the funding file to see Reservations and the Balance left.";
   }
   function chart(d, rows, j) {
+    if (!d[2]) return;
     var k = d[0], horiz = k !== "fy" && k !== "appn", withTdp = j && S.fund.keys.indexOf(k) >= 0 && S.fund.amts.indexOf("tdp") >= 0;
     var g = withTdp ? groupJoined(j, k) : group(rows, k);
     if (k === "fy") g.sort(function (a, b) { return a.label === BLANK ? 1 : b.label === BLANK ? -1 : cmpVal(a.label, b.label); });
@@ -502,6 +521,10 @@
     $("dictBody").innerHTML = COLS.map(function (c, i) { return "<tr><td>" + (i + 1) + "</td><td><code>" + esc(EXPORT_NAME[c[0]]) + "</code></td><td>" + esc(c[1]) + "</td><td>" + esc(c[4]) + "</td></tr>"; }).join("");
     $("btnLoad").addEventListener("click", function () { $("fileInput").click(); });
     $("btnFund").addEventListener("click", function () { $("fundInput").click(); });
+    $("btnPlan").addEventListener("click", function () { $("planInput").click(); });
+    document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("[data-plan]")) $("planInput").click(); });
+    $("planInput").addEventListener("change", function (e) { loadFiles(e.target.files, false, "plan"); this.value = ""; });
+    ["tFy", "tMetric"].forEach(function (id) { $(id).addEventListener("change", render); });
     document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("[data-fund]")) $("fundInput").click(); });
     $("btnDetails").addEventListener("click", function () { setExpanded($("loadPanel").hidden); });
     $("btnPresent").addEventListener("click", function () { setPresent(!document.body.classList.contains("present")); });

@@ -8,6 +8,8 @@ Writes, in the lowercase snake_case layout of the real export (only a handful of
   dashboards/finance/funds_template.xlsx    blank template formatted as a Table named FundsData (for Power Automate)
   dashboards/finance/data/funding_sample.xlsx  fictional funding file (Fiscal Year, Functional Area, Account, TDP, AFP, Reservations)
   dashboards/finance/funding_template.xlsx  blank funding file formatted as a Table named FundingData
+  dashboards/finance/spendplan_template.xlsx blank spend plan (Fiscal Year, Functional Area, Account, Fiscal Month, Planned Amount), Table SpendPlanData
+  dashboards/finance/data/spendplan_sample.xlsx fictional spend plan
 The demo includes extra ignored columns, an always-blank ssn column, and ALLOBJ lines (removed by the dashboard).
 Usage: python3 data-generation/generate_funds_data.py      (needs openpyxl)
 """
@@ -20,13 +22,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIR = os.path.join(ROOT, "dashboards", "finance")
 rng = random.Random(2026)
 
-USED = ["contract_doc_no", "commitment_item_fipex", "functional_area_farea", "appropriation_type", "fiscal_year",
+USED = ["contract_doc_no", "commitment_item_fipex", "functional_area_farea", "appropriation_type", "fiscal_year", "fiscal_month",
         "obligation_amt_cum", "commitment_amt_cum", "disbursement_amt_cum", "sag", "mdep"]
 FUND_HEADERS = ["Fiscal Year", "Functional Area", "Account", "TDP", "AFP", "Reservations"]
 # demo header order mimics a wide export: used columns mixed with ignored ones (and the blank ssn column)
 HEADERS = ["fund", "fund_center", "contract_doc_no", "document_type", "commitment_item_fipex", "functional_area_farea",
            "appropriation_type", "fiscal_year", "ssn", "obligation_amt_cum", "commitment_amt_cum", "disbursement_amt_cum",
-           "sag", "mdep", "posting_period", "afp_amt_cum", "allotment_amt_cum"]
+           "sag", "mdep", "fiscal_month", "afp_amt_cum", "allotment_amt_cum"]
 
 APPN = {"OMNG": "2065", "NGPA": "2060", "MCNG": "2085"}
 # Functional Areas look like 111G11AAAA (digits, G, digits, letters); each one is an account with a fixed Appropriation, Sag and MDEP
@@ -61,6 +63,11 @@ def doc_no(fy, appn):
     if rng.random() < 0.45: return f"00{rng.randrange(10000000, 99999999)}"                  # 10-digit commitment doc
     return f"W91ZZZ{fy % 100:02d}P{rng.randrange(1, 9999):04d}"                               # fictional contract number
 
+MONTH_W = [6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 12]          # fiscal months 1 (Oct) .. 12 (Sep); year-end spending heavier
+def fmonth(fy):
+    if fy == 2027: return 1                               # FY27 has just started (demo date 30 Oct 2026)
+    if rng.random() < 0.01: return None                   # a few lines with no fiscal month
+    return wpick([(m + 1, w) for m, w in enumerate(MONTH_W)])[0]
 rows, n_allobj = [], 0
 for i in range(300):                                  # documents
     acc = wpick([(f, f["w"]) for f in FAS])[0]
@@ -78,7 +85,7 @@ for i in range(300):                                  # documents
                      "document_type": rng.choice(["CO", "PO", "TR", "MI"]), "commitment_item_fipex": ci, "functional_area_farea": acc["fa"],
                      "appropriation_type": appn, "fiscal_year": fy, "ssn": "", "obligation_amt_cum": obl, "commitment_amt_cum": com,
                      "disbursement_amt_cum": disb, "sag": acc["sag"], "mdep": acc["mdep"],
-                     "posting_period": rng.randrange(1, 13), "afp_amt_cum": 9999999, "allotment_amt_cum": 8888888})
+                     "fiscal_month": fmonth(fy), "afp_amt_cum": 9999999, "allotment_amt_cum": 8888888})
 # ALLOBJ budget lines (large, must disappear from every total)
 for acc in FAS[:8] + FAS[16:18]:
     for fy, _w in FY_W:
@@ -87,7 +94,7 @@ for acc in FAS[:8] + FAS[16:18]:
         rows.append({"fund": APPN[acc["appn"]] + str(fy % 100), "fund_center": "IA000", "contract_doc_no": "", "document_type": "BD",
                      "commitment_item_fipex": rng.choice(["ALLOBJ", "allobj ", " ALLOBJ"]), "functional_area_farea": acc["fa"],
                      "appropriation_type": acc["appn"], "fiscal_year": fy, "ssn": "", "obligation_amt_cum": amt, "commitment_amt_cum": amt,
-                     "disbursement_amt_cum": round(amt * 0.3, 2), "sag": acc["sag"], "mdep": acc["mdep"], "posting_period": 1,
+                     "disbursement_amt_cum": round(amt * 0.3, 2), "sag": acc["sag"], "mdep": acc["mdep"], "fiscal_month": 1,
                      "afp_amt_cum": amt, "allotment_amt_cum": amt})
 rng.shuffle(rows)
 
@@ -107,10 +114,19 @@ for (fy, fa), (o, d) in sorted(grp.items()):
 for f in FAS[-6:]:   # funded, no lines yet
     if not any(x["Functional Area"] == f["fa"] and x["Fiscal Year"] == "FY27" for x in funding):
         funding.append({"Fiscal Year": "FY27", "Functional Area": f["fa"], "Account": f["acct"], "TDP": 120000.0, "AFP": 15000.0, "Reservations": 2500.0})
+# spend plan: Fiscal Year, Functional Area, Account, Fiscal Month, Planned Amount (TDP spread by a seasonal profile)
+PLAN_HEADERS = ["Fiscal Year", "Functional Area", "Account", "Fiscal Month", "Planned Amount"]
+PROFILE = [7, 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 10]
+plan = []
+for f in funding:
+    shares = [p * rng.uniform(0.85, 1.15) for p in PROFILE]; tot = sum(shares)
+    for m in range(12):
+        plan.append({"Fiscal Year": f["Fiscal Year"], "Functional Area": f["Functional Area"], "Account": f["Account"], "Fiscal Month": m + 1,
+                     "Planned Amount": round(f["TDP"] * shares[m] / tot, 2)})
 summary = {"lines": len(rows), "allobj": n_allobj, "kept": len(kept),
            "disbursement": round(sum(r["disbursement_amt_cum"] for r in kept), 2),
            "tdp": round(sum(f["TDP"] for f in funding), 2), "afp": round(sum(f["AFP"] for f in funding), 2),
-           "reservations": round(sum(f["Reservations"] for f in funding), 2), "fundingRows": len(funding),
+           "reservations": round(sum(f["Reservations"] for f in funding), 2), "fundingRows": len(funding), "planRows": len(plan), "planTotal": round(sum(x["Planned Amount"] for x in plan), 2),
            "obligation": round(sum(r["obligation_amt_cum"] for r in kept), 2),
            "commitments": round(sum(r["commitment_amt_cum"] for r in kept), 2),
            "documents": len({r["contract_doc_no"] for r in kept if r["contract_doc_no"]})}
@@ -120,6 +136,7 @@ with open(os.path.join(DIR, "data", "funds_demo.js"), "w", encoding="utf-8") as 
     f.write("// AUTO-GENERATED by data-generation/generate_funds_data.py - fictional data\n")
     f.write("window.FUNDS_DEMO = " + json.dumps({"asOf": "2026-10-30", "headers": HEADERS, "rows": [[r[h] for h in HEADERS] for r in rows],
                                               "funding": {"headers": FUND_HEADERS, "rows": [[f[h] for h in FUND_HEADERS] for f in funding]},
+                                              "plan": {"headers": PLAN_HEADERS, "rows": [[x[h] for h in PLAN_HEADERS] for x in plan]},
                                               "expect": summary}, separators=(",", ":")) + ";\n")
 
 def table(ws, name):
@@ -141,3 +158,9 @@ wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Funding"; ws.append(FUND_H
 for i in range(1, len(FUND_HEADERS) + 1): ws.column_dimensions[get_column_letter(i)].width = 20
 table(ws, "FundingData"); wb.save(os.path.join(DIR, "funding_template.xlsx"))
 print(json.dumps(summary))
+wb = openpyxl.Workbook(); ws = wb.active; ws.title = "SpendPlan"; ws.append(PLAN_HEADERS); ws.append([None] * len(PLAN_HEADERS))
+for i in range(1, len(PLAN_HEADERS) + 1): ws.column_dimensions[get_column_letter(i)].width = 20
+table(ws, "SpendPlanData"); wb.save(os.path.join(DIR, "spendplan_template.xlsx"))
+wb = openpyxl.Workbook(); ws = wb.active; ws.title = "SpendPlan"; ws.append(PLAN_HEADERS)
+for x in plan: ws.append([x[h] for h in PLAN_HEADERS])
+table(ws, "SpendPlanData"); wb.save(os.path.join(DIR, "data", "spendplan_sample.xlsx"))

@@ -43,6 +43,8 @@
       <button class="btn sm" id="btnLoad" type="button" title="Choose the funds export and/or the funding file; each is recognized by its headers">Load files</button>
       <button class="btn sm" id="btnFund" type="button" title="Choose the funding file (TDP, AFP, Reservations)">Funding file</button>
       <input type="file" id="fundInput" accept=".xlsx,.xls,.csv" multiple hidden>
+      <button class="btn ghost sm" id="btnPlan" type="button" title="Choose the spend plan (Fiscal Month, Planned Amount)">Spend plan</button>
+      <input type="file" id="planInput" accept=".xlsx,.xls,.csv" multiple hidden>
       <button class="btn ghost sm" id="btnAdd" type="button" hidden title="Add more exports to the current set">Add more files</button>
       <button class="btn ghost sm" id="btnClear" type="button" hidden title="Remove loaded files">Clear</button>
       <button class="btn sm save" id="btnSave" type="button" disabled title="Load your files first">&#128190; Save with data</button>
@@ -54,13 +56,16 @@
     <div>
       <h3>Load the funds export and the funding file (stays on this device)</h3>
       <p><strong>1. Funds export</strong> (<strong>.xlsx</strong> or <strong>.csv</strong>): Obligation, Disbursement and Commitments by line. Several exports are added together, so load each one only once. Only the nine columns below are read; every other column is ignored, and personal identifier columns (such as social security number) are skipped without being read. Lines whose Commitment Item is <strong>ALLOBJ</strong> are removed completely before anything is counted. The file is read by this browser tab only; nothing is uploaded, stored, or sent anywhere.</p>
-      <p><strong>2. Funding file</strong>: one row per Functional Area (optionally also Fiscal Year, Appropriation, Sag, MDEP, Commitment Item) with <strong>TDP</strong> (full-year funding), <strong>AFP</strong> (funded to date) and <strong>Reservations</strong> (known costs not yet obligated). An optional <strong>Account</strong> column names each Functional Area. Funding is matched to the export lines on every column both files share. You can choose both files at once; each is recognized by its headers.</p>
+      <p><strong>2. Funding file</strong>: one row per Functional Area (optionally also Fiscal Year, Appropriation, Sag, MDEP, Commitment Item) with <strong>TDP</strong> (full-year funding), <strong>AFP</strong> (funded to date) and <strong>Reservations</strong> (known costs not yet obligated). An optional <strong>Account</strong> column names each Functional Area. Funding is matched to the export lines on every column both files share. </p>
+      <p><strong>3. Spend plan</strong> (optional): Fiscal Year, Functional Area or Account (both optional), Fiscal Month (1&ndash;12 where 1 = Oct, or a month name) and Planned Amount. It draws the plan line on the trend charts.</p>
+      <p>You can choose all the files at once; each is recognized by its headers.</p>
       <p>
         <label class="btn filebtn">Choose files&hellip;<input type="file" id="fileInput" accept=".xlsx,.xls,.csv" multiple></label>
         <input type="file" id="addInput" accept=".xlsx,.xls,.csv" multiple hidden>
         <a class="btn ghost" href="funds_template.xlsx" download>&#8681; Blank template (.xlsx)</a>
         <a class="btn ghost" href="funds_template.csv" download>&#8681; Blank template (.csv)</a>
         <a class="btn ghost" href="funding_template.xlsx" download>&#8681; Blank funding file (.xlsx)</a>
+        <a class="btn ghost" href="spendplan_template.xlsx" download>&#8681; Blank spend plan (.xlsx)</a>
         <button class="btn ghost" id="btnDemo" type="button">Restore demo data</button>
       </p>
       <div id="loadReport" class="loadreport" role="status"></div>
@@ -78,6 +83,7 @@
     <label>MDEP<select id="fMdep"></select></label>
     <label>Functional Area<select id="fFa"></select></label>
     <label>Commitment Item<select id="fCi"></select></label>
+    <label>Fiscal Month<select id="fFm"></select></label>
     <button class="btn ghost" id="btnReset" type="button">Reset</button>
   </div>
 
@@ -93,6 +99,22 @@
     <h2>Where the money stands</h2>
     <div class="chartbox short"><canvas id="cPos"></canvas></div>
     <p class="muted small" id="posNote"></p>
+  </section>
+
+  <section class="panel" id="trendPanel">
+    <div class="tablehead"><h2>Spending trend</h2><div class="no-print tabletools trendtools">
+      <label>Year <select id="tFy" aria-label="Trend fiscal year"></select></label>
+      <label>Spent = <select id="tMetric" aria-label="What counts as spent"><option value="od">Obligation + Disbursement</option><option value="o">Obligation</option><option value="d">Disbursement</option></select></label>
+    </div></div>
+    <h3 class="sub">Where we should be</h3>
+    <div id="pace" class="pace"></div>
+    <div class="row r2b trendrow">
+      <div><h3 class="sub">Cumulative spent vs straight-line pace and spend plan</h3><div class="chartbox"><canvas id="cCum"></canvas></div>
+        <p class="hint no-print" id="paceHint" hidden>The straight-line pace needs TDP. <button class="btn sm" type="button" data-fund="1">Load funding file</button></p></div>
+      <div><h3 class="sub">Monthly spend</h3><div class="chartbox"><canvas id="cMon"></canvas></div>
+        <p class="hint no-print" id="planHint" hidden>No spend plan yet. <button class="btn sm" type="button" data-plan="1">Load spend plan</button> <a class="btn ghost sm" href="spendplan_template.xlsx" download>&#8681; Blank spend plan</a></p></div>
+    </div>
+    <p class="muted small" id="trendNote"></p>
   </section>
 
   <div class="row r2b">
@@ -131,6 +153,9 @@
       <li><strong>Obligation</strong> and <strong>Disbursement</strong> are the export's cumulative amounts (obligation_amt_cum and disbursement_amt_cum), added up for the lines in the current filters. <strong>Commitments</strong> (commitment_amt_cum) is shown in the line table only.</li>
       <li><strong>TDP</strong>, <strong>AFP</strong> and <strong>Reservations</strong> come only from the funding file, never from the export. Without a funding file they show &ldquo;Load funding file&rdquo;.</li>
       <li><strong>Balance</strong> = TDP &minus; Reservations &minus; Obligation &minus; Disbursement.</li>
+      <li><strong>Fiscal Month</strong> comes from the export's fiscal_month (1 = Oct, 2 = Nov &hellip; 12 = Sep) and is shown as &ldquo;1 - Oct&rdquo;. Values like 01, 1.0, P01 or a month name are accepted; anything else counts as blank.</li>
+      <li><strong>Spending trend</strong>: each line's amount counts in its fiscal month. &ldquo;Spent&rdquo; is Obligation + Disbursement by default (the same amounts Balance subtracts); you can switch it to Obligation or Disbursement only. The straight-line pace is TDP &times; month &divide; 12. The spend plan line is the cumulative Planned Amount.</li>
+      <li><strong>Where we should be</strong> compares % of TDP spent with % of the year elapsed. For the current fiscal year, elapsed uses today's fiscal month (October = 1/12); a past year counts as 12/12. The trend shows the Fiscal Year filter if set; otherwise the current fiscal year once it has two months of data, else the latest earlier year.</li>
       <li>Funding rows are matched to the lines on Functional Area plus any of Fiscal Year, Appropriation, Sag, MDEP and Commitment Item that both files have. Funding rows with the same match values are added together. Lines with no funding row still count in Obligation and Balance and are listed as &ldquo;no funding row&rdquo;.</li>
       <li>When a filter uses a column the funding file does not have (for example Commitment Item when funding is by Functional Area), funding cannot be split, so the funding rows that have matching lines are shown at their full amount.</li>
       <li><strong>ALLOBJ</strong> lines (Commitment Item equal to ALLOBJ, any case or spacing) are removed when the file is read. They are never counted, charted, listed, exported, or saved.</li>
@@ -154,6 +179,7 @@
 <script src="../../assets/js/dashkit.js"></script>
 <script src="data/funds_demo.js"></script>
 <script src="funding.js"></script>
+<script src="plan.js"></script>
 <script src="finance.js"></script>
 </body>
 </html>
