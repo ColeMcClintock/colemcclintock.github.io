@@ -40,7 +40,9 @@
     <span class="lb-badge" id="lbBadge" hidden></span>
     <span class="lb-actions">
       <button class="btn ghost sm" id="btnDetails" type="button" aria-expanded="false" aria-controls="loadPanel">Show details</button>
-      <button class="btn sm" id="btnLoad" type="button" title="Choose one or more funds exports (replaces the current files)">Load files</button>
+      <button class="btn sm" id="btnLoad" type="button" title="Choose the funds export and/or the funding file; each is recognized by its headers">Load files</button>
+      <button class="btn sm" id="btnFund" type="button" title="Choose the funding file (TDP, AFP, Reservations)">Funding file</button>
+      <input type="file" id="fundInput" accept=".xlsx,.xls,.csv" multiple hidden>
       <button class="btn ghost sm" id="btnAdd" type="button" hidden title="Add more exports to the current set">Add more files</button>
       <button class="btn ghost sm" id="btnClear" type="button" hidden title="Remove loaded files">Clear</button>
       <button class="btn sm save" id="btnSave" type="button" disabled title="Load your files first">&#128190; Save with data</button>
@@ -50,13 +52,15 @@
 
   <div class="loadpanel no-print chrome" id="loadPanel" hidden>
     <div>
-      <h3>Load funds exports (stays on this device)</h3>
-      <p>Choose or drag in the funds management export (<strong>.xlsx</strong> or <strong>.csv</strong>). Several files are added together, so load each export only once. Only the nine columns below are read; every other column is ignored, and personal identifier columns (such as social security number) are skipped without being read. Lines whose Commitment Item is <strong>ALLOBJ</strong> are removed completely before anything is counted. The file is read by this browser tab only; nothing is uploaded, stored, or sent anywhere.</p>
+      <h3>Load the funds export and the funding file (stays on this device)</h3>
+      <p><strong>1. Funds export</strong> (<strong>.xlsx</strong> or <strong>.csv</strong>): Obligation, Disbursement and Commitments by line. Several exports are added together, so load each one only once. Only the nine columns below are read; every other column is ignored, and personal identifier columns (such as social security number) are skipped without being read. Lines whose Commitment Item is <strong>ALLOBJ</strong> are removed completely before anything is counted. The file is read by this browser tab only; nothing is uploaded, stored, or sent anywhere.</p>
+      <p><strong>2. Funding file</strong>: one row per Functional Area (optionally also Fiscal Year, Appropriation, Sag, MDEP, Commitment Item) with <strong>TDP</strong> (full-year funding), <strong>AFP</strong> (funded to date) and <strong>Reservations</strong> (known costs not yet obligated). An optional <strong>Account</strong> column names each Functional Area. Funding is matched to the export lines on every column both files share. You can choose both files at once; each is recognized by its headers.</p>
       <p>
         <label class="btn filebtn">Choose files&hellip;<input type="file" id="fileInput" accept=".xlsx,.xls,.csv" multiple></label>
         <input type="file" id="addInput" accept=".xlsx,.xls,.csv" multiple hidden>
         <a class="btn ghost" href="funds_template.xlsx" download>&#8681; Blank template (.xlsx)</a>
         <a class="btn ghost" href="funds_template.csv" download>&#8681; Blank template (.csv)</a>
+        <a class="btn ghost" href="funding_template.xlsx" download>&#8681; Blank funding file (.xlsx)</a>
         <button class="btn ghost" id="btnDemo" type="button">Restore demo data</button>
       </p>
       <div id="loadReport" class="loadreport" role="status"></div>
@@ -85,6 +89,12 @@
     <p class="muted small">Auto-generated from the filtered data. ALLOBJ lines are never included.</p>
   </section>
 
+  <section class="panel">
+    <h2>Where the money stands</h2>
+    <div class="chartbox short"><canvas id="cPos"></canvas></div>
+    <p class="muted small" id="posNote"></p>
+  </section>
+
   <div class="row r2b">
     <section class="panel"><h2>By Fiscal Year</h2><div class="chartbox"><canvas id="cFy"></canvas></div></section>
     <section class="panel"><h2>By Appropriation</h2><div class="chartbox"><canvas id="cAppn"></canvas></div></section>
@@ -99,8 +109,18 @@
   </div>
   <p class="muted small chartnote no-print">Largest 10 values by amount; the rest are grouped as Other. Click a bar to filter by it.</p>
 
+  <section class="panel" id="fundPanel">
+    <div class="tablehead"><h2>Funding vs execution</h2><div class="no-print tabletools"><button class="btn ghost" id="btnFundCsv" type="button">&#8681; Export CSV</button><button class="btn ghost" id="btnFundAll" type="button">Show all</button></div></div>
+    <p class="muted small" id="fundNote"></p>
+    <div class="tablewrap scrolly"><table class="units" id="tFund"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+  </section>
+  <section class="panel fundneed" id="fundNeed" hidden>
+    <h2>Funding vs execution</h2>
+    <p>TDP, AFP, Reservations and Balance come from the funding file. <button class="btn sm" type="button" data-fund="1">Load funding file</button> <a class="btn ghost sm" href="funding_template.xlsx" download>&#8681; Blank funding file</a></p>
+  </section>
+
   <section class="panel">
-    <div class="tablehead"><h2>Document detail</h2><div class="no-print tabletools"><input type="search" id="fSearch" placeholder="Search document number, MDEP, Sag&hellip;" aria-label="Search lines by document number or any field" autocomplete="off"><button class="btn ghost" id="btnCsv" type="button">&#8681; Export CSV</button><button class="btn ghost" id="btnAll" type="button">Show all</button></div></div>
+    <div class="tablehead"><h2>Document detail</h2><div class="no-print tabletools"><input type="search" id="fSearch" placeholder="Search document number, MDEP, account&hellip;" aria-label="Search lines by document number or any field" autocomplete="off"><button class="btn ghost" id="btnCsv" type="button">&#8681; Export CSV</button><button class="btn ghost" id="btnAll" type="button">Show all</button></div></div>
     <p class="muted small">One row per line in the export. Click a column header to sort. Export CSV saves the filtered and searched lines. <span id="searchNote" class="searchnote"></span></p>
     <div class="tablewrap scrolly"><table class="units" id="tDocs"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
   </section>
@@ -108,7 +128,11 @@
   <details class="panel method chrome">
     <summary><h2>How the numbers are calculated</h2></summary>
     <ul>
-      <li><strong>Obligation</strong> and <strong>Commitments</strong> are the export's cumulative amounts (obligation_amt_cum and commitment_amt_cum), added up for the lines in the current filters.</li>
+      <li><strong>Obligation</strong> and <strong>Disbursement</strong> are the export's cumulative amounts (obligation_amt_cum and disbursement_amt_cum), added up for the lines in the current filters. <strong>Commitments</strong> (commitment_amt_cum) is shown in the line table only.</li>
+      <li><strong>TDP</strong>, <strong>AFP</strong> and <strong>Reservations</strong> come only from the funding file, never from the export. Without a funding file they show &ldquo;Load funding file&rdquo;.</li>
+      <li><strong>Balance</strong> = TDP &minus; Reservations &minus; Obligation &minus; Disbursement.</li>
+      <li>Funding rows are matched to the lines on Functional Area plus any of Fiscal Year, Appropriation, Sag, MDEP and Commitment Item that both files have. Funding rows with the same match values are added together. Lines with no funding row still count in Obligation and Balance and are listed as &ldquo;no funding row&rdquo;.</li>
+      <li>When a filter uses a column the funding file does not have (for example Commitment Item when funding is by Functional Area), funding cannot be split, so the funding rows that have matching lines are shown at their full amount.</li>
       <li><strong>ALLOBJ</strong> lines (Commitment Item equal to ALLOBJ, any case or spacing) are removed when the file is read. They are never counted, charted, listed, exported, or saved.</li>
       <li><strong>Documents</strong> = distinct Document Numbers among the lines shown. A document can have several lines (one per Commitment Item).</li>
       <li>Amounts accept commas, dollar signs, parentheses and trailing minus signs for negatives. Blank, #REF! and other error cells count as blank ($0 in totals).</li>
@@ -129,6 +153,7 @@
 <script src="../../assets/vendor/xlsx.full.min.js"></script>
 <script src="../../assets/js/dashkit.js"></script>
 <script src="data/funds_demo.js"></script>
+<script src="funding.js"></script>
 <script src="finance.js"></script>
 </body>
 </html>

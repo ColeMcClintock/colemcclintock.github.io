@@ -28,7 +28,7 @@ PAGES = {
                              templates=["asmis_template.xlsx", "asmis_template.csv"], guide=True, save_prefix="SAFETY"),
     "readiness-dashboard": dict(dir="dashboards/readiness", title="Readiness Command Dashboard", templates=["readiness_template.csv"]),
     "finance-dashboard": dict(dir="dashboards/finance", title="Status of Funds Dashboard",
-                              templates=["funds_template.xlsx", "funds_template.csv"], save_prefix="FUNDS", pa_template=True),
+                              templates=["funds_template.xlsx", "funds_template.csv", "funding_template.xlsx"], save_prefix="FUNDS", pa_template=True),
 }
 
 def read(p, mode="r"):
@@ -177,7 +177,7 @@ PA_COMMENTS = {
               "Excel rows at the very end) and saves the result as SAFETY-REAL-DATA.html. Untouched, it shows fictional demo data. "
               "Runs entirely in the browser; makes no network requests. -->",
     "finance": "<!-- Status of Funds dashboard: Power Automate template. A scheduled flow replaces the two placeholders (refresh time in the head, "
-               "Excel rows at the very end) and saves the result over the dashboard file in the restricted library. Untouched, it shows "
+               "rows from the export table and the funding table at the very end) and saves the result over the dashboard file in the restricted library. Untouched, it shows "
                "fictional demo data. Runs entirely in the browser; makes no network requests. -->",
 }
 def build_pa_template(single, kind="safety"):

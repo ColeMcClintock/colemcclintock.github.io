@@ -1,26 +1,28 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Funds flow expressions</title>
 <style>body{font-family:Segoe UI,Arial,sans-serif;background:#0f172a;color:#e2e8f0;max-width:900px;margin:30px auto;padding:0 16px}h1{font-size:22px}h2{font-size:16px;margin-top:28px}textarea{width:100%;height:150px;font:13px Consolas,monospace;background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:6px;padding:10px;box-sizing:border-box}button{margin-top:8px;padding:8px 16px;font-size:14px;border:0;border-radius:6px;background:#facc15;color:#111;cursor:pointer;font-weight:600}.ok{margin-left:10px;color:#86efac}p,li{color:#94a3b8;font-size:14px}code{color:#facc15}</style></head><body>
 <h1>Status of Funds flow: expressions</h1>
-<p>Same flow as the Mishap dashboard, with one Excel table. Click Copy, then paste into the field named.</p>
+<p>Same flow as the Mishap dashboard (tracker + rollup), with two Excel tables: the funds export and the funding file. Click Copy, then paste into the field named. The dashboard tells the two tables apart by their headers, so their order does not matter.</p>
 <ol>
 <li>Recurrence (your times, Central).</li>
-<li>Excel Online (Business) &gt; <b>List rows present in a table</b>: the funds export in the restricted library, its table (Ctrl+T on the sheet; any table name). Settings: Pagination on, Threshold 100000.</li>
+<li>Excel Online (Business) &gt; <b>List rows present in a table</b>: the funds export in the restricted library, its table (Ctrl+T on the sheet; any table name). Settings: Pagination on, Threshold 100000. Leave the step name as <code>List rows present in a table</code>.</li>
+<li>Excel Online (Business) &gt; <b>List rows present in a table</b> again: the funding file (columns Fiscal Year, Functional Area, Account, TDP, AFP, Reservations), table <code>FundingData</code> in the blank funding file. Power Automate names this step <code>List rows present in a table 2</code>; keep that name. Pagination on.</li>
 <li>SharePoint &gt; <b>Get file content</b>: <code>finance-dashboard-template.html</code>. Infer Content Type = No.</li>
 <li><b>Compose</b>: Inputs = expression below.</li>
 <li>SharePoint &gt; <b>Update file</b>: your dashboard file (for example <code>Funds_Dashboard.html</code>), File Content = <code>outputs('Compose')</code>.</li>
 </ol>
-<h2>Optional, step 2 &gt; Show all &gt; Select Query (reads only the 9 columns; the SSN column and the rest are never pulled)</h2>
-<textarea id="e0" readonly style="height:60px">contract_doc_no,commitment_item_fipex,functional_area_farea,appropriation_type,fiscal_year,obligation_amt_cum,commitment_amt_cum,sag,mdep</textarea>
+<h2>Optional, step 2 &gt; Show all &gt; Select Query (reads only the 10 export columns; the SSN column and the rest are never pulled)</h2>
+<textarea id="e0" readonly style="height:60px">contract_doc_no,commitment_item_fipex,functional_area_farea,appropriation_type,fiscal_year,obligation_amt_cum,commitment_amt_cum,disbursement_amt_cum,sag,mdep</textarea>
 <button onclick="cp('e0',this)">Copy</button><span class="ok"></span>
-<h2>Step 4: Compose, Inputs</h2>
-<textarea id="e1" readonly>replace(replace(base64ToString(body('Get_file_content')?['$content']), '__PA_REFRESHED__', convertFromUtc(utcNow(), 'Central Standard Time', 'dd-MMM-yy HHmm')), '__PA_DATA__', replace(string(createArray(addProperty(addProperty(json('{}'), 'file', 'Funds export'), 'rows', body('List_rows_present_in_a_table')?['value']))), '&lt;/', '&lt;\/'))</textarea>
+<h2>Step 5: Compose, Inputs (export + funding)</h2>
+<textarea id="e1" readonly>replace(replace(base64ToString(body('Get_file_content')?['$content']), '__PA_REFRESHED__', convertFromUtc(utcNow(), 'Central Standard Time', 'dd-MMM-yy HHmm')), '__PA_DATA__', replace(string(createArray(addProperty(addProperty(json('{}'), 'file', 'Funds export'), 'rows', body('List_rows_present_in_a_table')?['value']), addProperty(addProperty(json('{}'), 'file', 'Funding'), 'rows', body('List_rows_present_in_a_table_2')?['value']))), '&lt;/', '&lt;\/'))</textarea>
 <button onclick="cp('e1',this)">Copy</button><span class="ok"></span>
-<h2>Step 5: Update file, File Content</h2>
+<h2>Step 6: Update file, File Content</h2>
 <textarea id="e2" readonly style="height:50px">outputs('Compose')</textarea>
 <button onclick="cp('e2',this)">Copy</button><span class="ok"></span>
 <h2>Only if Compose gives a base64 error: alternate Compose expression</h2>
-<textarea id="e3" readonly>replace(replace(string(body('Get_file_content')), '__PA_REFRESHED__', convertFromUtc(utcNow(), 'Central Standard Time', 'dd-MMM-yy HHmm')), '__PA_DATA__', replace(string(createArray(addProperty(addProperty(json('{}'), 'file', 'Funds export'), 'rows', body('List_rows_present_in_a_table')?['value']))), '&lt;/', '&lt;\/'))</textarea>
+<textarea id="e3" readonly>replace(replace(string(body('Get_file_content')), '__PA_REFRESHED__', convertFromUtc(utcNow(), 'Central Standard Time', 'dd-MMM-yy HHmm')), '__PA_DATA__', replace(string(createArray(addProperty(addProperty(json('{}'), 'file', 'Funds export'), 'rows', body('List_rows_present_in_a_table')?['value']), addProperty(addProperty(json('{}'), 'file', 'Funding'), 'rows', body('List_rows_present_in_a_table_2')?['value']))), '&lt;/', '&lt;\/'))</textarea>
 <button onclick="cp('e3',this)">Copy</button><span class="ok"></span>
+<p>If you renamed either List rows step, change <code>List_rows_present_in_a_table</code> / <code>List_rows_present_in_a_table_2</code> to the new name with spaces as underscores. Without the funding step, use only the first <code>addProperty(...)</code> pair; the dashboard then shows &ldquo;Load funding file&rdquo; for TDP, AFP, Reservations and Balance.</p>
 <p>ALLOBJ lines are removed by the dashboard itself, so no filter is needed in the flow.</p>
 <script>function cp(id,b){var t=document.getElementById(id);t.select();var done=function(){b.nextElementSibling.textContent='Copied';};if(navigator.clipboard){navigator.clipboard.writeText(t.value).then(done,function(){document.execCommand('copy');done();});}else{document.execCommand('copy');done();}}</script>
 </body></html>

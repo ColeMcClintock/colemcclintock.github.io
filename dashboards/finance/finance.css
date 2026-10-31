@@ -52,3 +52,20 @@ body.present .realbanner span{font-size:.74rem;flex:1;min-width:0;overflow:hidde
   .tablewrap.scrolly{max-height:none;overflow:visible}
   .realbanner{display:flex!important;position:static;background:#fff;color:#8f1d1d;border:2px solid #8f1d1d;box-shadow:none}.realbanner span{color:#8f1d1d}
 }
+/* funding: six KPI cards, funding table, position chart */
+.kpis{grid-template-columns:repeat(6,1fr)}
+.kpi.tdp{--st:#c9a27e}.kpi.afp{--st:#d6c58a}.kpi.res{--st:#e3b34c}.kpi.disb{--st:#a9c16a}
+.kpi.bal.good{--st:#5fbf7f}.kpi.bal.bad{--st:#e0645c}.kpi.bal.bad .val{color:#f2a19b}
+.kpi.need .val{font-size:1rem}.kpi.need .sub{color:var(--muted)}
+.chartbox.short{height:130px}
+#tFund td{white-space:nowrap;font-variant-numeric:tabular-nums}
+#tFund td.num,#tFund th.num{text-align:right}
+#tFund th[data-k],#tDocs th[data-k]{cursor:pointer}
+#tFund tfoot td{font-weight:700;border-top:2px solid var(--line);padding:8px}
+#tFund td.neg{color:#f2a19b}
+#tFund td.cf-bad{background:rgba(224,100,92,.14)}
+#tFund tr.unfunded td{color:var(--muted)}
+.fundneed p{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+@media(max-width:1300px){.kpis{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:640px){.kpis{grid-template-columns:repeat(2,1fr)}}
+@media print{.kpis{grid-template-columns:repeat(6,1fr)}.kpi .val{font-size:1.3rem}}
