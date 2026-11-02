@@ -89,6 +89,8 @@
     <label>Duty status<select id="fDuty"></select></label>
     <label>Since deployment<select id="fMsd"></select></label>
     <label>Holiday / payday<select id="fWin"></select></label>
+    <label>Day of week<select id="fDow"></select></label>
+    <label>Time of day<select id="fTod"></select></label>
     <button class="btn ghost" id="btnReset" type="button">Reset</button>
   </div>
 
@@ -105,13 +107,15 @@
     <div id="hcBody"></div>
   </details>
 
-  <section class="kpis k6" id="kpis" aria-label="Key indicators"></section>
-
-  <section class="panel summary">
-    <h2>Prevention summary</h2>
+  <section class="panel summary cmd" id="cmdSummary">
+    <div class="tablehead"><h2>Commander summary</h2><div class="no-print"><button class="btn sm" id="btnPrintCs" type="button" title="Print or save as PDF just this summary">&#128424; Print summary</button></div></div>
+    <p class="muted small" id="cmdScope"></p>
     <p id="summary">Loading&hellip;</p>
-    <p class="muted small">Auto-generated from the filtered data. Groups with fewer than 5 incidents are shown as &lt;5 and left out of rankings.</p>
+    <ul id="cmdBullets" class="cmdlist"></ul>
+    <p class="muted small">Auto-generated on this device from the current filters. Groups with fewer than 5 incidents are shown as &lt;5 and left out of rankings. Associations in the data are not proof of cause.</p>
   </section>
+
+  <section class="kpis k6" id="kpis" aria-label="Key indicators"></section>
 
   <div class="row r2b">
     <section class="panel insights">
@@ -120,8 +124,8 @@
       <ul id="weak" class="ilist"></ul>
     </section>
     <section class="panel insights focus">
-      <h2>Prevention focus</h2>
-      <p class="muted small">Data-driven starting points for the prevention plan. They show where incidents concentrate, not why; confirm with the program team.</p>
+      <h2>Automated recommendations (generated on this device)</h2>
+      <p class="muted small">Rules applied to the current selection; each item shows the evidence behind it. They show where incidents concentrate, not why: confirm with the prevention team before acting.</p>
       <ol id="focus" class="ilist"></ol>
     </section>
   </div>
@@ -156,21 +160,40 @@
   </div>
   <p class="muted small chartnote no-print">Click a bar to filter by it. Bars for groups under 5 are hidden and labelled &lt;5. With a headcount, the line shows incidents per 1,000 assigned (annualized).</p>
 
-  <section class="panel" data-req="grade,ageBand">
-    <h2>Hot spots: pay grade &times; age band</h2>
-    <p class="muted small">Incident counts in the current selection. Darker = more incidents. Cells under 5 show &lt;5.</p>
-    <div class="tablewrap"><table class="heat" id="tHeat"></table></div>
+  <section class="panel heats">
+    <h2>Hot spots</h2>
+    <p class="muted small">Incident counts in the current selection. Darker = more incidents. Cells under 5 show &lt;5. Click a cell to filter by both values.</p>
+    <div data-req="tod"><h3 class="sub">Day of week &times; time of day (from the DTG)</h3><div class="tablewrap"><table class="heat clickheat" id="tHeatDH"></table></div></div>
+    <div class="row r2b">
+      <div data-req="grade,ageBand"><h3 class="sub">Grade &times; age band</h3><div class="tablewrap"><table class="heat clickheat" id="tHeat"></table></div></div>
+      <div data-req="unit,duty"><h3 class="sub">Unit &times; duty status</h3><div class="tablewrap"><table class="heat clickheat" id="tHeatUD"></table></div></div>
+    </div>
+    <div class="row r2b">
+      <div data-req="loc"><h3 class="sub">Location &times; fiscal month (all selected years)</h3><div class="tablewrap"><table class="heat clickheat" id="tHeatLM"></table></div></div>
+      <div data-req="grade,marital"><h3 class="sub">Grade &times; marital status</h3><div class="tablewrap"><table class="heat clickheat" id="tHeatGM"></table></div></div>
+    </div>
+  </section>
+
+  <section class="panel corr">
+    <h2>Correlations: which fields move together</h2>
+    <p class="muted small">Bias-corrected Cram&eacute;r&rsquo;s V between every pair of categorical and banded fields among the incidents in the selection (0 = no association, 0.1 weak, 0.2 moderate, 0.3+ strong). Values with fewer than 5 incidents are pooled as Other or dropped. This shows how incident characteristics relate to each other, not who is at risk: use the rates above for that.</p>
+    <div class="tablewrap"><table class="heat corrm" id="tCorr"></table></div>
+    <h3 class="sub">Strongest relationships, in plain English</h3>
+    <ol id="corrList" class="ilist"></ol>
+    <p class="muted small" id="corrExp"></p>
   </section>
 
   <section class="panel">
-    <div class="tablehead"><h2>Incident detail</h2><div class="no-print tabletools"><input type="search" id="fSearch" placeholder="Search Person ID, unit, MOS, type&hellip;" aria-label="Search incidents" autocomplete="off"><button class="btn ghost" id="btnCsv" type="button">&#8681; Export CSV</button><button class="btn ghost" id="btnAll" type="button">Show all</button></div></div>
+    <div class="tablehead"><h2>Incident detail</h2><div class="no-print tabletools"><label class="toggle"><input type="checkbox" id="showRows"> Show row-level records</label><input type="search" id="fSearch" placeholder="Search Person ID, unit, MOS, type&hellip;" aria-label="Search incidents" autocomplete="off"><button class="btn ghost" id="btnCsv" type="button">&#8681; Export CSV</button><button class="btn ghost" id="btnAll" type="button">Show all</button></div></div>
+    <p class="callout" id="rowsNote">Row-level records are hidden in this commander view to protect small groups: a single row can point to one person even without a name. Tick &ldquo;Show row-level records&rdquo; only when you need to work individual cases, and untick it before presenting or printing.</p>
     <p class="muted small">One row per incident, most recent first. Click a column header to sort. Export CSV saves the filtered and searched rows. Name, SSN, DoD ID and date of birth are never read or shown. <span id="searchNote" class="searchnote"></span></p>
-    <div class="tablewrap scrolly"><table class="units" id="tDetail"><thead></thead><tbody></tbody></table></div>
+    <div class="tablewrap scrolly" id="rowsWrap"><table class="units" id="tDetail"><thead></thead><tbody></tbody></table></div>
   </section>
 
   <details class="panel method chrome">
     <summary><h2>How the numbers are calculated</h2></summary>
     <ul>
+      <li><strong>DTG of Incident</strong> accepts military date-time groups (021430ZNOV26, 021430Z NOV 26, 021430NOV2026, with or without the zone letter, 2- or 4-digit year), Excel date/time cells and dates such as 11/2/2026 14:30. Day of week and hour come from it; the hour is used as written (no time-zone conversion). <strong>TY</strong> is shown as given; the federal fiscal year is always worked out from the DTG.</li>
       <li><strong>Fiscal year</strong> is the federal year, 1 October to 30 September (FY26 = Oct 2025 to Sep 2026). Fiscal month 1 = October. Quarters: Q1 Oct&ndash;Dec, Q2 Jan&ndash;Mar, Q3 Apr&ndash;Jun, Q4 Jul&ndash;Sep.</li>
       <li><strong>Unique people</strong> = distinct Person IDs. <strong>Repeat rate</strong> = people with 2 or more incidents in the selection, or any incident marked Repeat Incident = Y, divided by unique people.</li>
       <li><strong>% referred</strong> = incidents with Referred to Treatment = Y. <strong>% completed</strong> = Completed Program = Y among referred incidents.</li>
@@ -180,7 +203,8 @@
       <li><strong>Holiday window</strong> = within 3 days of a federal holiday, New Year&rsquo;s Eve or St. Patrick&rsquo;s Day. <strong>Payday window</strong> = 0&ndash;3 days after the 1st or 15th. Their relative risk compares incidents per calendar day inside vs outside the window.</li>
       <li><strong>Small cells</strong>: any group with fewer than 5 incidents shows &lt;5, is hidden from charts and the GenAI pack, and is left out of rankings and recommendations.</li>
       <li><strong>Privacy</strong>: columns whose header is a name, SSN, DoD ID / EDIPI or date of birth are skipped without reading. Blank, #REF! and other Excel error cells count as blank. Everything runs in this browser; no network requests.</li>
-      <li>Prevention focus items are generated from the data to start a discussion. They are not clinical or legal advice.</li>
+      <li><strong>Correlations</strong>: bias-corrected Cram&eacute;r&rsquo;s V from a chi-square test on each pair of fields (values under 5 pooled), needing 30+ incidents. Pairs that are related by design (unit and location, referred and completed, grade and age or service) are listed separately and not ranked.</li>
+      <li>Automated recommendations are generated from the data to start a discussion. They are not clinical or legal advice.</li>
     </ul>
   </details>
 </main>

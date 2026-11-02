@@ -39,26 +39,27 @@
   // ---------- columns ----------
   // [key, shown as, aliases (normalized), used for]
   var COLS = [
-    ["pid", "Person ID", ["personid", "pid", "pseudoid", "pseudonymousid", "memberid", "recordid", "participantid", "caseid", "id"], "Unique people, repeat rate (pseudonymous ID only)"],
+    ["ty", "TY", ["ty", "year", "calendaryear", "cy", "incidentyear"], "Detail table (the federal fiscal year is worked out from the DTG)"],
+    ["grade", "Grade", ["grade", "paygrade", "rank", "rankgrade"], "Chart, filter, heat maps, rates"],
+    ["date", "DTG of Incident", ["dtgofincident", "dtg", "incidentdtg", "dtgincident", "datetimegroup", "dtgofevent", "incidentdate", "date", "dateofincident", "eventdate", "offensedate", "incidentdatetime"], "Required: date, weekday and hour; fiscal year, month, quarter; holiday / payday windows"],
+    ["loc", "Location", ["location", "armory", "locationarmory", "readinesscenter", "station", "city"], "Chart, filter, heat maps, rates"],
+    ["duty", "Duty Status", ["dutystatus", "dutystays", "dutystaus", "dutystat", "duty", "onoffduty"], "Chart, filter, heat map"],
     ["age", "Age", ["age", "ageatincident", "ageattimeofincident"], "Age band chart, filter, heat map"],
     ["gender", "Gender", ["gender", "sex"], "Chart, filter, rates"],
-    ["loc", "Location", ["location", "armory", "locationarmory", "readinesscenter", "station", "city"], "Chart, filter, rates"],
-    ["unit", "Unit", ["unit", "unitname", "company", "organization", "org"], "Chart, filter, rates (matches the headcount)"],
-    ["status", "Status", ["status", "dutytype", "membershipstatus", "component", "category", "personnelcategory", "tsagrtech"], "Chart, filter (Traditional, AGR, Technician)"],
-    ["grade", "Pay Grade", ["paygrade", "grade", "rank", "rankgrade"], "Chart, filter, heat map, rates"],
-    ["mos", "MOS", ["mos", "pmos", "primarymos", "dmos", "aoc", "specialty"], "Detail table, search"],
-    ["tis", "Time in Service (yrs)", ["timeinservice", "timeinserviceyrs", "timeinserviceyears", "yearsofservice", "yos", "tis"], "Weak spots (service band)"],
-    ["marital", "Marital Status", ["maritalstatus", "marital"], "Chart, filter"],
-    ["deps", "Dependents", ["dependents", "numberofdependents", "numdependents", "dependentcount"], "Weak spots"],
-    ["date", "Incident Date", ["incidentdate", "date", "dateofincident", "eventdate", "offensedate"], "Required: fiscal year, month, quarter, holiday / payday windows"],
-    ["type", "Incident Type", ["incidenttype", "type", "offensetype", "incidentcategory"], "Chart, filter"],
-    ["duty", "Duty Status", ["dutystatus", "duty", "onoffduty"], "Chart, filter"],
-    ["msd", "Months Since Deployment", ["monthssincedeployment", "monthssincelastdeployment", "monthssinceredeployment", "monthssincedeploy", "monthspostdeployment"], "Chart, filter (blank = never deployed)"],
-    ["prior", "Prior Incidents", ["priorincidents", "previousincidents", "priorincidentcount", "prior"], "Weak spots"],
-    ["ref", "Referred to Treatment", ["referredtotreatment", "referred", "referral", "referredtoprogram", "referredtoasap"], "% referred, repeat by treatment"],
-    ["comp", "Completed Program", ["completedprogram", "completed", "programcompleted", "completedtreatment"], "% completed, repeat by treatment"],
-    ["rep", "Repeat Incident", ["repeatincident", "repeat", "repeatoffense", "recidivism", "reoffended"], "Repeat rate"],
-    ["out", "Outcome", ["outcome", "disposition", "result", "action"], "Detail table"]
+    ["unit", "Unit", ["unit", "unitname", "company", "organization", "org"], "Chart, filter, heat map, rates (matches the headcount)"],
+    ["pid", "Person ID", ["personid", "pid", "pseudoid", "pseudonymousid", "memberid", "recordid", "participantid", "caseid", "id"], "Optional: unique people, repeat rate (pseudonymous ID only)"],
+    ["status", "Status", ["status", "dutytype", "membershipstatus", "component", "category", "personnelcategory", "tsagrtech"], "Optional: chart, filter (Traditional, AGR, Technician)"],
+    ["mos", "MOS", ["mos", "pmos", "primarymos", "dmos", "aoc", "specialty"], "Optional: detail table, search"],
+    ["tis", "Time in Service (yrs)", ["timeinservice", "timeinserviceyrs", "timeinserviceyears", "yearsofservice", "yos", "tis"], "Optional: correlations (service band)"],
+    ["marital", "Marital Status", ["maritalstatus", "marital"], "Optional: chart, filter, heat map"],
+    ["deps", "Dependents", ["dependents", "numberofdependents", "numdependents", "dependentcount"], "Optional: correlations"],
+    ["type", "Incident Type", ["incidenttype", "type", "offensetype", "incidentcategory"], "Optional: chart, filter"],
+    ["msd", "Months Since Deployment", ["monthssincedeployment", "monthssincelastdeployment", "monthssinceredeployment", "monthssincedeploy", "monthspostdeployment"], "Optional: chart, filter (blank = never deployed)"],
+    ["prior", "Prior Incidents", ["priorincidents", "previousincidents", "priorincidentcount", "prior"], "Optional: correlations"],
+    ["ref", "Referred to Treatment", ["referredtotreatment", "referred", "referral", "referredtoprogram", "referredtoasap"], "Optional: % referred, repeat by treatment"],
+    ["comp", "Completed Program", ["completedprogram", "completed", "programcompleted", "completedtreatment"], "Optional: % completed, repeat by treatment"],
+    ["rep", "Repeat Incident", ["repeatincident", "repeat", "repeatoffense", "recidivism", "reoffended"], "Optional: repeat rate"],
+    ["out", "Outcome", ["outcome", "disposition", "result", "action"], "Optional: detail table"]
   ];
   var LABEL = {}; COLS.forEach(function (c) { LABEL[c[0]] = c[1]; });
   var RCOLS = [["unit", "Unit", ["unit", "unitname", "company"]], ["loc", "Location", ["location", "armory", "readinesscenter", "city"]], ["grade", "Grade", ["grade", "paygrade", "rank"]],
@@ -103,15 +104,32 @@
   }
   function normBand(v) { return val(v).replace(/\s*(?:to|[\u2013\u2014-])\s*/g, "-").replace(/\s+/g, ""); }
   function utc(y, m, d) { return new Date(Date.UTC(y, m - 1, d)); }
-  function toDate(v) { // Date, Excel serial, ISO, m/d/y, d-Mon-y -> UTC Date or null / NaN for unreadable
+  // Date + time from a military DTG (021430ZNOV26, 021430Z NOV 26, 021430NOV2026), an Excel serial (fraction = time),
+  // ISO (2026-11-02 or 2026-11-02T14:30) or m/d/y with optional time. Returns {d, h, mi}, null for blank, false for unreadable.
+  var MON_UP = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  function okDate(y, m, d) { var x = utc(y, m, d); return m >= 1 && m <= 12 && x.getUTCDate() === d && x.getUTCMonth() === m - 1 ? x : null; }
+  function when(y, m, d, h, mi) { var x = okDate(y, m, d); if (!x) return false; if (h != null && (h > 23 || mi > 59)) return false; return { d: x, h: h == null ? null : h, mi: h == null ? null : mi || 0 }; }
+  function hm12(h, ap) { h = +h; if (ap) { ap = ap.toUpperCase(); if (ap === "PM" && h < 12) h += 12; if (ap === "AM" && h === 12) h = 0; } return h; }
+  function parseWhen(v) {
     if (blankish(v)) return null;
-    if (v instanceof Date) return isNaN(v) ? NaN : utc(v.getFullYear(), v.getMonth() + 1, v.getDate());
-    if (typeof v === "number") { if (v < 1 || v > 80000) return NaN; var d0 = new Date(Math.round((Math.floor(v) - 25569) * 864e5)); return utc(d0.getUTCFullYear(), d0.getUTCMonth() + 1, d0.getUTCDate()); }
-    var s = txt(v), m;
-    if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return utc(+m[1], +m[2], +m[3]);
-    if ((m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/))) { var y = +m[3]; if (y < 100) y += 2000; return utc(y, +m[1], +m[2]); }
-    if (/^\d{5}(\.\d+)?$/.test(s)) return toDate(+s);
-    var t = new Date(s); return isNaN(t) ? NaN : utc(t.getFullYear(), t.getMonth() + 1, t.getDate());
+    if (v instanceof Date) return isNaN(v) ? false : when(v.getFullYear(), v.getMonth() + 1, v.getDate(), v.getHours() || v.getMinutes() ? v.getHours() : null, v.getMinutes());
+    if (typeof v === "number") {
+      if (v < 1 || v > 80000) return false;
+      var day = Math.floor(v), fr = v - day, d0 = new Date(Math.round((day - 25569) * 864e5)), mins = Math.round(fr * 1440);
+      return when(d0.getUTCFullYear(), d0.getUTCMonth() + 1, d0.getUTCDate(), fr > 1e-9 && mins < 1440 ? Math.floor(mins / 60) : null, mins % 60);
+    }
+    var s = txt(v), c = s.toUpperCase().replace(/[\s.]+/g, ""), m;
+    if ((m = c.match(/^(\d{2})(\d{2})(\d{2})([A-Z])?(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2}|\d{4})$/))) {
+      var y = +m[6]; if (y < 100) y += 2000; return when(y, MON_UP.indexOf(m[5]) + 1, +m[1], +m[2], +m[3]);
+    }
+    if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ](\d{1,2}):(\d{2}))?/))) return when(+m[1], +m[2], +m[3], m[4] == null ? null : +m[4], +m[5]);
+    if ((m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})(?:,?\s+(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?)?\s*$/i))) {
+      var yy = +m[3]; if (yy < 100) yy += 2000; return when(yy, +m[1], +m[2], m[4] == null ? null : hm12(m[4], m[6]), +m[5]);
+    }
+    if (/^\d{5}(\.\d+)?$/.test(s)) return parseWhen(+s);
+    var t = new Date(s); if (isNaN(t)) return false;
+    var tm = s.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    return when(t.getFullYear(), t.getMonth() + 1, t.getDate(), tm ? hm12(tm[1], tm[3]) : null, tm ? +tm[2] : 0);
   }
   function iso(d) { return d.toISOString().slice(0, 10); }
 
@@ -143,6 +161,8 @@
   var TIS_B = ["Under 2 yrs", "2\u20135 yrs", "6\u201310 yrs", "11\u201320 yrs", "Over 20 yrs"];
   function tisBand(t) { return t == null || isNaN(t) ? "" : t < 2 ? TIS_B[0] : t <= 5 ? TIS_B[1] : t <= 10 ? TIS_B[2] : t <= 20 ? TIS_B[3] : TIS_B[4]; }
   var Q_L = ["Q1 (Oct\u2013Dec)", "Q2 (Jan\u2013Mar)", "Q3 (Apr\u2013Jun)", "Q4 (Jul\u2013Sep)"];
+  var DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  var TOD = ["0000\u20130259", "0300\u20130559", "0600\u20130859", "0900\u20131159", "1200\u20131459", "1500\u20131759", "1800\u20132059", "2100\u20132359"];
   var TREAT = ["Completed program", "Referred, not completed", "Not referred"];
   function gradeGroup(g) { var k = gradeKey(g); return k <= 4 ? "E-1 to E-4" : k <= 6 ? "E-5 to E-6" : k <= 9 ? "E-7 to E-9" : k < 999 ? "Officer / Warrant" : ""; }
 
@@ -182,17 +202,19 @@
     var hm = mapHeaders(src, ALIAS), map = hm.map;
     var rep = { kind: "incidents", headerRow: hm.hi + 1, matched: COLS.filter(function (c) { return map[c[0]] != null; }).map(function (c) { return c[1]; }),
       missing: COLS.filter(function (c) { return map[c[0]] == null; }).map(function (c) { return c[1]; }), extra: hm.extra, dupes: hm.dupes, pii: hm.pii,
-      rowsRead: 0, rowsLoaded: 0, blankRows: 0, badDate: 0, badDateEx: [], badNum: 0, fatal: null };
-    if (map.date == null) { rep.fatal = "No Incident Date column was found, so trends cannot be built. The file was not loaded."; return { records: [], report: rep }; }
+      rowsRead: 0, rowsLoaded: 0, blankRows: 0, withTime: 0, badDate: 0, badDateEx: [], badNum: 0, fatal: null };
+    if (map.date == null) { rep.fatal = "No DTG of Incident (or Incident Date) column was found, so trends cannot be built. The file was not loaded."; return { records: [], report: rep }; }
     var keys = Object.keys(map), out = [];
     for (var rr = hm.hi + 1; rr < src.rows; rr++) {
       var raw = {}, empty = true;
       keys.forEach(function (k) { var v = src.get(rr, map[k]); raw[k] = v; if (!blankish(v)) empty = false; });
       if (empty) { rep.blankRows++; continue; }
       rep.rowsRead++;
-      var d = toDate(raw.date);
-      if (!d || isNaN(d)) { rep.badDate++; if (rep.badDateEx.length < 5) rep.badDateEx.push({ row: rr + 1, value: txt(raw.date) }); continue; }
-      var rec = { _row: rr + 1, d: d, date: iso(d), pid: val(raw.pid), gender: normGender(raw.gender), loc: val(raw.loc), unit: val(raw.unit), status: normStatus(raw.status),
+      var w = parseWhen(raw.date);
+      if (!w) { rep.badDate++; if (rep.badDateEx.length < 5) rep.badDateEx.push({ row: rr + 1, value: txt(raw.date) }); continue; }
+      var d = w.d;
+      if (w.h != null) rep.withTime++;
+      var rec = { _row: rr + 1, d: d, date: iso(d), hour: w.h, min: w.mi, ty: val(raw.ty), pid: val(raw.pid), gender: normGender(raw.gender), loc: val(raw.loc), unit: val(raw.unit), status: normStatus(raw.status),
         grade: normGrade(raw.grade), mos: val(raw.mos), marital: val(raw.marital), type: normType(raw.type), duty: normDuty(raw.duty),
         ref: yn(raw.ref), comp: yn(raw.comp), rep: yn(raw.rep), out: val(raw.out) };
       ["age", "tis", "deps", "msd", "prior"].forEach(function (k) { var x = k in raw ? num(raw[k]) : null; if (x !== null && isNaN(x)) { rep.badNum++; x = k === "msd" ? NaN : null; } rec[k] = x; });
@@ -210,6 +232,9 @@
     r.win = winOf(d); r.hol = nearHoliday(d); r.gg = gradeGroup(r.grade);
     r.depsBand = r.deps == null ? "" : r.deps === 0 ? "No dependents" : r.deps <= 2 ? "1\u20132 dependents" : "3+ dependents";
     r.priorBand = r.prior == null ? "" : r.prior === 0 ? "No prior incidents" : r.prior === 1 ? "1 prior incident" : "2+ prior incidents";
+    r.dow = DOW[(d.getUTCDay() + 6) % 7]; r.tod = r.hour == null ? "" : TOD[Math.floor(r.hour / 3)];
+    r.time = r.hour == null ? "" : ("0" + r.hour).slice(-2) + ("0" + r.min).slice(-2);
+    r.when = r.date + (r.hour == null ? "" : "T" + ("0" + r.hour).slice(-2) + ":" + ("0" + r.min).slice(-2));
     r.treat = r.ref === "Y" ? (r.comp === "Y" ? TREAT[0] : TREAT[1]) : r.ref === "N" ? TREAT[2] : "";
   }
   function parseRoster(src) {
@@ -393,10 +418,10 @@
 
   // ---------- filters ----------
   var DIMS = [["fy", "fFy", "All years"], ["q", "fQ", "All quarters"], ["fm", "fFm", "All months"], ["loc", "fLoc", "All"], ["unit", "fUnit", "All"], ["grade", "fGrade", "All"],
-    ["ageBand", "fAge", "All"], ["gender", "fGender", "All"], ["status", "fStatus", "All"], ["marital", "fMarital", "All"], ["type", "fType", "All"], ["duty", "fDuty", "All"], ["msdBand", "fMsd", "All"], ["win", "fWin", "All"]];
-  var DLABEL = { fy: "Fiscal year", q: "Quarter", fm: "Month", loc: "Location", unit: "Unit", grade: "Pay grade", ageBand: "Age", gender: "Gender", status: "Status", marital: "Marital status",
-    type: "Incident type", duty: "Duty status", msdBand: "Since deployment", win: "Holiday / payday", hol: "Holiday", treat: "Treatment", tisBand: "Time in service", depsBand: "Dependents", priorBand: "Prior incidents", gg: "Grade group" };
-  var ORDER = { fm: FY_MON, q: Q_L, ageBand: AGE_B, msdBand: MSD_B, win: WIN, tisBand: TIS_B, treat: TREAT, depsBand: ["No dependents", "1\u20132 dependents", "3+ dependents"], priorBand: ["No prior incidents", "1 prior incident", "2+ prior incidents"] };
+    ["ageBand", "fAge", "All"], ["gender", "fGender", "All"], ["status", "fStatus", "All"], ["marital", "fMarital", "All"], ["type", "fType", "All"], ["duty", "fDuty", "All"], ["msdBand", "fMsd", "All"], ["win", "fWin", "All"], ["dow", "fDow", "All days"], ["tod", "fTod", "All times"]];
+  var DLABEL = { fy: "Fiscal year", q: "Quarter", fm: "Month", loc: "Location", unit: "Unit", grade: "Grade", ageBand: "Age", gender: "Gender", status: "Status", marital: "Marital status",
+    type: "Incident type", duty: "Duty status", msdBand: "Since deployment", win: "Holiday / payday", hol: "Holiday", treat: "Treatment", dow: "Day of week", tod: "Time of day", ref: "Referred", comp: "Completed program", rep: "Repeat incident", tisBand: "Time in service", depsBand: "Dependents", priorBand: "Prior incidents", gg: "Grade group" };
+  var ORDER = { dow: DOW, tod: TOD, fm: FY_MON, q: Q_L, ageBand: AGE_B, msdBand: MSD_B, win: WIN, tisBand: TIS_B, treat: TREAT, depsBand: ["No dependents", "1\u20132 dependents", "3+ dependents"], priorBand: ["No prior incidents", "1 prior incident", "2+ prior incidents"] };
   function sortVals(k, vals) {
     if (k === "grade") return vals.sort(function (a, b) { return gradeKey(a) - gradeKey(b) || cmpVal(a, b); });
     if (ORDER[k]) return vals.sort(function (a, b) { var x = ORDER[k].indexOf(a), y = ORDER[k].indexOf(b); return (x < 0 ? 99 : x) - (y < 0 ? 99 : y) || cmpVal(a, b); });
@@ -424,11 +449,11 @@
     $("scopeLabel").textContent = scope.length ? scope.join(" \u00b7 ") : "All incidents";
     $("sourceLabel").textContent = S.source === "file" ? " \u00b7 Your files" : S.source === "saved" ? " \u00b7 Saved data" : S.source === "demo-roster" ? " \u00b7 Demo incidents + your headcount" : " \u00b7 Demo data";
     S.an = analyze(rows, f);
-    kpis(rows, f); summary(rows, f); insights();
+    kpis(rows, f); insights();
     monthChart(f); fyChart(f);
     [["cGrade", "grade", false], ["cAge", "ageBand", false], ["cType", "type", true], ["cGender", "gender", false], ["cStatus", "status", true], ["cMarital", "marital", true],
      ["cLoc", "loc", true], ["cUnit", "unit", true], ["cDuty", "duty", false], ["cMsd", "msdBand", false], ["cWin", "win", false], ["cHol", "hol", true]].forEach(function (c) { barChart(c[0], c[1], c[2], rows, f); });
-    repeatChart(rows); heat(rows); S.base = rows; table();
+    repeatChart(rows); heatAll(rows); S.corr = correlations(rows, f); renderCorr(S.corr); commander(rows, f); S.base = rows; table();
   }
   function dateRange(rows) {
     if (!rows.length) return "no dates";
@@ -511,6 +536,12 @@
       tm("Payday window (0\u20133 days after the 1st / 15th)", (gw[WIN[0]] || 0) + (gw[WIN[2]] || 0), (dc.by[WIN[0]] || 0) + (dc.by[WIN[2]] || 0));
       tm("Fri\u2013Sun", rows.filter(function (r) { var x = r.d.getUTCDay(); return x === 0 || x >= 5; }).length, Math.round(dc.total * 3 / 7));
     }
+    var tg = group(rows, "tod"), withT = N - (tg[BLANK] || 0);
+    if (withT >= MIN_N * 4) {
+      var night = ["1800\u20132059", "2100\u20132359", "0000\u20130259"], ns = K.sum(night, function (t) { return tg[t] || 0; });
+      var dg = group(rows, "dow"), we = (dg.Fri || 0) + (dg.Sat || 0) + (dg.Sun || 0);
+      if (ns / withT >= 0.4) out.peak = { tod: "1800\u20130259", share: ns / withT, days: "Fri\u2013Sun", dshare: we / N };
+    }
     var hg = group(rows, "hol"); out.hols = Object.keys(hg).filter(function (v) { return v !== BLANK && hg[v] >= MIN_N; }).map(function (v) { return { v: v, n: hg[v] }; }).sort(function (a, b) { return b.n - a.n; });
     var cm = Object.create(null);
     rows.forEach(function (r) { if (!r.ageBand || !r.gg || !r.marital) return; var k = [r.gender || "", r.ageBand, r.gg, r.marital].join("|"); cm[k] = (cm[k] || 0) + 1; });
@@ -527,6 +558,7 @@
   }
   function seg(x) { return x.dim === "ageBand" ? "Soldiers aged " + x.v : x.dim === "gender" ? x.v.toLowerCase() + " Soldiers" : x.dim === "grade" ? x.v + "s" : x.v; }
   function pillRR(rr) { return '<span class="rr' + (rr >= 1.5 ? "" : rr >= 1.2 ? " mid" : " info") + '">' + rr.toFixed(1) + "\u00d7</span>"; }
+  function ev(s) { return '<span class="why"><strong>Evidence:</strong> ' + s + "</span>"; }
   function why(s) { return '<span class="why">' + s + "</span>"; }
   function profile(c) { return [c.g, c.mar.toLowerCase(), c.gg, "age " + c.age].filter(Boolean).join(", "); }
   function insights() {
@@ -550,18 +582,50 @@
     var person = topR.filter(function (x) { return ["grade", "ageBand", "gender"].indexOf(x.dim) >= 0; }).slice(0, 2), place = topR.filter(function (x) { return x.dim === "unit" || x.dim === "loc"; }).slice(0, 2);
     var target = person.length ? person.map(seg).join(" and ") : A.combos[0] ? profile(A.combos[0]) + " Soldiers" : "the highest-count groups";
     var hol = A.timing.filter(function (x) { return /Holiday/.test(x.v); })[0], pay = A.timing.filter(function (x) { return /Payday/.test(x.v); })[0];
-    if (hol && hol.rr >= 1.15) fo.push("<li><strong>Before the holidays:</strong> run safe-ride, designated-driver and leader check-in messaging in the 2 weeks before " + esc(A.hols.slice(0, 3).map(function (h) { return h.v; }).join(", ") || "major holidays") + ", aimed at " + esc(target) + "." + why("Holiday windows carry " + hol.rr.toFixed(1) + "\u00d7 the daily incident rate.") + "</li>");
-    if (place.length) fo.push("<li><strong>Unit-level focus:</strong> schedule prevention training and a command climate check at " + esc(place.map(function (x) { return x.v; }).join(" and ")) + "." + why(place.map(function (x) { return esc(x.v) + " " + x.rr.toFixed(1) + "\u00d7 the overall rate"; }).join("; ") + ".") + "</li>");
-    if (person.length) fo.push("<li><strong>Target the highest-rate groups:</strong> peer-to-peer and first-line-leader engagement for " + esc(target) + ", for example at drill in-processing and before long weekends." + why(person.map(function (x) { return esc(DLABEL[x.dim] + " " + x.v) + " " + x.rr.toFixed(1) + "\u00d7"; }).join("; ") + ".") + "</li>");
-    else if (A.combos[0]) fo.push("<li><strong>Target the most common profile:</strong> " + esc(profile(A.combos[0])) + " make up " + Math.round(A.combos[0].share * 100) + "% of incidents. Add a headcount to confirm whether that is a higher rate or just a larger group.</li>");
-    if (A.dep12 && A.dep12.share >= 0.15) fo.push("<li><strong>Reintegration:</strong> add alcohol screening and a leader touchpoint at 30, 90 and 180 days after redeployment." + why(Math.round(A.dep12.share * 100) + "% of incidents are within 12 months of return.") + "</li>");
-    if (A.corr[0] && A.corr[0].ratio >= 1.3) fo.push("<li><strong>Drive program completion:</strong> track every referral to completion with command follow-up at 30, 60 and 90 days." + why("Those who did not complete repeat " + A.corr[0].ratio.toFixed(1) + "\u00d7 as often.") + "</li>");
-    if (A.notRef != null && A.notRef >= 0.1) fo.push("<li><strong>Close the referral gap:</strong> make referral to the prevention / treatment program automatic after any incident." + why(Math.round(A.notRef * 100) + "% of incidents were not referred.") + "</li>");
-    if (pay && pay.rr >= 1.15) fo.push("<li><strong>Payday weekends:</strong> time reminders and safe-ride information with the 1st and 15th." + why("Payday windows carry " + pay.rr.toFixed(1) + "\u00d7 the daily rate.") + "</li>");
-    if (A.dui != null && A.dui >= 0.3) fo.push("<li><strong>DUI prevention:</strong> promote the safe-ride program and a no-questions-asked ride home policy." + why("DUI is " + Math.round(A.dui * 100) + "% of incidents.") + "</li>");
-    if (A.u21 && A.u21.share >= 0.1) fo.push("<li><strong>Under 21:</strong> include alcohol education in new-Soldier / RSP training and first-drill sponsorship." + why(Math.round(A.u21.share * 100) + "% of incidents involve Soldiers under 21.") + "</li>");
-    if (A.off != null && A.off >= 0.6) fo.push("<li><strong>Off-duty time:</strong> most incidents (" + Math.round(A.off * 100) + "%) are off duty, so pre-weekend safety briefs and family / peer outreach matter more than duty-time rules.</li>");
+    if (hol && hol.rr >= 1.15) fo.push("<li><strong>Before the holidays:</strong> run safe-ride, designated-driver and leader check-in messaging in the 2 weeks before " + esc(A.hols.slice(0, 3).map(function (h) { return h.v; }).join(", ") || "major holidays") + ", aimed at " + esc(target) + "." + ev("Holiday windows carry " + hol.rr.toFixed(1) + "\u00d7 the daily incident rate.") + "</li>");
+    if (place.length) fo.push("<li><strong>Unit-level focus:</strong> schedule prevention training and a command climate check at " + esc(place.map(function (x) { return x.v; }).join(" and ")) + "." + ev(place.map(function (x) { return esc(x.v) + " " + x.rr.toFixed(1) + "\u00d7 the overall rate"; }).join("; ") + ".") + "</li>");
+    if (person.length) fo.push("<li><strong>Target the highest-rate groups:</strong> peer-to-peer and first-line-leader engagement for " + esc(target) + ", for example at drill in-processing and before long weekends." + ev(person.map(function (x) { return esc(DLABEL[x.dim] + " " + x.v) + " " + x.rr.toFixed(1) + "\u00d7"; }).join("; ") + ".") + "</li>");
+    else if (A.combos[0]) fo.push("<li><strong>Target the most common profile:</strong> " + esc(profile(A.combos[0])) + " make up the largest group. Add a headcount to confirm whether that is a higher rate or just a larger group." + ev(Math.round(A.combos[0].share * 100) + "% of incidents (" + K.fmt(A.combos[0].n) + ") share this profile.") + "</li>");
+    if (A.dep12 && A.dep12.share >= 0.15) fo.push("<li><strong>Reintegration:</strong> add alcohol screening and a leader touchpoint at 30, 90 and 180 days after redeployment." + ev(Math.round(A.dep12.share * 100) + "% of incidents are within 12 months of return.") + "</li>");
+    if (A.corr[0] && A.corr[0].ratio >= 1.3) fo.push("<li><strong>Drive program completion:</strong> track every referral to completion with command follow-up at 30, 60 and 90 days." + ev("Those who did not complete repeat " + A.corr[0].ratio.toFixed(1) + "\u00d7 as often.") + "</li>");
+    if (A.notRef != null && A.notRef >= 0.1) fo.push("<li><strong>Close the referral gap:</strong> make referral to the prevention / treatment program automatic after any incident." + ev(Math.round(A.notRef * 100) + "% of incidents were not referred.") + "</li>");
+    if (A.peak) fo.push("<li><strong>Peak hours:</strong> put leader check-ins, safe-ride and duty-NCO coverage on " + esc(A.peak.days) + " " + esc(A.peak.tod) + "." + ev(Math.round(A.peak.share * 100) + "% of incidents with a time fall in " + esc(A.peak.tod) + "; " + esc(A.peak.days) + " carry " + Math.round(A.peak.dshare * 100) + "% of incidents.") + "</li>");
+    if (pay && pay.rr >= 1.15) fo.push("<li><strong>Payday weekends:</strong> time reminders and safe-ride information with the 1st and 15th." + ev("Payday windows carry " + pay.rr.toFixed(1) + "\u00d7 the daily rate.") + "</li>");
+    if (A.dui != null && A.dui >= 0.3) fo.push("<li><strong>DUI prevention:</strong> promote the safe-ride program and a no-questions-asked ride home policy." + ev("DUI is " + Math.round(A.dui * 100) + "% of incidents.") + "</li>");
+    if (A.u21 && A.u21.share >= 0.1) fo.push("<li><strong>Under 21:</strong> include alcohol education in new-Soldier / RSP training and first-drill sponsorship." + ev(Math.round(A.u21.share * 100) + "% of incidents involve Soldiers under 21.") + "</li>");
+    if (A.off != null && A.off >= 0.6) fo.push("<li><strong>Off-duty time:</strong> most incidents (" + Math.round(A.off * 100) + "%) are off duty, so pre-weekend safety briefs and family / peer outreach matter more than duty-time rules." + ev(Math.round(A.off * 100) + "% of incidents with a duty status were off duty.") + "</li>");
     $("focus").innerHTML = fo.length ? fo.join("") : "<li>No clear focus areas in this selection.</li>";
+    S.focusTop = fo.slice(0, 3).map(function (h) { var d = document.createElement("div"); d.innerHTML = h.replace(/<span class="why">.*?<\/span>/g, ""); return d.textContent; });
+  }
+  function commander(rows, f) {
+    var A = S.an, scope = DIMS.filter(function (d) { return f[d[0]]; }).map(function (d) { return DLABEL[d[0]] + " " + f[d[0]]; });
+    $("cmdScope").textContent = (scope.length ? scope.join(" \u00b7 ") : "All incidents") + " \u00b7 " + dateRange(rows) + " \u00b7 " + (S.source === "file" || S.source === "saved" ? "loaded data" : "fictional demo data") + " \u00b7 generated " + fmtStamp(new Date());
+    summary(rows, f);
+    var b = [];
+    if (A.N >= MIN_N) {
+      var rp = repeatPeople(rows), refK = rows.filter(function (r) { return r.ref; }), refY = refK.filter(function (r) { return r.ref === "Y"; }), compY = refY.filter(function (r) { return r.comp === "Y"; });
+      var top = A.hasRates ? A.rate.filter(function (x) { return x.rr >= 1.3; }).slice(0, 3).map(function (x) { return DLABEL[x.dim] + " " + x.v + " (" + x.rr.toFixed(1) + "\u00d7 the rate)"; })
+        : A.share.filter(function (x) { return ["grade", "ageBand", "marital", "unit", "loc"].indexOf(x.dim) >= 0 && x.share < 0.95; }).slice(0, 3).map(function (x) { return DLABEL[x.dim] + " " + x.v + " (" + Math.round(x.share * 100) + "% of incidents)"; });
+      if (top.length) b.push("<li><strong>Where:</strong> " + esc(top.join("; ")) + (A.hasRates ? "." : ". Shares only; add a headcount for rates.") + "</li>");
+      var hol = A.timing.filter(function (x) { return /Holiday/.test(x.v); })[0], pay = A.timing.filter(function (x) { return /Payday/.test(x.v); })[0], w = [];
+      if (A.peak) w.push(Math.round(A.peak.share * 100) + "% between 1800 and 0259");
+      if (hol && hol.rr >= 1.15) w.push("holiday windows " + hol.rr.toFixed(1) + "\u00d7 the daily rate" + (A.hols[0] ? " (most around " + A.hols.slice(0, 2).map(function (h) { return h.v; }).join(" and ") + ")" : ""));
+      if (pay && pay.rr >= 1.15) w.push("payday windows " + pay.rr.toFixed(1) + "\u00d7");
+      if (A.off != null) w.push(Math.round(A.off * 100) + "% off duty");
+      if (w.length) b.push("<li><strong>When:</strong> " + esc(w.join("; ")) + ".</li>");
+      var ft = []; if (refK.length) ft.push(pctS(refY.length, refK.length) + " referred"); if (refY.length) ft.push(pctS(compY.length, refY.length) + " of those completed the program"); if (rp.people) ft.push(pctS(rp.repeat, rp.people) + " of people had a repeat");
+      if (A.corr[0]) ft.push("non-completers repeat " + A.corr[0].ratio.toFixed(1) + "\u00d7 as often");
+      if (ft.length) b.push("<li><strong>Follow-through:</strong> " + esc(ft.join("; ")) + ".</li>");
+      var cs = (S.corr && S.corr.list || []).filter(function (c) { return !c.expected && c.v >= 0.15; })[0];
+      if (cs) b.push("<li><strong>Strongest link in the data:</strong> " + esc(corrSentence(cs)) + "</li>");
+      if (S.focusTop && S.focusTop.length) b.push("<li><strong>Recommended next steps:</strong><ol>" + S.focusTop.map(function (t) { return "<li>" + esc(t) + "</li>"; }).join("") + "</ol></li>");
+    }
+    $("cmdBullets").innerHTML = b.join("");
+  }
+  function printSummary() {
+    document.body.classList.add("print-cs");
+    var done = function () { document.body.classList.remove("print-cs"); window.removeEventListener("afterprint", done); };
+    window.addEventListener("afterprint", done); window.print(); setTimeout(done, 1500);
   }
   function summary(rows, f) {
     var A = S.an, s = [];
@@ -641,29 +705,115 @@
     var hot = Object.keys(m).filter(function (k) { return m[k] >= MIN_N; }).map(function (k) { var p = k.split("|"); return { grade: p[0], age: p[1], n: m[k] }; }).sort(function (a, b) { return b.n - a.n; });
     return { m: m, hot: hot };
   }
-  function heat(rows) {
-    var grades = sortVals("grade", K.uniq(rows.map(function (r) { return r.grade; }).filter(Boolean))), bands = AGE_B.filter(function (b) { return rows.some(function (r) { return r.ageBand === b; }); });
-    var hc = heatCells(rows), m = hc.m, mx = 0; Object.keys(m).forEach(function (k) { if (m[k] > mx) mx = m[k]; });
-    $("tHeat").innerHTML = "<thead><tr><th></th>" + bands.map(function (b) { return "<th>" + esc(b) + "</th>"; }).join("") + "</tr></thead><tbody>" + grades.map(function (g) {
-      return '<tr><th class="rowh">' + esc(g) + "</th>" + bands.map(function (b) {
-        var n = m[g + "|" + b] || 0;
-        return n === 0 ? '<td class="sup">0</td>' : n < MIN_N ? '<td class="sup">&lt;5</td>' : '<td style="background:' + K.heatColor(n / mx) + '" title="' + esc(g + ", age " + b + ": " + n) + '">' + n + "</td>";
+  // generic heat map: rows x columns of incident counts; cells under 5 show <5; click a cell to filter by both
+  var HEATS = [["tHeat", "grade", "ageBand"], ["tHeatDH", "dow", "tod"], ["tHeatLM", "loc", "fm"], ["tHeatUD", "unit", "duty"], ["tHeatGM", "grade", "marital"]];
+  function heatData(rows, rk, ck, maxRows) {
+    var m = Object.create(null), rc = Object.create(null), mx = 0;
+    rows.forEach(function (r) { var a = r[rk], b = r[ck]; if (!a || !b) return; var k = a + "|" + b; m[k] = (m[k] || 0) + 1; rc[a] = (rc[a] || 0) + 1; if (m[k] > mx) mx = m[k]; });
+    var rvals = Object.keys(rc); rvals = ORDER[rk] || rk === "grade" ? sortVals(rk, rvals) : rvals.sort(function (a, b) { return rc[b] - rc[a] || cmpVal(a, b); });
+    if (maxRows && rvals.length > maxRows) rvals = rvals.slice(0, maxRows);
+    var cvals = sortVals(ck, K.uniq(rows.map(function (r) { return r[ck]; }).filter(Boolean)));
+    var hot = Object.keys(m).filter(function (k) { return m[k] >= MIN_N; }).map(function (k) { var p = k.split("|"); return { a: p[0], b: p[1], n: m[k] }; }).sort(function (a, b) { return b.n - a.n; });
+    return { m: m, rows: rvals, cols: cvals, mx: mx, hot: hot, more: Object.keys(rc).length - rvals.length };
+  }
+  function heatAll(rows) {
+    HEATS.forEach(function (h) {
+      var el = $(h[0]); if (!el) return;
+      var H = heatData(rows, h[1], h[2], 14), ok = H.rows.length && H.cols.length;
+      el.innerHTML = !ok ? "<tbody><tr><td class=\"sup\">No data in this selection</td></tr></tbody>" : "<thead><tr><th></th>" + H.cols.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") + "</tr></thead><tbody>" + H.rows.map(function (a) {
+        return '<tr><th class="rowh">' + esc(a) + "</th>" + H.cols.map(function (b) {
+          var n = H.m[a + "|" + b] || 0;
+          return n === 0 ? '<td class="sup">0</td>' : n < MIN_N ? '<td class="sup">&lt;5</td>' : '<td class="hot" data-r="' + esc(a) + '" data-c="' + esc(b) + '" style="background:' + K.heatColor(n / H.mx) + '" title="' + esc(a + " \u00b7 " + b + ": " + n + " (click to filter)") + '">' + n + "</td>";
+        }).join("") + "</tr>";
+      }).join("") + "</tbody>" + (H.more > 0 ? '<caption class="muted small">Top ' + H.rows.length + " by incidents; " + H.more + " more not shown.</caption>" : "");
+      el.setAttribute("data-rk", h[1]); el.setAttribute("data-ck", h[2]);
+    });
+  }
+  function heatClick(e) {
+    var td = e.target.closest && e.target.closest("td.hot"); if (!td) return;
+    var t = td.closest("table"), rk = t.getAttribute("data-rk"), ck = t.getAttribute("data-ck");
+    [[rk, td.getAttribute("data-r")], [ck, td.getAttribute("data-c")]].forEach(function (x) { var d = DIMS.filter(function (y) { return y[0] === x[0]; })[0]; if (d) $(d[1]).value = x[1]; });
+    S.showAll = false; render();
+  }
+  function heatCells(rows) { var H = heatData(rows, "grade", "ageBand"); return { hot: H.hot.map(function (x) { return { grade: x.a, age: x.b, n: x.n }; }) }; }
+
+  // ---------- correlations: bias-corrected Cramer's V between categorical / binned fields ----------
+  var CF = ["grade", "ageBand", "gender", "status", "marital", "loc", "unit", "type", "duty", "msdBand", "win", "dow", "tod", "fy", "tisBand", "depsBand", "priorBand", "ref", "comp", "rep"];
+  var CSHORT = { grade: "Grade", ageBand: "Age", gender: "Gender", status: "Status", marital: "Marital", loc: "Location", unit: "Unit", type: "Type", duty: "Duty", msdBand: "Since dep.", win: "Hol/pay",
+    dow: "Day", tod: "Time", fy: "FY", tisBand: "Service", depsBand: "Deps", priorBand: "Prior", ref: "Referred", comp: "Completed", rep: "Repeat" };
+  var EXPECTED = { "unit|loc": "units sit at a location", "ref|comp": "only referred people can complete", "grade|tisBand": "grade follows time in service", "ageBand|tisBand": "service grows with age",
+    "grade|ageBand": "grade follows age", "depsBand|marital": "dependents go with marriage", "marital|depsBand": "dependents go with marriage", "type|duty": "duty-related incidents happen on duty", "duty|type": "duty-related incidents happen on duty", "tisBand|fy": "the same people gain service each year", "fy|tisBand": "the same people gain service each year", "priorBand|rep": "both count repeat incidents", "comp|ref": "only referred people can complete" };
+  function levels(rows, k) { // levels with 5+ incidents; smaller ones pooled as Other (dropped if the pool is still under 5)
+    var g = group(rows, k), big = Object.keys(g).filter(function (v) { return v !== BLANK && g[v] >= MIN_N; }), small = Object.keys(g).filter(function (v) { return v !== BLANK && g[v] < MIN_N; });
+    var other = K.sum(small, function (v) { return g[v]; }), map = {};
+    big.forEach(function (v) { map[v] = v; }); if (other >= MIN_N) small.forEach(function (v) { map[v] = "Other"; });
+    return map;
+  }
+  function cramer(rows, a, b, la, lb) {
+    var t = Object.create(null), ra = Object.create(null), cb = Object.create(null), n = 0;
+    rows.forEach(function (r) { var x = la[dv(r, a)], y = lb[dv(r, b)]; if (!x || !y) return; var k = x + "|" + y; t[k] = (t[k] || 0) + 1; ra[x] = (ra[x] || 0) + 1; cb[y] = (cb[y] || 0) + 1; n++; });
+    var R = Object.keys(ra), C = Object.keys(cb); if (n < 30 || R.length < 2 || C.length < 2) return null;
+    var chi = 0; R.forEach(function (x) { C.forEach(function (y) { var e = ra[x] * cb[y] / n, o = t[x + "|" + y] || 0; chi += (o - e) * (o - e) / e; }); });
+    var phi2 = chi / n, r = R.length, k = C.length, p2 = Math.max(0, phi2 - (k - 1) * (r - 1) / (n - 1)), rc = r - (r - 1) * (r - 1) / (n - 1), kc = k - (k - 1) * (k - 1) / (n - 1);
+    var den = Math.min(kc - 1, rc - 1), v = den > 0 ? Math.sqrt(p2 / den) : 0;
+    var best = null; // most over-represented combination (5+ incidents)
+    R.forEach(function (x) { C.forEach(function (y) { var o = t[x + "|" + y] || 0; if (o < MIN_N || x === "Other" || y === "Other") return; var lift = (o / ra[x]) / (cb[y] / n);
+      if (!best || lift > best.lift) best = { x: x, y: y, o: o, lift: lift, pIn: o / ra[x], pAll: cb[y] / n }; }); });
+    return { v: v, n: n, best: best };
+  }
+  function correlations(rows, f) {
+    var flds = CF.filter(function (k) { return !f[k]; }), L = {}, use = [];
+    if (rows.length < 30) return { fields: [], m: {}, list: [] };
+    flds.forEach(function (k) { var l = levels(rows, k), u = K.uniq(Object.keys(l).map(function (x) { return l[x]; })); if (u.length >= 2) { L[k] = l; use.push(k); } });
+    var m = {}, list = [];
+    for (var i = 0; i < use.length; i++) for (var j = 0; j < i; j++) {
+      var a = use[i], b = use[j], c = cramer(rows, a, b, L[a], L[b]); if (!c) continue;
+      m[a + "|" + b] = m[b + "|" + a] = c.v;
+      var exp = EXPECTED[a + "|" + b] || EXPECTED[b + "|" + a];
+      list.push({ a: a, b: b, v: c.v, n: c.n, best: c.best, expected: exp });
+    }
+    list.sort(function (x, y) { return y.v - x.v; });
+    return { fields: use, m: m, list: list };
+  }
+  function strength(v) { return v >= 0.3 ? "strong" : v >= 0.2 ? "moderate" : v >= 0.1 ? "weak" : "negligible"; }
+  function corrSentence(c) {
+    var s = DLABEL[c.a] + " and " + DLABEL[c.b].toLowerCase() + ": " + strength(c.v) + " association (V = " + c.v.toFixed(2) + ")";
+    if (c.best && c.best.lift >= 1.2) s += ". Among incidents with " + DLABEL[c.a].toLowerCase() + " " + c.best.x + ", " + Math.round(c.best.pIn * 100) + "% have " + DLABEL[c.b].toLowerCase() + " " + c.best.y + " (vs " + Math.round(c.best.pAll * 100) + "% overall)";
+    return s + ".";
+  }
+  function renderCorr(C) {
+    if (!$("tCorr")) return;
+    if (!C.fields.length) { $("tCorr").innerHTML = '<tbody><tr><td class="sup">Needs at least 30 incidents in the selection.</td></tr></tbody>'; $("corrList").innerHTML = ""; $("corrExp").textContent = ""; return; }
+    var F_ = C.fields;
+    $("tCorr").innerHTML = "<thead><tr><th></th>" + F_.map(function (k) { return '<th title="' + esc(DLABEL[k]) + '">' + esc(CSHORT[k]) + "</th>"; }).join("") + "</tr></thead><tbody>" + F_.map(function (a, i) {
+      return '<tr><th class="rowh">' + esc(CSHORT[a]) + "</th>" + F_.map(function (b, j) {
+        if (i === j) return '<td class="sup diag"></td>';
+        var v = C.m[a + "|" + b]; if (v == null) return '<td class="sup">\u2014</td>';
+        return '<td style="background:' + K.heatColor(Math.min(1, v / 0.5)) + '" title="' + esc(DLABEL[a] + " \u00d7 " + DLABEL[b] + ": V = " + v.toFixed(2) + " (" + strength(v) + ")") + '">' + v.toFixed(2).replace(/^0/, "") + "</td>";
       }).join("") + "</tr>";
     }).join("") + "</tbody>";
+    var top = C.list.filter(function (c) { return !c.expected && c.v >= 0.1; }).slice(0, 10), exp = C.list.filter(function (c) { return c.expected && c.v >= 0.1; }).slice(0, 4);
+    $("corrList").innerHTML = (top.length ? top.map(function (c) { return "<li>" + pillV(c.v) + esc(corrSentence(c)) + '<span class="why">' + K.fmt(c.n) + " incidents with both fields</span></li>"; }).join("") : "<li>No association of 0.10 or more in this selection.</li>");
+    $("corrExp").textContent = exp.length ? "Expected by design (not ranked): " + exp.map(function (c) { return DLABEL[c.a] + " \u00d7 " + DLABEL[c.b].toLowerCase() + " (V = " + c.v.toFixed(2) + ", " + c.expected + ")"; }).join("; ") + "." : "";
   }
+  function pillV(v) { return '<span class="rr' + (v >= 0.3 ? "" : v >= 0.2 ? " mid" : " info") + '">V ' + v.toFixed(2) + "</span>"; }
 
   // ---------- detail table ----------
-  var TCOLS = [["date", "Incident Date"], ["fy", "FY"], ["pid", "Person ID"], ["age", "Age", 1], ["gender", "Gender"], ["grade", "Pay Grade"], ["status", "Status"], ["loc", "Location"], ["unit", "Unit"],
+  var TCOLS = [["date", "Date"], ["time", "Time"], ["dow", "Day"], ["ty", "TY"], ["fy", "FY"], ["pid", "Person ID"], ["age", "Age", 1], ["gender", "Gender"], ["grade", "Grade"], ["status", "Status"], ["loc", "Location"], ["unit", "Unit"],
     ["mos", "MOS"], ["tis", "TIS (yrs)", 1], ["marital", "Marital"], ["deps", "Deps", 1], ["type", "Incident Type"], ["duty", "Duty Status"], ["msd", "Mo. Since Dep.", 1], ["prior", "Prior", 1],
     ["ref", "Referred"], ["comp", "Completed"], ["rep", "Repeat"], ["out", "Outcome"]];
   var SEARCH = ["pid", "unit", "loc", "mos", "type", "grade", "status", "out", "duty", "marital", "gender"];
   function cellv(r, k) { var v = r[k]; return v == null || (typeof v === "number" && isNaN(v)) ? "" : v; }
   function table() {
+    var on = $("showRows").checked;
+    ["rowsWrap", "fSearch", "btnCsv", "searchNote"].forEach(function (id) { $(id).hidden = !on; });
+    $("rowsNote").hidden = on;
+    if (!on) { $("btnAll").style.display = "none"; $("tDetail").tBodies[0].innerHTML = ""; S.shown = []; return; }
     var q = ($("fSearch").value || "").trim().toLowerCase(), rows = S.base || [];
     if (q) rows = rows.filter(function (r) { return SEARCH.some(function (k) { return r[k] && String(r[k]).toLowerCase().indexOf(q) >= 0; }); });
     var k = S.sort.k, dir = S.sort.dir, isN = TCOLS.some(function (c) { return c[0] === k && c[2]; });
     rows = rows.slice().sort(function (a, b) {
-      var x = k === "date" ? a.d - b.d : k === "grade" ? gradeKey(a.grade) - gradeKey(b.grade) : isN ? (cellv(a, k) === "" ? -1e9 : a[k]) - (cellv(b, k) === "" ? -1e9 : b[k]) : cmpVal(cellv(a, k), cellv(b, k));
+      var x = k === "date" ? (a.d - b.d) || ((a.hour || 0) * 60 + (a.min || 0)) - ((b.hour || 0) * 60 + (b.min || 0)) : k === "grade" ? gradeKey(a.grade) - gradeKey(b.grade) : isN ? (cellv(a, k) === "" ? -1e9 : a[k]) - (cellv(b, k) === "" ? -1e9 : b[k]) : cmpVal(cellv(a, k), cellv(b, k));
       return x * dir || b.d - a.d;
     });
     S.shown = rows;
@@ -676,7 +826,7 @@
     btn.textContent = S.showAll ? "Show " + PAGE : rows.length > MAXROWS ? "Show first " + K.fmt(MAXROWS) : "Show all " + K.fmt(rows.length);
   }
   function stamp() { var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
-  function exportCsv() { K.downloadCsv("incidents_" + stamp() + ".csv", TCOLS.map(function (c) { return c[1]; }), (S.shown || []).map(function (r) { return TCOLS.map(function (c) { return c[0] === "msd" && r.msd === null ? "" : cellv(r, c[0]); }); })); }
+  function exportCsv() { if (!$("showRows").checked) return; K.downloadCsv("incidents_" + stamp() + ".csv", TCOLS.map(function (c) { return c[1]; }), (S.shown || []).map(function (r) { return TCOLS.map(function (c) { return c[0] === "msd" && r.msd === null ? "" : cellv(r, c[0]); }); })); }
 
   // ---------- GenAI pack (aggregated only: no names, IDs, records or exact dates; groups under 5 suppressed) ----------
   var PROMPT = [
@@ -726,6 +876,14 @@
     A.combos.forEach(function (c) { L.push("Common profile: " + profile(c) + " = " + Math.round(c.share * 100) + "% of incidents"); });
     L.push("", "-- Heat-map hot spots (pay grade x age band, cells of 5 or more) --");
     heatCells(rows).hot.slice(0, 8).forEach(function (h) { L.push(h.grade + ", age " + h.age + ": " + h.n + " incidents"); });
+    L.push("", "-- Hot spots: day of week x time of day (cells of 5 or more) --");
+    heatData(rows, "dow", "tod").hot.slice(0, 8).forEach(function (h) { L.push(h.a + " " + h.b + ": " + h.n + " incidents"); });
+    L.push("", "-- Hot spots: location x fiscal month, unit x duty status (cells of 5 or more) --");
+    heatData(rows, "loc", "fm").hot.slice(0, 5).forEach(function (h) { L.push(h.a + ", " + h.b + " (all years): " + h.n + " incidents"); });
+    heatData(rows, "unit", "duty").hot.slice(0, 5).forEach(function (h) { L.push(h.a + ", " + h.b + ": " + h.n + " incidents"); });
+    var CC = correlations(rows, f);
+    L.push("", "-- Strongest associations between fields (bias-corrected Cramer's V; association, not cause) --");
+    CC.list.filter(function (c) { return !c.expected && c.v >= 0.1; }).slice(0, 10).forEach(function (c) { L.push(corrSentence(c)); });
     L.push("", "Notes: groups under 5 are suppressed. RR = relative risk (group rate / overall rate). Holiday window = within 3 days of a federal holiday, New Year's Eve or St. Patrick's Day; payday window = 0-3 days after the 1st or 15th.");
     return L.join("\n");
   }
@@ -758,7 +916,7 @@
   function snapshot() {
     var files = []; S.files.filter(function (e) { return usable(e) && e.kind === "incidents"; }).forEach(function (e) { (e.embedded && SAVED ? SAVED.files : [e.name]).forEach(function (n) { if (files.indexOf(n) < 0) files.push(n); }); });
     var o = { v: 1, savedAt: new Date().toISOString(), files: files, headers: COLS.map(function (c) { return c[1]; }),
-      rows: S.recs.map(function (r) { return SCOLS.map(function (k) { var v = r[k]; return k === "date" ? r.date : v == null || (typeof v === "number" && isNaN(v)) ? "" : v; }); }),
+      rows: S.recs.map(function (r) { return SCOLS.map(function (k) { var v = r[k]; return k === "date" ? r.when : v == null || (typeof v === "number" && isNaN(v)) ? "" : v; }); }),
       hc: { mode: S.hc.mode, gender: S.hc.gender, remember: false, unit: S.hc.unit, grade: S.hc.grade, grid: S.hc.grid } };
     if (S.roster) o.roster = { files: S.roster.files, headers: ["Unit", "Location", "Grade", "Gender", "Age Band", "Count"], rows: S.roster.rows.map(function (x) { return [x.unit || "", x.loc || "", x.grade || "", x.gender || "", x.ageBand || "", x.count]; }) };
     return o;
@@ -868,6 +1026,9 @@
     $("btnPresent").addEventListener("click", function () { setPresent(!document.body.classList.contains("present")); });
     $("btnPrint").addEventListener("click", function () { window.print(); });
     $("btnGenAI").addEventListener("click", copyPack);
+    $("btnPrintCs").addEventListener("click", printSummary);
+    $("showRows").addEventListener("change", function () { S.showAll = false; table(); });
+    document.querySelector("main").addEventListener("click", heatClick);
     $("btnGenAITxt").addEventListener("click", downloadPack);
     try { setExpanded(localStorage.getItem(LS_KEY) === "1", false); } catch (e) { setExpanded(false, false); }
     ["dragover", "drop"].forEach(function (t) { document.addEventListener(t, function (e) { e.preventDefault(); }); });
@@ -894,6 +1055,6 @@
     SAVED = readSaved();
     if (SAVED) { showBanner(); document.title = "REAL DATA \u00b7 " + document.title; loadSaved(); } else loadDemo();
   }
-  window.PreventionDash = { packText: packText, analysis: function () { return S.an; }, state: S };
+  window.PreventionDash = { packText: packText, analysis: function () { return S.an; }, correlations: function () { return S.corr; }, state: S, parseWhen: function (v) { var w = parseWhen(v); return w ? { date: iso(w.d), h: w.h, mi: w.mi, dow: DOW[(w.d.getUTCDay() + 6) % 7] } : w; }, mapHeader: function (h) { return isPii(h) ? "SKIP" : ALIAS[norm(h)] || null; } };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 })();
