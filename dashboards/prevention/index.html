@@ -163,7 +163,8 @@
   <section class="panel heats">
     <h2>Hot spots</h2>
     <p class="muted small">Incident counts in the current selection. Darker = more incidents. Cells under 5 show &lt;5. Click a cell to filter by both values.</p>
-    <div data-req="tod"><h3 class="sub">Day of week &times; time of day (from the DTG)</h3><div class="tablewrap"><table class="heat clickheat" id="tHeatDH"></table></div></div>
+    <div><h3 class="sub">Day of week &times; fiscal month (all selected years)</h3><div class="tablewrap"><table class="heat clickheat" id="tHeatDM"></table></div></div>
+    <div data-req="tod"><h3 class="sub">Day of week &times; time of day (shown only when the DTGs include times)</h3><div class="tablewrap"><table class="heat clickheat" id="tHeatDH"></table></div></div>
     <div class="row r2b">
       <div data-req="grade,ageBand"><h3 class="sub">Grade &times; age band</h3><div class="tablewrap"><table class="heat clickheat" id="tHeat"></table></div></div>
       <div data-req="unit,duty"><h3 class="sub">Unit &times; duty status</h3><div class="tablewrap"><table class="heat clickheat" id="tHeatUD"></table></div></div>
@@ -193,7 +194,7 @@
   <details class="panel method chrome">
     <summary><h2>How the numbers are calculated</h2></summary>
     <ul>
-      <li><strong>DTG of Incident</strong> accepts military date-time groups (021430ZNOV26, 021430Z NOV 26, 021430NOV2026, with or without the zone letter, 2- or 4-digit year), Excel date/time cells and dates such as 11/2/2026 14:30. Day of week and hour come from it; the hour is used as written (no time-zone conversion). <strong>TY</strong> is shown as given; the federal fiscal year is always worked out from the DTG.</li>
+      <li><strong>DTG of Incident</strong> is read as a date: 02NOV26, 02 NOV 26, 02NOV2026, 02-Nov-26, Excel dates and dates such as 11/2/2026. Day of week, weekend vs weekday, holiday and payday windows come from it. If a DTG also carries a time (021430ZNOV26 or 11/2/2026 14:30), the time-of-day filter and heat map appear automatically; if no incident has a time, they stay hidden and nothing is inferred about hours. <strong>TY</strong> is shown as given; the federal fiscal year is always worked out from the DTG.</li>
       <li><strong>Fiscal year</strong> is the federal year, 1 October to 30 September (FY26 = Oct 2025 to Sep 2026). Fiscal month 1 = October. Quarters: Q1 Oct&ndash;Dec, Q2 Jan&ndash;Mar, Q3 Apr&ndash;Jun, Q4 Jul&ndash;Sep.</li>
       <li><strong>Unique people</strong> = distinct Person IDs. <strong>Repeat rate</strong> = people with 2 or more incidents in the selection, or any incident marked Repeat Incident = Y, divided by unique people.</li>
       <li><strong>% referred</strong> = incidents with Referred to Treatment = Y. <strong>% completed</strong> = Completed Program = Y among referred incidents.</li>

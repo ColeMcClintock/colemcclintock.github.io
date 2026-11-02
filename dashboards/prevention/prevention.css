@@ -98,3 +98,4 @@ label.toggle{display:flex;align-items:center;gap:6px;font-size:.85rem;color:#dbe
 #corrList .why{display:block}
 table.corrm{width:100%}
 #tHeatDH{width:100%}
+.filters label[hidden]{display:none!important}

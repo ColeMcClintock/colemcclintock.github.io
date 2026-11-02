@@ -96,7 +96,7 @@ CW = [day_weight(d) for d in CAL]
 def drill_weekend(d):      # second full weekend of the month
     s = nth_wd(d.year, d.month, 5, 2); return s <= d <= s + dt.timedelta(days=1)
 def at_window(p, d):       # two weeks of annual training in June or July, by unit
-    m = 6 if hash(p["u"]["battalion"]) % 2 else 7; return d.month == m and 8 <= d.day <= 22
+    m = 6 if sum(map(ord, p["u"]["battalion"])) % 2 else 7; return d.month == m and 8 <= d.day <= 22
 
 def months_since_dep(p, d):
     ret = REDEPLOY.get(p["u"]["battalion"])
@@ -164,7 +164,7 @@ def hour_for(r):
     if r["duty"] in ("On Duty", "Drill", "AT") and rng.random() < .7: return rng.randint(7, 17)
     w = HOUR_W if r["d"].weekday() >= 4 else [x if i < 18 and i > 3 else x * .7 for i, x in enumerate(HOUR_W)]
     return rng.choices(range(24), w)[0]
-def dtg(d, h, m): return "%02d%02d%02dZ%s%02d" % (d.day, h, m, MONS[d.month - 1], d.year % 100)
+def dtg(d, h=None, m=None): return "%02d%s%02d" % (d.day, MONS[d.month - 1], d.year % 100)   # date only, like the real tracker
 rows = []
 for r in incidents:
     p = r["p"]
@@ -187,7 +187,7 @@ roster = [list(k) + [v] for k, v in sorted(cnt.items())]
 
 # ---------- write ----------
 def fy_of(r):
-    d = r[I["DTG of Incident"]]; mo = MONS.index(d[7:10]) + 1; y = 2000 + int(d[10:12]); return y + 1 if mo >= 10 else y
+    d = r[I["DTG of Incident"]]; mo = MONS.index(d[2:5]) + 1; y = 2000 + int(d[5:7]); return y + 1 if mo >= 10 else y
 expect = dict(incidents=len(rows), people=len(set(r[I["Person ID"]] for r in rows)), assigned=len(people),
               repeatRows=sum(1 for r in rows if r[I["Repeat Incident"]] == "Y"), referred=sum(1 for r in rows if r[I["Referred to Treatment"]] == "Y"),
               completed=sum(1 for r in rows if r[I["Completed Program"]] == "Y"), fy26=sum(1 for r in rows if fy_of(r) == 2026))
@@ -223,13 +223,13 @@ demo_x = [[r[I[h]] if h in I else "" for h in XH] for r in rows]
 book(os.path.join(DIR, "prevention_demo.xlsx"), [("Incidents", XH, demo_x, ())],
      ["FICTIONAL demo data. Not real people. Person IDs are random pseudonyms.",
       "Last and First are left blank on purpose: the dashboard skips name columns by header and never reads them.",
-      "DTG of Incident is a military date-time group, for example 021430ZNOV26 (2 Nov 2026, 1430)."])
+      "DTG of Incident is a date only, for example 02NOV26 (2 Nov 2026)."])
 book(os.path.join(DIR, "prevention_roster_demo.xlsx"), [("Roster", ROSTER_HEADERS, roster, ())],
      ["FICTIONAL headcount. One row per group: Unit, Grade, Gender, Count (Location and Age Band optional)."])
 GUIDE = ["INCIDENT TEMPLATE: one row per incident. Headers match regardless of case, spaces or underscores.",
          "Core columns (your tracker): TY, Grade, DTG of Incident, Location, Duty Status, Age, Gender, Unit. The rest are optional; add any you have.",
          "Last / First are left out on purpose. If your sheet has them, the dashboard skips them without reading them.",
-         "DTG of Incident: 021430ZNOV26, 021430Z NOV 26, 021430NOV2026, an Excel date/time, or a date such as 11/2/2026 14:30.",
+         "DTG of Incident: a date such as 02NOV26, 02 NOV 26, 02NOV2026, an Excel date or 11/2/2026. A time is optional (021430ZNOV26); it is used only when present.",
          "Do NOT add names, SSN, DoD ID / EDIPI or date of birth. If your export has them, the dashboard skips those columns without reading them.",
          "Person ID: any pseudonymous ID (for example P-0001) so repeat incidents by the same person can be counted.",
          "Status: Traditional (M-Day) / TS, AGR, Technician.  Grade: E-1..E-9, W-1..W-5, O-1..O-10 (E4, SPC etc. accepted).",

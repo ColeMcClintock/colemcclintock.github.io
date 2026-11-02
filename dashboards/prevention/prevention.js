@@ -41,7 +41,7 @@
   var COLS = [
     ["ty", "TY", ["ty", "year", "calendaryear", "cy", "incidentyear"], "Detail table (the federal fiscal year is worked out from the DTG)"],
     ["grade", "Grade", ["grade", "paygrade", "rank", "rankgrade"], "Chart, filter, heat maps, rates"],
-    ["date", "DTG of Incident", ["dtgofincident", "dtg", "incidentdtg", "dtgincident", "datetimegroup", "dtgofevent", "incidentdate", "date", "dateofincident", "eventdate", "offensedate", "incidentdatetime"], "Required: date, weekday and hour; fiscal year, month, quarter; holiday / payday windows"],
+    ["date", "DTG of Incident", ["dtgofincident", "dtg", "incidentdtg", "dtgincident", "datetimegroup", "dtgofevent", "incidentdate", "date", "dateofincident", "eventdate", "offensedate", "incidentdatetime"], "Required: the date (a time is optional and used only when present); weekday; fiscal year, month, quarter; holiday / payday windows"],
     ["loc", "Location", ["location", "armory", "locationarmory", "readinesscenter", "station", "city"], "Chart, filter, heat maps, rates"],
     ["duty", "Duty Status", ["dutystatus", "dutystays", "dutystaus", "dutystat", "duty", "onoffduty"], "Chart, filter, heat map"],
     ["age", "Age", ["age", "ageatincident", "ageattimeofincident"], "Age band chart, filter, heat map"],
@@ -116,9 +116,11 @@
     if (typeof v === "number") {
       if (v < 1 || v > 80000) return false;
       var day = Math.floor(v), fr = v - day, d0 = new Date(Math.round((day - 25569) * 864e5)), mins = Math.round(fr * 1440);
-      return when(d0.getUTCFullYear(), d0.getUTCMonth() + 1, d0.getUTCDate(), fr > 1e-9 && mins < 1440 ? Math.floor(mins / 60) : null, mins % 60);
+      return when(d0.getUTCFullYear(), d0.getUTCMonth() + 1, d0.getUTCDate(), mins > 0 && mins < 1440 ? Math.floor(mins / 60) : null, mins > 0 && mins < 1440 ? mins % 60 : 0);
     }
     var s = txt(v), c = s.toUpperCase().replace(/[\s.]+/g, ""), m;
+    if ((m = c.match(/^(\d{1,2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2}|\d{4})$/))) { var y0 = +m[3]; if (y0 < 100) y0 += 2000; return when(y0, MON_UP.indexOf(m[2]) + 1, +m[1], null, 0); }
+    if ((m = c.match(/^(\d{1,2})-?(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)-?(\d{2}|\d{4})$/))) { var y1 = +m[3]; if (y1 < 100) y1 += 2000; return when(y1, MON_UP.indexOf(m[2]) + 1, +m[1], null, 0); }
     if ((m = c.match(/^(\d{2})(\d{2})(\d{2})([A-Z])?(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2}|\d{4})$/))) {
       var y = +m[6]; if (y < 100) y += 2000; return when(y, MON_UP.indexOf(m[5]) + 1, +m[1], +m[2], +m[3]);
     }
@@ -320,6 +322,9 @@
   }
   function applyData(recs, roster, source) {
     recs.forEach(function (r, i) { r._i = i; });
+    if (!recs.some(function (r) { return r.hour != null && (r.hour || r.min); })) recs.forEach(function (r) { r.hour = null; r.min = null; r.tod = ""; r.time = ""; r.when = r.date; });
+    S.hasTime = recs.some(function (r) { return r.hour != null; });
+    $("fTod").value = ""; $("fTod").closest("label").hidden = !S.hasTime;
     S.recs = recs; S.roster = roster; S.source = source; S.showAll = false; setDisclaimer(source === "file" || source === "saved");
     S.unitLoc = {}; var ul = {}; recs.forEach(function (r) { if (r.unit && r.loc) { var m = ul[r.unit] = ul[r.unit] || {}; m[r.loc] = (m[r.loc] || 0) + 1; } });
     Object.keys(ul).forEach(function (u) { var m = ul[u]; S.unitLoc[u] = Object.keys(m).sort(function (a, b) { return m[b] - m[a]; })[0]; });
@@ -496,7 +501,7 @@
     for (var t = lo; t <= hi; t += DAYMS) {
       var d = new Date(t), y = d.getUTCFullYear(), mo = d.getUTCMonth() + 1, fyN = mo >= 10 ? y + 1 : y, fmN = (mo + 2) % 12 + 1;
       if (f.fy && "FY" + String(fyN).slice(2) !== f.fy) continue; if (f.fm && FY_MON[fmN - 1] !== f.fm) continue; if (f.q && Q_L[Math.floor((fmN - 1) / 3)] !== f.q) continue;
-      var w = winOf(d); m[w] = (m[w] || 0) + 1; tot++;
+      var w = winOf(d), wd = d.getUTCDay(); m[w] = (m[w] || 0) + 1; m["dow" + wd] = (m["dow" + wd] || 0) + 1; tot++;
     }
     return { by: m, total: tot };
   }
@@ -534,10 +539,16 @@
       var tm = function (label, n, days) { if (n >= MIN_N && days > 0 && dc.total - days > 0 && N - n > 0) out.timing.push({ v: label, n: n, days: days, share: n / N, dayShare: days / dc.total, rr: (n / days) / ((N - n) / (dc.total - days)) }); };
       tm("Holiday window (\u00b13 days)", (gw[WIN[0]] || 0) + (gw[WIN[1]] || 0), (dc.by[WIN[0]] || 0) + (dc.by[WIN[1]] || 0));
       tm("Payday window (0\u20133 days after the 1st / 15th)", (gw[WIN[0]] || 0) + (gw[WIN[2]] || 0), (dc.by[WIN[0]] || 0) + (dc.by[WIN[2]] || 0));
-      tm("Fri\u2013Sun", rows.filter(function (r) { var x = r.d.getUTCDay(); return x === 0 || x >= 5; }).length, Math.round(dc.total * 3 / 7));
+      tm("Fri\u2013Sun", rows.filter(function (r) { var x = r.d.getUTCDay(); return x === 0 || x >= 5; }).length, (dc.by.dow5 || 0) + (dc.by.dow6 || 0) + (dc.by.dow0 || 0));
+    }
+    if (!f.dow && N >= MIN_N) {
+      var dc2 = dayCounts(f), weN = rows.filter(function (r) { var x = r.d.getUTCDay(); return x === 0 || x === 6; }).length, weD = (dc2.by.dow6 || 0) + (dc2.by.dow0 || 0), wdD = dc2.total - weD;
+      var dg2 = group(rows, "dow"), topD = DOW.slice().sort(function (a, b) { return (dg2[b] || 0) - (dg2[a] || 0); })[0];
+      var fri = dg2.Fri || 0;
+      if (weD && wdD && N - weN > 0) out.wk = { n: weN, share: weN / N, rr: (weN / weD) / ((N - weN) / wdD), top: topD, topShare: (dg2[topD] || 0) / N, fri: fri / N, friSun: (weN + fri) / N };
     }
     var tg = group(rows, "tod"), withT = N - (tg[BLANK] || 0);
-    if (withT >= MIN_N * 4) {
+    if (S.hasTime && withT >= MIN_N * 4) {
       var night = ["1800\u20132059", "2100\u20132359", "0000\u20130259"], ns = K.sum(night, function (t) { return tg[t] || 0; });
       var dg = group(rows, "dow"), we = (dg.Fri || 0) + (dg.Sat || 0) + (dg.Sun || 0);
       if (ns / withT >= 0.4) out.peak = { tod: "1800\u20130259", share: ns / withT, days: "Fri\u2013Sun", dshare: we / N };
@@ -590,6 +601,7 @@
     if (A.corr[0] && A.corr[0].ratio >= 1.3) fo.push("<li><strong>Drive program completion:</strong> track every referral to completion with command follow-up at 30, 60 and 90 days." + ev("Those who did not complete repeat " + A.corr[0].ratio.toFixed(1) + "\u00d7 as often.") + "</li>");
     if (A.notRef != null && A.notRef >= 0.1) fo.push("<li><strong>Close the referral gap:</strong> make referral to the prevention / treatment program automatic after any incident." + ev(Math.round(A.notRef * 100) + "% of incidents were not referred.") + "</li>");
     if (A.peak) fo.push("<li><strong>Peak hours:</strong> put leader check-ins, safe-ride and duty-NCO coverage on " + esc(A.peak.days) + " " + esc(A.peak.tod) + "." + ev(Math.round(A.peak.share * 100) + "% of incidents with a time fall in " + esc(A.peak.tod) + "; " + esc(A.peak.days) + " carry " + Math.round(A.peak.dshare * 100) + "% of incidents.") + "</li>");
+    else if (A.wk && A.wk.rr >= 1.2) fo.push("<li><strong>Weekends:</strong> put leader check-ins, safe-ride reminders and duty-NCO coverage on Friday through Sunday, especially " + esc(A.wk.top) + "." + ev("Sat\u2013Sun run " + A.wk.rr.toFixed(1) + "\u00d7 the weekday daily rate; Fri\u2013Sun carry " + Math.round(A.wk.friSun * 100) + "% of incidents.") + "</li>");
     if (pay && pay.rr >= 1.15) fo.push("<li><strong>Payday weekends:</strong> time reminders and safe-ride information with the 1st and 15th." + ev("Payday windows carry " + pay.rr.toFixed(1) + "\u00d7 the daily rate.") + "</li>");
     if (A.dui != null && A.dui >= 0.3) fo.push("<li><strong>DUI prevention:</strong> promote the safe-ride program and a no-questions-asked ride home policy." + ev("DUI is " + Math.round(A.dui * 100) + "% of incidents.") + "</li>");
     if (A.u21 && A.u21.share >= 0.1) fo.push("<li><strong>Under 21:</strong> include alcohol education in new-Soldier / RSP training and first-drill sponsorship." + ev(Math.round(A.u21.share * 100) + "% of incidents involve Soldiers under 21.") + "</li>");
@@ -612,7 +624,10 @@
       if (hol && hol.rr >= 1.15) w.push("holiday windows " + hol.rr.toFixed(1) + "\u00d7 the daily rate" + (A.hols[0] ? " (most around " + A.hols.slice(0, 2).map(function (h) { return h.v; }).join(" and ") + ")" : ""));
       if (pay && pay.rr >= 1.15) w.push("payday windows " + pay.rr.toFixed(1) + "\u00d7");
       if (A.off != null) w.push(Math.round(A.off * 100) + "% off duty");
+      var dr = rows.filter(function (r) { return r.duty; }), drN = dr.filter(function (r) { return r.duty === "Drill"; }).length;
+      if (dr.length && drN >= MIN_N) w.push(Math.round(drN / dr.length * 100) + "% during drill");
       if (w.length) b.push("<li><strong>When:</strong> " + esc(w.join("; ")) + ".</li>");
+      if (A.wk) b.push("<li><strong>Weekend vs weekday:</strong> " + esc("Sat\u2013Sun carry " + Math.round(A.wk.share * 100) + "% of incidents, " + A.wk.rr.toFixed(1) + "\u00d7 the weekday daily rate; Fri\u2013Sun " + Math.round(A.wk.friSun * 100) + "%. Busiest day: " + A.wk.top + " (" + Math.round(A.wk.topShare * 100) + "%).") + "</li>");
       var ft = []; if (refK.length) ft.push(pctS(refY.length, refK.length) + " referred"); if (refY.length) ft.push(pctS(compY.length, refY.length) + " of those completed the program"); if (rp.people) ft.push(pctS(rp.repeat, rp.people) + " of people had a repeat");
       if (A.corr[0]) ft.push("non-completers repeat " + A.corr[0].ratio.toFixed(1) + "\u00d7 as often");
       if (ft.length) b.push("<li><strong>Follow-through:</strong> " + esc(ft.join("; ")) + ".</li>");
@@ -706,7 +721,7 @@
     return { m: m, hot: hot };
   }
   // generic heat map: rows x columns of incident counts; cells under 5 show <5; click a cell to filter by both
-  var HEATS = [["tHeat", "grade", "ageBand"], ["tHeatDH", "dow", "tod"], ["tHeatLM", "loc", "fm"], ["tHeatUD", "unit", "duty"], ["tHeatGM", "grade", "marital"]];
+  var HEATS = [["tHeat", "grade", "ageBand"], ["tHeatDH", "dow", "tod"], ["tHeatDM", "dow", "fm"], ["tHeatLM", "loc", "fm"], ["tHeatUD", "unit", "duty"], ["tHeatGM", "grade", "marital"]];
   function heatData(rows, rk, ck, maxRows) {
     var m = Object.create(null), rc = Object.create(null), mx = 0;
     rows.forEach(function (r) { var a = r[rk], b = r[ck]; if (!a || !b) return; var k = a + "|" + b; m[k] = (m[k] || 0) + 1; rc[a] = (rc[a] || 0) + 1; if (m[k] > mx) mx = m[k]; });
@@ -802,6 +817,7 @@
   var TCOLS = [["date", "Date"], ["time", "Time"], ["dow", "Day"], ["ty", "TY"], ["fy", "FY"], ["pid", "Person ID"], ["age", "Age", 1], ["gender", "Gender"], ["grade", "Grade"], ["status", "Status"], ["loc", "Location"], ["unit", "Unit"],
     ["mos", "MOS"], ["tis", "TIS (yrs)", 1], ["marital", "Marital"], ["deps", "Deps", 1], ["type", "Incident Type"], ["duty", "Duty Status"], ["msd", "Mo. Since Dep.", 1], ["prior", "Prior", 1],
     ["ref", "Referred"], ["comp", "Completed"], ["rep", "Repeat"], ["out", "Outcome"]];
+  function tcols() { return S.hasTime ? TCOLS : TCOLS.filter(function (c) { return c[0] !== "time"; }); }
   var SEARCH = ["pid", "unit", "loc", "mos", "type", "grade", "status", "out", "duty", "marital", "gender"];
   function cellv(r, k) { var v = r[k]; return v == null || (typeof v === "number" && isNaN(v)) ? "" : v; }
   function table() {
@@ -818,15 +834,16 @@
     });
     S.shown = rows;
     $("searchNote").textContent = q ? K.fmt(rows.length) + " of " + K.fmt(S.base.length) + " incidents match \u201c" + $("fSearch").value.trim() + "\u201d" : "";
-    $("tDetail").tHead.innerHTML = "<tr>" + TCOLS.map(function (c) { var on = S.sort.k === c[0]; return '<th data-k="' + c[0] + '" class="' + (c[2] ? "num" : "") + (on ? " sorted" + (S.sort.dir > 0 ? " asc" : "") : "") + '" aria-sort="' + (on ? (S.sort.dir > 0 ? "ascending" : "descending") : "none") + '">' + esc(c[1]) + "</th>"; }).join("") + "</tr>";
+    var TC = tcols();
+    $("tDetail").tHead.innerHTML = "<tr>" + TC.map(function (c) { var on = S.sort.k === c[0]; return '<th data-k="' + c[0] + '" class="' + (c[2] ? "num" : "") + (on ? " sorted" + (S.sort.dir > 0 ? " asc" : "") : "") + '" aria-sort="' + (on ? (S.sort.dir > 0 ? "ascending" : "descending") : "none") + '">' + esc(c[1]) + "</th>"; }).join("") + "</tr>";
     var show = rows.slice(0, S.showAll ? MAXROWS : PAGE), dash = '<span class="muted">\u2014</span>';
-    $("tDetail").tBodies[0].innerHTML = show.length ? show.map(function (r) { return "<tr>" + TCOLS.map(function (c) { var v = cellv(r, c[0]); if (c[0] === "msd" && r.msd === null) v = "Never"; return "<td" + (c[2] ? ' class="num"' : "") + ">" + (v === "" ? dash : esc(v)) + "</td>"; }).join("") + "</tr>"; }).join("")
-      : '<tr><td colspan="' + TCOLS.length + '" class="muted">' + (q ? "No incidents match the search in the current selection." : "No incidents match the current filters.") + "</td></tr>";
+    $("tDetail").tBodies[0].innerHTML = show.length ? show.map(function (r) { return "<tr>" + TC.map(function (c) { var v = cellv(r, c[0]); if (c[0] === "msd" && r.msd === null) v = "Never"; return "<td" + (c[2] ? ' class="num"' : "") + ">" + (v === "" ? dash : esc(v)) + "</td>"; }).join("") + "</tr>"; }).join("")
+      : '<tr><td colspan="' + TC.length + '" class="muted">' + (q ? "No incidents match the search in the current selection." : "No incidents match the current filters.") + "</td></tr>";
     var btn = $("btnAll"); btn.style.display = rows.length > PAGE ? "" : "none";
     btn.textContent = S.showAll ? "Show " + PAGE : rows.length > MAXROWS ? "Show first " + K.fmt(MAXROWS) : "Show all " + K.fmt(rows.length);
   }
   function stamp() { var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
-  function exportCsv() { if (!$("showRows").checked) return; K.downloadCsv("incidents_" + stamp() + ".csv", TCOLS.map(function (c) { return c[1]; }), (S.shown || []).map(function (r) { return TCOLS.map(function (c) { return c[0] === "msd" && r.msd === null ? "" : cellv(r, c[0]); }); })); }
+  function exportCsv() { if (!$("showRows").checked) return; var TC = tcols(); K.downloadCsv("incidents_" + stamp() + ".csv", TC.map(function (c) { return c[1]; }), (S.shown || []).map(function (r) { return TC.map(function (c) { return c[0] === "msd" && r.msd === null ? "" : cellv(r, c[0]); }); })); }
 
   // ---------- GenAI pack (aggregated only: no names, IDs, records or exact dates; groups under 5 suppressed) ----------
   var PROMPT = [
@@ -876,8 +893,13 @@
     A.combos.forEach(function (c) { L.push("Common profile: " + profile(c) + " = " + Math.round(c.share * 100) + "% of incidents"); });
     L.push("", "-- Heat-map hot spots (pay grade x age band, cells of 5 or more) --");
     heatCells(rows).hot.slice(0, 8).forEach(function (h) { L.push(h.grade + ", age " + h.age + ": " + h.n + " incidents"); });
-    L.push("", "-- Hot spots: day of week x time of day (cells of 5 or more) --");
-    heatData(rows, "dow", "tod").hot.slice(0, 8).forEach(function (h) { L.push(h.a + " " + h.b + ": " + h.n + " incidents"); });
+    if (A.wk) L.push("", "Weekend vs weekday: Sat-Sun = " + Math.round(A.wk.share * 100) + "% of incidents (" + A.wk.rr.toFixed(2) + "x the weekday daily rate); Fri-Sun = " + Math.round(A.wk.friSun * 100) + "%; busiest day " + A.wk.top + " (" + Math.round(A.wk.topShare * 100) + "%)");
+    if (S.hasTime) {
+      L.push("", "-- Hot spots: day of week x time of day (cells of 5 or more) --");
+      heatData(rows, "dow", "tod").hot.slice(0, 8).forEach(function (h) { L.push(h.a + " " + h.b + ": " + h.n + " incidents"); });
+    }
+    L.push("", "-- Hot spots: day of week x fiscal month (cells of 5 or more) --");
+    heatData(rows, "dow", "fm").hot.slice(0, 8).forEach(function (h) { L.push(h.a + " in " + h.b + " (all years): " + h.n + " incidents"); });
     L.push("", "-- Hot spots: location x fiscal month, unit x duty status (cells of 5 or more) --");
     heatData(rows, "loc", "fm").hot.slice(0, 5).forEach(function (h) { L.push(h.a + ", " + h.b + " (all years): " + h.n + " incidents"); });
     heatData(rows, "unit", "duty").hot.slice(0, 5).forEach(function (h) { L.push(h.a + ", " + h.b + ": " + h.n + " incidents"); });

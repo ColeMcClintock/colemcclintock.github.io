@@ -26,8 +26,8 @@ tmp = tempfile.mkdtemp(prefix="prev-test-")
 wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Export"
 ws.append(["Incident report (fictional)"]); ws.append([])
 ws.append(["TY", "Grade", "Last", "First", "DTG of Incident", "Location", "Duty Stays", "Age", "Gender", "Unit", "SSN", "DoD ID", "DOB", "person_id", "Status", "Incident_x0020_Type", "Referred", "Completed", "Repeat Incident", "Notes"])
-DTGS = ["021430ZOCT25", "031415Z OCT 25", "042300OCT2025", dt.datetime(2025, 10, 5, 22, 15), "10/6/2025 21:30", "071930ZOCT25",
-        "082245Z OCT 2025", "092100ZOCT25", dt.datetime(2025, 10, 10, 23, 0), "111800ZOCT25", "120130ZOCT25", "130200ZOCT25"]
+DTGS = ["02OCT25", "03 OCT 25", "04OCT2025", dt.datetime(2025, 10, 5), "10/6/2025", "07-Oct-25",   # date only, like Cole's tracker
+        "08 OCT 2025", "09OCT25", dt.date(2025, 10, 10), "11OCT25", "12oct25", "13OCT25"]
 rows = []
 for i in range(12):
     rows.append([2025, ["SPC", "E4", "PFC", "SGT"][i % 4], "Zzmarkername", "Zzmarkername", DTGS[i], "Testville", "Off Duty", 20 + i % 5, "M" if i % 4 else "F", "Test Co" if i < 9 else "Tiny Co",
@@ -35,6 +35,10 @@ for i in range(12):
 for r in rows: ws.append(r)
 ws.cell(row=5, column=20).value = "#REF!"
 testx = os.path.join(tmp, "test-incidents.xlsx"); wb.save(testx)
+# a second small file whose DTGs DO carry times: the time-of-day views must appear
+wb2 = openpyxl.Workbook(); w2 = wb2.active; w2.append(["TY", "Grade", "DTG of Incident", "Location", "Duty Status", "Age", "Gender", "Unit"])
+for i in range(12): w2.append([2025, "E-4", ["%02d1430ZOCT25", "%02d1415Z OCT 25", "%02d2300OCT2025", "10/%d/2025 21:30"][i % 4] % (i + 1), "Testville", "Off Duty", 22, "M", "Time Co"])
+timex = os.path.join(tmp, "test-times.xlsx"); wb2.save(timex)
 
 def run():
     with sync_playwright() as p:
@@ -61,6 +65,8 @@ def run():
                             ("312359ROCT25", "2025-10-31", 23, 59), (46328.6041667, "2026-11-02", 14, 30), ("11/2/2026 14:30", "2026-11-02", 14, 30), ("11/2/2026 2:30 PM", "2026-11-02", 14, 30),
                             ("2026-11-02T14:30", "2026-11-02", 14, 30)]:
             r = P(v); check(bool(r) and r["date"] == d and r["h"] == h and r["mi"] == mi, f"DTG/date parse {v!r} -> {d} {h:02d}{mi:02d} (got {r})")
+        for v in ["02NOV26", "02 NOV 26", "02NOV2026", "2NOV26", "02-Nov-26", "02nov26", 46328, 46328.0, "11/2/2026", "2026-11-02", "46328"]:
+            r = P(v); check(bool(r) and r["date"] == "2026-11-02" and r["h"] is None, f"date-only DTG {v!r} -> 2026-11-02, no hour (got {r})")
         r = P("11/2/2026"); check(bool(r) and r["date"] == "2026-11-02" and r["h"] is None, "date without time parses with no hour")
         check(P("not a date") is False and P("") is None, "unreadable DTG flagged, blank ignored")
         M = lambda h: pg.evaluate("h => window.PreventionDash.mapHeader(h)", h)
@@ -81,11 +87,17 @@ def run():
         check(pg.is_visible("#cmdSummary") and not pg.is_visible("#kpis") and not pg.is_visible("#tDetail") and not pg.is_visible("#filters"), "print summary shows only the commander summary")
         pg.evaluate("document.body.classList.remove('print-cs')"); pg.emulate_media(media="screen")
         check(pg.locator("#corrList > li").count() >= 3 and "V = " in pg.inner_text("#corrList") and pg.locator("#tCorr td").count() > 100, "correlation matrix + ranked plain-English list")
-        for t in ["tHeat", "tHeatDH", "tHeatLM", "tHeatUD", "tHeatGM"]:
+        check(not pg.is_visible("#fTod") and not pg.is_visible("#tHeatDH"), "date-only data: Time of day filter and day x time heat map hidden")
+        foc = pg.inner_text("#focus")
+        check("1800" not in cs and "0259" not in cs and "Peak hours" not in foc and "0000" not in pg.inner_text("main"), "date-only data: no hour text or midnight artifacts")
+        check("Weekend vs weekday" in cs and "weekday daily rate" in cs, "commander summary has the weekend vs weekday line")
+        check("Weekends:" in foc, "weekend recommendation replaces peak hours")
+        check("Holiday" in pg.inner_text("#weak") + cs and "drill" in cs.lower() and "payday" in cs.lower(), "holiday, payday and drill analysis kept")
+        for t in ["tHeat", "tHeatDM", "tHeatLM", "tHeatUD", "tHeatGM"]:
             check(pg.locator(f"#{t} td.hot").count() > 0, f"heat map {t} rendered with clickable cells")
         check("<5" in pg.inner_text("#tHeatLM"), "heat map suppresses cells under 5")
-        cell = pg.locator("#tHeatDH td.hot").first; cell.click(); pg.wait_for_timeout(400)
-        check(pg.input_value("#fDow") != "" and pg.input_value("#fTod") != "", f"heat-map click filters day + time ({pg.input_value('#fDow')} {pg.input_value('#fTod')})")
+        cell = pg.locator("#tHeatDM td.hot").first; cell.click(); pg.wait_for_timeout(400)
+        check(pg.input_value("#fDow") != "" and pg.input_value("#fFm") != "", f"heat-map click filters day + fiscal month ({pg.input_value('#fDow')} {pg.input_value('#fFm')})")
         pg.click("#btnReset"); pg.wait_for_timeout(300)
         cell = pg.locator("#tHeatUD td.hot").first; cell.click(); pg.wait_for_timeout(400)
         check(pg.input_value("#fUnit") != "" and pg.input_value("#fDuty") != "", "heat-map click filters unit + duty status")
@@ -114,9 +126,9 @@ def run():
         pg.click("#btnGenAI"); pg.wait_for_timeout(500)
         clip = pg.evaluate("navigator.clipboard.readText()")
         check("commander" in clip and "AGGREGATED DATA" in clip and "Incidents by fiscal month" in clip and "hot spots" in clip.lower(), "GenAI pack copied with prompt + aggregates")
-        check(not re.search(r"\d{6}\s?[A-Z]?\s?(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)", clip) and "Strongest associations" in clip and "day of week x time of day" in clip, "GenAI pack: no DTGs; has day x time + associations")
+        check(not re.search(r"\d{6}\s?[A-Z]?\s?(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)", clip) and "Strongest associations" in clip and "day of week x fiscal month" in clip and "time of day" not in clip and "1800" not in clip and "Weekend vs weekday" in clip, "GenAI pack: no DTGs or hours; has day x month, weekend line + associations")
         check(not re.search(r"P-\d{4}", clip) and not re.search(r"\d{4}-\d{2}-\d{2}", clip) and not re.search(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b", clip), "GenAI pack has no IDs or exact dates")
-        check(not re.search(r"\b[1-4] \(", clip) and ": 1 " not in clip, "GenAI pack: no counts under 5 shown")
+        check(not re.search(r"(?<![-\w.])[1-4] \(", clip) and ": 1 " not in clip, "GenAI pack: no counts under 5 shown")
         with pg.expect_download() as dl: pg.click("#btnGenAITxt")
         check(dl.value.suggested_filename.endswith(".txt"), "GenAI pack .txt download")
         check("agency-approved GenAI tool" in pg.inner_text("#genaiNote"), "on-page GenAI note")
@@ -128,7 +140,7 @@ def run():
         check("Showing data loaded from your files" in pg.inner_text("#dataDisclaimer"), "footer switches to own-data text")
         for h in ["Last", "First", "SSN", "DoD ID", "DOB"]: check(re.search(r"\b" + h + r"\b", rep), f"load report lists skipped column {h}")
         pg.select_option("#fUnit", "Test Co"); pg.wait_for_timeout(400)
-        check(pg.evaluate("window.PreventionDash.state.base.filter(r => r.hour != null).length") == 9 and pg.evaluate("window.PreventionDash.state.base.every(r => r.fy === 'FY26' && String(r.ty) === '2025' && r.duty === 'Off Duty')"), "test file: DTG hours, TY, FY26 and 'Duty Stays' column read")
+        check(pg.evaluate("window.PreventionDash.state.base.length") == 9 and pg.evaluate("window.PreventionDash.state.base.every(r => r.hour == null)") and pg.evaluate("window.PreventionDash.state.base.every(r => r.fy === 'FY26' && String(r.ty) === '2025' && r.duty === 'Off Duty')"), "test file: date-only DTGs, TY, FY26 and 'Duty Stays' column read")
         pg.click("#btnReset"); pg.wait_for_timeout(300)
         html = pg.content()
         check(not any(m in html for m in MARKERS), "no PII marker value anywhere in the page")
@@ -162,6 +174,9 @@ def run():
         check(f"{E['incidents'] + 12:,}" in pg2.inner_text("#kpis"), "saved file reloads the same incidents")
         check("per 1,000" in pg2.inner_text("#kpis"), "saved file keeps the headcount")
         check(pg2.evaluate("window.PreventionDash.state.hc.unit['Test Co'] && window.PreventionDash.state.hc.unit['Test Co'].t") == "60", "saved file keeps typed headcounts")
+        pg.set_input_files("#fileInput", [timex]); pg.wait_for_timeout(1500)
+        check(pg.is_visible("#fTod") and pg.is_visible("#tHeatDH"), "DTGs with times: Time of day filter and day x time heat map appear")
+        check(pg.evaluate("window.PreventionDash.state.recs.filter(r => r.hour != null).length") == 12, "DTGs with times: hours read")
         check(not net, "no network requests " + str(net[:3]))
         check(not errors, "no console errors " + str(errors[:3]))
         b.close()
