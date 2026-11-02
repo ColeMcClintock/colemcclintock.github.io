@@ -76,7 +76,9 @@
     var ciLoaded = L.ciInfo().size > 0;
     recs.forEach(function (r) {
       var k = L.keyed(r.fa); r.acct = k.acct; r.acctL = k.acct || L.UNMAPPED; r.sag = k.sag; r.mdep = k.mdep;
-      var d = L.ciDesc(r.ci); r.ciDesc = d; r.ciL = d || r.ci; r.ciUnm = ciLoaded && !!r.ci && !d;
+      var d = L.ciDesc(r.ci); r.ciDesc = d; r.ciUnm = ciLoaded && !!r.ci && !d;
+      // shared descriptions already carry one label; an unmapped code stays separate under its raw code
+      r.ciL = d || (r.ciUnm && L.ciIsDesc(r.ci) ? r.ci + " (Unmapped)" : r.ci);
     });
   }
   function keysFrom(entries) {
@@ -388,7 +390,7 @@
     var ciu = Object.create(null), ciList = [];
     S.recs.forEach(function (r) { if (r.ciUnm && !ciu[r.ci]) { ciu[r.ci] = 1; ciList.push(r.ci); } });
     var ciHtml = !L.ciInfo().size ? '<p class="muted">No Commitment Item Key loaded: commitment items show as codes.</p>'
-      : '<p class="ok">Commitment Item Key: ' + plural(L.ciInfo().size, "code") + " with descriptions.</p>" + (ciList.length ? '<p class="warn"><strong>' + plural(ciList.length, "unmapped commitment item") + "</strong> shown as the raw code: " + codes(ciList.slice(0, 15)) + (ciList.length > 15 ? " &hellip;" : "") + ".</p>" : "");
+      : '<p class="ok">Commitment Item Key: ' + plural(L.ciInfo().size, "code") + " with descriptions.</p>" + (function () { var sh = L.ciShared(); return sh.length ? '<p class="muted">' + plural(sh.length, "description") + " shared by several codes, added together in charts, filters and summaries: " + sh.slice(0, 10).map(function (x) { return esc(x.desc) + " (" + esc(x.codes.join(", ")) + ")"; }).join("; ") + (sh.length > 10 ? " &hellip;" : "") + ".</p>" : ""; })() + (ciList.length ? '<p class="warn"><strong>' + plural(ciList.length, "unmapped commitment item") + "</strong> shown as the raw code: " + codes(ciList.slice(0, 15)) + (ciList.length > 15 ? " &hellip;" : "") + ".</p>" : "");
     if (ciList.length) warns++;
     fu.html += ciHtml;
     h.push('<div class="combined"><p class="ok"><strong>Combined: ' + plural(S.recs.length, "line") + " from " + plural(ex.length, "export file") + "</strong> \u00b7 " + plural(S.allobj, "ALLOBJ line") + " removed.</p>" + (ex.length ? "" : '<p class="warn">No funds export loaded yet: Obligation and Disbursement are $0. Load the export with &ldquo;Add more files&rdquo;.</p>') + fu.html + (S.plan ? '<p class="ok">Spend plan: ' + plural(S.plan.rows.length, "row") + " from " + esc(S.plan.files.join(", ")) + ".</p>" : '<p class="muted">No spend plan loaded (optional): the trend chart shows actuals and the straight-line pace only.</p>') + "</div>");

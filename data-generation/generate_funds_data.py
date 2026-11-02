@@ -36,10 +36,11 @@ ACCOUNTS = [("OMNG", "Course Supplies", "1N", "TATM", 3), ("OMNG", "Lawyers", "1
             ("OMNG", "Recruiting Travel", "133", "VRCT", 2), ("OMNG", "IT Equipment", "133", "QNMG", 2), ("OMNG", "Family Programs", "1N", "VCND", 1),
             ("NGPA", "Drill Pay", "1N", "VNGP", 3), ("NGPA", "Annual Training Pay", "1N", "VNGP", 2), ("NGPA", "Bonuses & Incentives", "111", "VRCT", 2),
             ("MCNG", "Readiness Center Repair", "131", "FCMC", 2), ("MCNG", "Range Construction", "131", "QDPW", 1)]
-CI = {"OMNG": ["21T0", "22NL", "26RB", "252G", "26FF", "2571", "23U1"], "NGPA": ["1198", "1199", "1250", "21T0"], "MCNG": ["252G", "32B1", "26RB"]}
+CI = {"OMNG": ["21T0", "21T1", "22NL", "26RB", "252G", "26FF", "2571", "23U1"], "NGPA": ["1198", "1199", "1250", "21T0"], "MCNG": ["252G", "32B1", "26RB"]}
 CI_DESC = {"21T0": "Travel (example)", "22NL": "Transportation (example)", "26RB": "Supplies (example)", "252G": "Contract Services (example)",
            "26FF": "Fuel (example)", "2571": "Equipment Maintenance (example)", "32B1": "Construction (example)",
-           "1198": "Military Pay - Drill (example)", "1199": "Military Pay - Annual Training (example)", "1250": "Bonuses & Allowances (example)"}
+           "1198": "Military Pay - Drill (example)", "1199": "Military Pay - Annual Training (example)", "1250": "Bonuses & Allowances (example)",
+           "21T1": "  travel  (EXAMPLE) "}          # second code with the SAME description (other case/spacing): combined with 21T0
 # 23U1 is deliberately missing from the Commitment Item Key so the demo shows an Unmapped code
 LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ"
 used_fa = set()
@@ -128,7 +129,11 @@ summary = {"lines": len(rows), "allobj": n_allobj, "kept": len(kept),
            "reservations": round(sum(f["Reservations"] for f in funding), 2), "fundingRows": len(funding), "planRows": len(plan),
            "planTotal": round(sum(x["Planned Amount"] for x in plan), 2), "accounts": len(ACCOUNTS), "functionalAreas": len(FAS),
            "unmappedFa": UNMAPPED_FA["fa"], "unmappedLines": sum(1 for r in kept if not r["_acct"]),
-           "documents": len({r["contract_doc_no"] for r in kept if r["contract_doc_no"]})}
+           "documents": len({r["contract_doc_no"] for r in kept if r["contract_doc_no"]}),
+           "sharedDesc": {"codes": ["21T0", "21T1"], "label": CI_DESC["21T0"],
+                          "obligation": round(-sum(r["obligation_amt_cum"] for r in kept if r["commitment_item_fipex"] in ("21T0", "21T1")), 2),
+                          "lines": sum(1 for r in kept if r["commitment_item_fipex"] in ("21T0", "21T1")),
+                          "linesSecond": sum(1 for r in kept if r["commitment_item_fipex"] == "21T1")}}
 
 os.makedirs(os.path.join(DIR, "data"), exist_ok=True)
 def tbl(H, recs): return {"headers": H, "rows": [[x[h] for h in H] for x in recs]}

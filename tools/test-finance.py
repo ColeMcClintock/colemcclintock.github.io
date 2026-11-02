@@ -29,13 +29,13 @@ H = ["fund", "contract_doc_no", "commitment_item_fipex", "functional_area_farea"
 FAS = ["121G11ABCD", "131G21TRNG", "113G05LGLS", "1N0G44MEDS", "999G99NOFD"]          # last one is not in the Account Key
 ACCT = {"121G11ABCD": "Course Supplies", "131G21TRNG": "Course Supplies", "113G05LGLS": "Lawyers", "1N0G44MEDS": "Lawyers"}
 SAGM = {"Course Supplies": ("1N", "TATM"), "Lawyers": ("131", "QLPR")}
-CIS = ["21T100", "26FF00", "252G00", "31EQ00"]
-CIDESC = {"21T100": "Travel (example)", "26FF00": "Fuel (example)", "252G00": "Contract Services (example)"}   # 31EQ00 unmapped
+CIS = ["21T100", "21T200", "26FF00", "252G00", "31EQ00"]
+CIDESC = {"21T100": "Travel (example)", "21T200": " travel  (EXAMPLE) ", "26FF00": "Fuel (example)", "252G00": "Contract Services (example)"}   # 31EQ00 unmapped
 def styled(v, style):   # v is the export value (negative for obligations)
     return {0: v, 1: (f"-${abs(v):,.2f}" if v < 0 else f"${v:,.2f}"), 2: (f"({abs(v):,.2f})" if v < 0 else f"{v:,.2f}"), 3: (f"{abs(v):,.2f}-" if v < 0 else str(v)), 4: v}[style]
 def make(n, seed):
     r = random.Random(seed); rows = []
-    exp = {"obl": 0.0, "com": 0.0, "disb": 0.0, "fy_acct": {}, "fy_m": {}, "badm": 0, "kept": 0, "allobj": 0, "docs": set(), "unm": 0}
+    exp = {"obl": 0.0, "com": 0.0, "disb": 0.0, "fy_acct": {}, "fy_m": {}, "ci": {}, "badm": 0, "kept": 0, "allobj": 0, "docs": set(), "unm": 0}
     for i in range(n):
         allobj = r.random() < 0.08
         ci = r.choice(["ALLOBJ", " allobj", "Allobj "]) if allobj else r.choice(CIS)
@@ -56,6 +56,7 @@ def make(n, seed):
         rows.append(row)
         if allobj: exp["allobj"] += 1; continue
         exp["obl"] += obl; exp["com"] += com_v; exp["disb"] += disb; exp["kept"] += 1; exp["docs"].add(doc)
+        exp["ci"][ci] = exp["ci"].get(ci, 0.0) + obl
         a = ACCT.get(fa)
         if not a: exp["unm"] += 1
         g = exp["fy_acct"].setdefault((fy, a or fa), [0.0, 0.0]); g[0] += obl; g[1] += disb
@@ -161,6 +162,15 @@ def run():
         check("FUNCTIONAL AREAS" in pg.inner_text("#tFund thead").upper() and "Unmapped" in fu and D["unmappedFa"] in fu, "demo: funding table per Account with FAs, unmapped FA flagged")
         check("Travel (example)" in pg.inner_text("#tDocs tbody") and "Travel (example)" in pg.inner_text("#fCi"), "demo: commitment item descriptions in table and filter")
         check("23U1" in pg.inner_text("#fCi"), "demo: unmapped CI code shown raw")
+        SD = D["sharedDesc"]; opts = pg.eval_on_selector_all("#fCi option", "o => o.map(x => x.textContent)")
+        check(sum(1 for o in opts if o.replace(" ", "").upper() == SD["label"].replace(" ", "").upper()) == 1, "demo: codes sharing a description give ONE filter entry " + SD["label"])
+        lab = pg.evaluate("DashKit.charts.cCi.data.labels"); val = pg.evaluate("DashKit.charts.cCi.data.datasets[0].data")
+        check(SD["label"] in lab and close(val[lab.index(SD["label"])], SD["obligation"]) and sum(1 for x in lab if "TRAVEL" in x.upper()) == 1, f"demo: chart bar for shared description sums both codes ({SD['obligation']:,.2f})")
+        pg.select_option("#fCi", SD["label"]); pg.wait_for_timeout(300)
+        check(money_text(SD["obligation"]) in kt(pg, "obl") and f"{SD['lines']} lines" in pg.inner_text("#kpis"), "demo: selecting the shared description selects both codes")
+        codes_shown = set(re.findall(r"\b21T[01]\b", pg.inner_text("#tDocs tbody")))
+        check(codes_shown == set(SD["codes"]), "demo: line table keeps per-line rows with each CI Code " + str(codes_shown))
+        pg.click("#btnReset"); pg.wait_for_timeout(200)
         check("XX" not in pg.inner_text("#fSag") and "Unmapped" in pg.inner_text("#fSag"), "demo: Sag from the key (export sag ignored), Unmapped option")
         fm_opts = pg.eval_on_selector_all("#fFm option", "o => o.map(x => x.textContent)")
         check(fm_opts[1:13] == [f"{i} - {m}" for i, m in enumerate(MON, 1)], "demo: Fiscal Month filter in FY order")
@@ -208,6 +218,15 @@ def run():
         tf = pg.inner_text("#tFund")
         check("Course Supplies" in tf and "121G11ABCD, 131G21TRNG" in tf and "Unmapped" in tf, "funding table: one row per Account listing its FAs; unmapped row")
         check("Travel (example)" in pg.inner_text("#tDocs") and "21T100" in pg.inner_text("#tDocs"), "CI key: description shown, code kept in CI Code column")
+        trv = sum(e["ci"].get(c, 0) for e in (e1, e2) for c in ("21T100", "21T200")); unm = sum(e["ci"].get("31EQ00", 0) for e in (e1, e2))
+        opts = pg.eval_on_selector_all("#fCi option", "o => o.map(x => x.textContent)")
+        check([o for o in opts if "TRAVEL" in o.upper()] == ["Travel (example)"] and "31EQ00" in opts, "CI key: 21T100 + 21T200 (description differs in case/spaces) = one filter entry; unmapped code separate")
+        lab = pg.evaluate("DashKit.charts.cCi.data.labels"); val = pg.evaluate("DashKit.charts.cCi.data.datasets[0].data")
+        check(close(val[lab.index("Travel (example)")], round(trv, 2)) and close(val[lab.index("31EQ00")], round(unm, 2)), f"CI chart: shared description summed ({trv:,.2f}); unmapped code its own bar")
+        check("shared by several codes" in pg.inner_text("#loadReport") and "21T100, 21T200" in pg.inner_text("#loadReport"), "report: lists codes combined under one description")
+        pg.select_option("#fCi", "Travel (example)"); pg.wait_for_timeout(300)
+        check(money_text(round(trv, 2)) in kt(pg, "obl") and "21T200" in pg.inner_text("#tDocs") and "21T100" in pg.inner_text("#tDocs"), "CI filter: one entry selects all its codes; table keeps CI Code")
+        pg.click("#btnReset"); pg.wait_for_timeout(200)
         check("Course Supplies" in pg.inner_text("#fAcct") and pg.eval_on_selector_all("#fSag option", "o => o.map(x => x.textContent)")[1:] == ["1N", "131", "Unmapped"], "Sag filter uses keyed values")
         # per-account balance
         pg.select_option("#fAcct", "Course Supplies"); pg.select_option("#fFy", "2026"); pg.wait_for_timeout(300)
@@ -244,6 +263,7 @@ def run():
         check(csvt.splitlines()[0] == LINE_CSV, "line csv header " + csvt.splitlines()[0])
         check("Travel (example)" in csvt and "31EQ00 (Unmapped)" in csvt and SSN not in csvt and "ALLOBJ" not in csvt.upper(), "line csv: descriptions, unmapped code, no ssn/ALLOBJ")
         check(len(csvt.strip().splitlines()) == e1["kept"] + e2["kept"] + 1, "line csv: all lines")
+        check(re.search(r",Travel \(example\),21T200,", csvt) is not None and re.search(r",Travel \(example\),21T100,", csvt) is not None, "line csv: per-line rows, same description, own CI Code")
         # save with data
         with pg.expect_download() as dl: pg.click("#btnSave")
         d = dl.value; saved = os.path.join(tmp, d.suggested_filename); d.save_as(saved)

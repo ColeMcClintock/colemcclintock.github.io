@@ -213,11 +213,22 @@
     rep.rowsLoaded = out.length;
     return { rows: out, report: rep };
   }
+  // Descriptions are matched ignoring case and spaces: every code whose description matches gets the SAME label
+  // (the first spelling in the key), so charts, filters and summaries add those codes together.
+  function dk(d) { return String(d || "").toUpperCase().replace(/\s+/g, ""); }
   function buildCiKey(entries) {
-    var C = { map: Object.create(null), size: 0, files: entries.map(function (e) { return e.name; }), conflicts: 0 };
-    entries.forEach(function (e) { e.rows.forEach(function (r) { var k = kn("ci", r.ci); if (C.map[k]) { if (C.map[k] !== r.desc) C.conflicts++; return; } C.map[k] = r.desc; C.size++; }); });
+    var C = { map: Object.create(null), size: 0, files: entries.map(function (e) { return e.name; }), conflicts: 0, canon: Object.create(null), codes: Object.create(null) };
+    entries.forEach(function (e) { e.rows.forEach(function (r) {
+      var k = kn("ci", r.ci), d = dk(r.desc);
+      if (C.map[k]) { if (dk(C.map[k]) !== d) C.conflicts++; return; }
+      if (!C.canon[d]) { C.canon[d] = r.desc.trim(); C.codes[d] = []; }
+      C.map[k] = C.canon[d]; C.codes[d].push(r.ci); C.size++;
+    }); });
     CIKEY = C; return C;
   }
+  function ciIsDesc(v) { return !!CIKEY.canon && !!CIKEY.canon[dk(v)]; }
+  function ciCodes(desc) { return (CIKEY.codes && CIKEY.codes[dk(desc)]) || []; }
+  function ciShared() { var out = []; Object.keys(CIKEY.codes || {}).forEach(function (d) { if (CIKEY.codes[d].length > 1) out.push({ desc: CIKEY.canon[d], codes: CIKEY.codes[d] }); }); return out; }
   function ciDesc(code) { return code ? CIKEY.map[kn("ci", code)] || "" : ""; }
   function ciRows() { var out = []; Object.keys(CIKEY.map).forEach(function (k) { out.push([k, CIKEY.map[k]]); }); return out; }
 
@@ -418,7 +429,7 @@
     isAllobj: isAllobj, FY_MON: FY_MON, fmNum: fmNum, fmLabel: fmLabel, fiscalNow: fiscalNow, kn: kn, an: an, n: n, full: full, plural: plural, cmpVal: cmpVal, isObj: isObj,
     aoaSource: aoaSource, sheetSource: sheetSource, rowsSource: rowsSource, mapHeaders: mapHeaders, badNum: badNum,
     FLABEL: FLABEL, keyLabel: keyLabel, classify: classify, parseFunding: parseFunding, buildFund: buildFund, parseKey: parseKey, buildKey: buildKey,
-    parseCiKey: parseCiKey, buildCiKey: buildCiKey, ciDesc: ciDesc, ciRows: ciRows, ciInfo: function () { return CIKEY; },
+    parseCiKey: parseCiKey, buildCiKey: buildCiKey, ciDesc: ciDesc, ciRows: ciRows, ciIsDesc: ciIsDesc, ciCodes: ciCodes, ciShared: ciShared, ciInfo: function () { return CIKEY; },
     acctOf: acctOf, keyed: keyed, keyRows: keyRows, keyInfo: function () { return KEY; }, joined: joined, reportLines: reportLines, fileLines: fileLines,
     table: { render: renderTable, exportCsv: exportCsv, sortBy: sortBy, toggleAll: function () { T.all = !T.all; } }
   };
