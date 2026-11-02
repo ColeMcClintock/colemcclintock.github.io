@@ -88,7 +88,7 @@ table.corrm td.diag{background:transparent!important}
 label.toggle{display:flex;align-items:center;gap:6px;font-size:.85rem;color:#dbe4ef;margin-right:6px}
 #rowsNote[hidden],#rowsWrap[hidden],#fSearch[hidden],#btnCsv[hidden]{display:none!important}
 @media print{
-  body.print-cs main>*:not(#cmdSummary):not(#realBanner):not(.titlebar){display:none!important}
+  body.print-cs main>*:not(#cmdSummary):not(#mapPanel):not(#realBanner):not(.titlebar){display:none!important}
   body.print-cs .titlebar .actions{display:none!important}
   body.print-cs #cmdSummary{border:1px solid #999!important;break-inside:auto}
   .cmdlist,.cmd #summary{color:#111!important}
@@ -99,3 +99,28 @@ label.toggle{display:flex;align-items:center;gap:6px;font-size:.85rem;color:#dbe
 table.corrm{width:100%}
 #tHeatDH{width:100%}
 .filters label[hidden]{display:none!important}
+/* incident map */
+.mapwrap{position:relative;max-width:980px;margin:0 auto}
+.incmap svg{width:100%;height:auto;display:block}
+.m-county{fill:none;stroke:rgba(200,214,232,.2);stroke-width:.8}
+.m-state{fill:rgba(255,255,255,.035);stroke:#c8d6e8;stroke-width:2.2;stroke-linejoin:round}
+.m-dot{cursor:pointer}.m-dot circle{stroke:#fff;stroke-width:1.2;fill-opacity:.9}
+.m-dot:hover circle,.m-dot:focus circle,.m-dot.on circle{stroke:#ffd166;stroke-width:3}
+.m-dot:focus{outline:none}
+.m-dot.small circle{fill:#8b97a8;stroke:#dbe4ef;stroke-width:1}
+.m-dot.dim{opacity:.3}
+.m-dot text{fill:#fff;font-size:12px;font-weight:700;text-anchor:middle;pointer-events:none;paint-order:stroke;stroke:rgba(0,0,0,.5);stroke-width:2.5px}
+.m-name{fill:#dbe4ef;font-size:13px;pointer-events:none;paint-order:stroke;stroke:#0f1b2d;stroke-width:3px}
+.maptip{position:absolute;pointer-events:none;background:#0b1422;border:1px solid #c8d6e8;color:#fff;border-radius:6px;padding:5px 9px;font-size:.82rem;z-index:5;white-space:nowrap}
+.maplegend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;justify-content:center;font-size:.8rem;color:#dbe4ef;margin:6px 0}
+.lg-item{display:inline-flex;align-items:center;gap:5px}.lg-item svg circle{stroke:#fff;stroke-width:1}.lg-small{fill:#8b97a8}
+.lg-ramp{display:inline-block;width:120px;height:10px;border-radius:5px;background:linear-gradient(90deg,rgb(252,187,161),rgb(153,0,13))}
+.lg-cap{color:var(--muted)}
+.warnline{color:#ffcf99}.warnline:empty{display:none}
+.filters label.smalltoggle{flex:0 0 auto;min-width:0;flex-direction:row;text-transform:none;letter-spacing:0;align-self:flex-end;font-size:.85rem;color:#dbe4ef;padding-bottom:8px}
+@media print{
+  #mapPanel{break-inside:avoid}
+  .m-state{fill:none;stroke:#333}.m-county{stroke:#bbb}.m-name{fill:#111;stroke:#fff}.maplegend,.lg-cap{color:#111!important}
+  .m-dot circle,.lg-ramp{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+@media print{.mapwrap{max-width:5.6in}#mapPanel>p.muted.small:last-child{display:none}}

@@ -2,7 +2,7 @@
 """Fictional alcohol-incident data for the Incident Trends & Prevention dashboard. FICTIONAL DATA ONLY.
 
 No real people: Person IDs are random pseudonyms (P-0001 ...), units come from the shared fictional roster
-(data/units.json). Built-in patterns so the dashboard has trends to find: young E-3/E-4, single, male,
+(data/units.json). Built-in patterns so the dashboard has trends to find: young E-3/E-4, male, (internally: single; marital status is not written out),
 0-12 months after redeployment, holiday and payday windows, two higher-rate units; finishing the program cuts repeats.
 
 Writes:
@@ -27,7 +27,7 @@ rng = random.Random(4242)
 
 # Core columns = the real tracker's headers (Last / First are left out: the dashboard skips name columns unread), then optional ones
 CORE = ["TY", "Grade", "DTG of Incident", "Location", "Duty Status", "Age", "Gender", "Unit"]
-OPTIONAL = ["Person ID", "Status", "MOS", "Time in Service (yrs)", "Marital Status", "Dependents", "Incident Type",
+OPTIONAL = ["Person ID", "Status", "MOS", "Time in Service (yrs)", "Dependents", "Incident Type",
             "Months Since Deployment", "Prior Incidents", "Referred to Treatment", "Completed Program", "Repeat Incident", "Outcome"]
 HEADERS = CORE + OPTIONAL
 ROSTER_HEADERS = ["Unit", "Location", "Grade", "Gender", "Age Band", "Count"]
@@ -172,7 +172,7 @@ for r in incidents:
     h, mi = hour_for(r), rng.choice([0, 5, 10, 15, 20, 30, 40, 45, 50])
     r["sort"] = (r["d"], h, mi)
     core = [r["d"].year, p["grade"], dtg(r["d"], h, mi), p["u"]["location"], r["duty"], r["age"], p["gender"], p["u"]["unit_name"]]
-    opt = [pid[id(p)], p["status"], p["mos"], round(p["tis"] + (r["d"] - START).days / 365.25, 1), p["marital"], p["deps"], r["t"],
+    opt = [pid[id(p)], p["status"], p["mos"], round(p["tis"] + (r["d"] - START).days / 365.25, 1), p["deps"], r["t"],
            "" if r["msd"] is None else r["msd"], r["prior"], r["ref"], "" if r["ref"] == "N" else r["comp"], r["rep"], outcome(r)]
     rows.append((r["sort"], core + opt))
 rows = [x[1] for x in sorted(rows, key=lambda x: x[0])]

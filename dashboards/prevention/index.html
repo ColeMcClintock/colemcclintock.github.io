@@ -84,13 +84,13 @@
     <label>Age band<select id="fAge"></select></label>
     <label>Gender<select id="fGender"></select></label>
     <label>Status<select id="fStatus"></select></label>
-    <label>Marital status<select id="fMarital"></select></label>
     <label>Incident type<select id="fType"></select></label>
     <label>Duty status<select id="fDuty"></select></label>
     <label>Since deployment<select id="fMsd"></select></label>
     <label>Holiday / payday<select id="fWin"></select></label>
     <label>Day of week<select id="fDow"></select></label>
     <label>Time of day<select id="fTod"></select></label>
+    <label class="toggle smalltoggle" title="Show groups with fewer than 5 incidents as &lt;5. The Copy for GenAI pack always hides them."><input type="checkbox" id="hideSmall"> Hide small groups (&lt;5)</label>
     <button class="btn ghost" id="btnReset" type="button">Reset</button>
   </div>
 
@@ -112,10 +112,20 @@
     <p class="muted small" id="cmdScope"></p>
     <p id="summary">Loading&hellip;</p>
     <ul id="cmdBullets" class="cmdlist"></ul>
-    <p class="muted small">Auto-generated on this device from the current filters. Groups with fewer than 5 incidents are shown as &lt;5 and left out of rankings. Associations in the data are not proof of cause.</p>
+    <p class="muted small">Auto-generated on this device from the current filters. Rankings and recommendations need at least 5 incidents per group, for statistical stability. Tick &ldquo;Hide small groups&rdquo; to show counts under 5 as &lt;5. Associations in the data are not proof of cause.</p>
   </section>
 
   <section class="kpis k6" id="kpis" aria-label="Key indicators"></section>
+
+  <section class="panel mappanel" id="mapPanel" data-req="loc">
+    <h2>Incident map</h2>
+    <p class="muted small">One bubble per Location in the current filters (all filters apply; a selected location is highlighted). Bigger and redder = more incidents. Hover for the count; click to filter.</p>
+    <div class="mapwrap"><div id="incMap" class="incmap"></div><div id="mapTip" class="maptip" hidden></div></div>
+    <div id="mapLegend" class="maplegend"></div>
+    <p class="muted small" id="mapNote"></p>
+    <p class="small warnline" id="mapMiss"></p>
+    <p class="muted small">Outline, county lines and town positions: U.S. Census Bureau cartographic boundary and Gazetteer files (public domain), built into this file. Location matching ignores case, punctuation and words like Armory, Readiness Center, RC, IA or Iowa; Camp Dodge places at Johnston and the air bases at Sioux City and Des Moines.</p>
+  </section>
 
   <div class="row r2b">
     <section class="panel insights">
@@ -143,7 +153,6 @@
   <div class="row r3b">
     <section class="panel" data-req="gender"><h2>Gender</h2><div class="chartbox short"><canvas id="cGender"></canvas></div></section>
     <section class="panel" data-req="status"><h2>Status</h2><div class="chartbox short"><canvas id="cStatus"></canvas></div></section>
-    <section class="panel" data-req="marital"><h2>Marital status</h2><div class="chartbox short"><canvas id="cMarital"></canvas></div></section>
   </div>
   <div class="row r2b">
     <section class="panel" data-req="loc"><h2>Location / armory</h2><div class="chartbox tall"><canvas id="cLoc"></canvas></div></section>
@@ -158,20 +167,16 @@
     <section class="panel" data-req="date"><h2>Which holidays</h2><div class="chartbox"><canvas id="cHol"></canvas></div><p class="muted small">Incidents within 3 days of each holiday (federal holidays plus New Year&rsquo;s Eve and St. Patrick&rsquo;s Day).</p></section>
     <section class="panel" data-req="rep"><h2>Repeat rate by treatment</h2><div class="chartbox"><canvas id="cRepeat"></canvas></div><p class="muted small" id="repNote"></p></section>
   </div>
-  <p class="muted small chartnote no-print">Click a bar to filter by it. Bars for groups under 5 are hidden and labelled &lt;5. With a headcount, the line shows incidents per 1,000 assigned (annualized).</p>
+  <p class="muted small chartnote no-print">Click a bar to filter by it. With &ldquo;Hide small groups&rdquo; ticked, bars under 5 are hidden and labelled &lt;5. With a headcount, the line shows incidents per 1,000 assigned (annualized).</p>
 
   <section class="panel heats">
     <h2>Hot spots</h2>
-    <p class="muted small">Incident counts in the current selection. Darker = more incidents. Cells under 5 show &lt;5. Click a cell to filter by both values.</p>
+    <p class="muted small">Incident counts in the current selection. Darker = more incidents. Real counts are shown unless &ldquo;Hide small groups&rdquo; is ticked. Click a cell to filter by both values.</p>
     <div><h3 class="sub">Day of week &times; fiscal month (all selected years)</h3><div class="tablewrap"><table class="heat clickheat" id="tHeatDM"></table></div></div>
     <div data-req="tod"><h3 class="sub">Day of week &times; time of day (shown only when the DTGs include times)</h3><div class="tablewrap"><table class="heat clickheat" id="tHeatDH"></table></div></div>
     <div class="row r2b">
       <div data-req="grade,ageBand"><h3 class="sub">Grade &times; age band</h3><div class="tablewrap"><table class="heat clickheat" id="tHeat"></table></div></div>
       <div data-req="unit,duty"><h3 class="sub">Unit &times; duty status</h3><div class="tablewrap"><table class="heat clickheat" id="tHeatUD"></table></div></div>
-    </div>
-    <div class="row r2b">
-      <div data-req="loc"><h3 class="sub">Location &times; fiscal month (all selected years)</h3><div class="tablewrap"><table class="heat clickheat" id="tHeatLM"></table></div></div>
-      <div data-req="grade,marital"><h3 class="sub">Grade &times; marital status</h3><div class="tablewrap"><table class="heat clickheat" id="tHeatGM"></table></div></div>
     </div>
   </section>
 
@@ -199,10 +204,10 @@
       <li><strong>Unique people</strong> = distinct Person IDs. <strong>Repeat rate</strong> = people with 2 or more incidents in the selection, or any incident marked Repeat Incident = Y, divided by unique people.</li>
       <li><strong>% referred</strong> = incidents with Referred to Treatment = Y. <strong>% completed</strong> = Completed Program = Y among referred incidents.</li>
       <li><strong>Trend vs prior FY</strong> compares the latest (or selected) fiscal year with the year before over the same fiscal months, so a part year is compared fairly.</li>
-      <li><strong>Rates per 1,000</strong> need a headcount (file or typed). Rate = incidents &divide; assigned &times; 1,000 &times; 12 &divide; months in the period (annualized). <strong>Relative risk</strong> = a group's rate &divide; the overall rate. Rates only show when the headcount covers the current filters (for example a Status or Marital filter has no headcount, so rankings fall back to shares).</li>
+      <li><strong>Rates per 1,000</strong> need a headcount (file or typed). Rate = incidents &divide; assigned &times; 1,000 &times; 12 &divide; months in the period (annualized). <strong>Relative risk</strong> = a group's rate &divide; the overall rate. Rates only show when the headcount covers the current filters (for example a Status or Since-deployment filter has no headcount, so rankings fall back to shares).</li>
       <li><strong>Without a headcount</strong>, weak spots use the share of incidents, the repeat rate compared with the overall repeat rate, and (for timing) incidents per day compared with other days.</li>
       <li><strong>Holiday window</strong> = within 3 days of a federal holiday, New Year&rsquo;s Eve or St. Patrick&rsquo;s Day. <strong>Payday window</strong> = 0&ndash;3 days after the 1st or 15th. Their relative risk compares incidents per calendar day inside vs outside the window.</li>
-      <li><strong>Small cells</strong>: any group with fewer than 5 incidents shows &lt;5, is hidden from charts and the GenAI pack, and is left out of rankings and recommendations.</li>
+      <li><strong>Small groups</strong>: counts are shown in full on the dashboard by default. &ldquo;Hide small groups (&lt;5)&rdquo; shows any group under 5 as &lt;5 on the map, charts, heat maps and summary. Rankings and recommendations always need 5+ incidents per group, for statistical stability. The Copy for GenAI pack and .txt always hide groups under 5, whatever the setting, because that text leaves the dashboard.</li>
       <li><strong>Privacy</strong>: columns whose header is a name, SSN, DoD ID / EDIPI or date of birth are skipped without reading. Blank, #REF! and other Excel error cells count as blank. Everything runs in this browser; no network requests.</li>
       <li><strong>Correlations</strong>: bias-corrected Cram&eacute;r&rsquo;s V from a chi-square test on each pair of fields (values under 5 pooled), needing 30+ incidents. Pairs that are related by design (unit and location, referred and completed, grade and age or service) are listed separately and not ranked.</li>
       <li>Automated recommendations are generated from the data to start a discussion. They are not clinical or legal advice.</li>
@@ -222,6 +227,7 @@
 <script src="../../assets/vendor/xlsx.full.min.js"></script>
 <script src="../../assets/js/dashkit.js"></script>
 <script src="data/prevention_demo.js"></script>
+<script src="data/iowa_geo.js"></script>
 <script src="prevention.js"></script>
 </body>
 </html>

@@ -25,13 +25,13 @@ tmp = tempfile.mkdtemp(prefix="prev-test-")
 # 'Duty Stays' typo, an Excel-escaped header, a #REF! cell, DTGs in several military formats plus Excel date-times and text dates
 wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Export"
 ws.append(["Incident report (fictional)"]); ws.append([])
-ws.append(["TY", "Grade", "Last", "First", "DTG of Incident", "Location", "Duty Stays", "Age", "Gender", "Unit", "SSN", "DoD ID", "DOB", "person_id", "Status", "Incident_x0020_Type", "Referred", "Completed", "Repeat Incident", "Notes"])
+ws.append(["TY", "Grade", "Last", "First", "DTG of Incident", "Location", "Duty Stays", "Age", "Gender", "Unit", "SSN", "DoD ID", "DOB", "person_id", "Status", "Incident_x0020_Type", "Referred", "Completed", "Repeat Incident", "Notes", "Marital Status"])
 DTGS = ["02OCT25", "03 OCT 25", "04OCT2025", dt.datetime(2025, 10, 5), "10/6/2025", "07-Oct-25",   # date only, like Cole's tracker
         "08 OCT 2025", "09OCT25", dt.date(2025, 10, 10), "11OCT25", "12oct25", "13OCT25"]
 rows = []
 for i in range(12):
-    rows.append([2025, ["SPC", "E4", "PFC", "SGT"][i % 4], "Zzmarkername", "Zzmarkername", DTGS[i], "Testville", "Off Duty", 20 + i % 5, "M" if i % 4 else "F", "Test Co" if i < 9 else "Tiny Co",
-                 "999-00-4321", "1234567890", dt.date(1999, 1, 2), "T-%03d" % (i % 9), ["TS", "AGR", "Tech"][i % 3], "dui" if i % 2 else "Public Intox", "Y", "N" if i % 3 else "Y", "N", "#REF!"])
+    rows.append([2025, ["SPC", "E4", "PFC", "SGT"][i % 4], "Zzmarkername", "Zzmarkername", DTGS[i], "Camp Dodge Armory" if i < 9 else "Testville", "Off Duty", 20 + i % 5, "M" if i % 4 else "F", "Test Co" if i < 9 else "Tiny Co",
+                 "999-00-4321", "1234567890", dt.date(1999, 1, 2), "T-%03d" % (i % 9), ["TS", "AGR", "Tech"][i % 3], "dui" if i % 2 else "Public Intox", "Y", "N" if i % 3 else "Y", "N", "#REF!", "Married" if i % 2 else "Single"])
 for r in rows: ws.append(r)
 ws.cell(row=5, column=20).value = "#REF!"
 testx = os.path.join(tmp, "test-incidents.xlsx"); wb.save(testx)
@@ -58,6 +58,7 @@ def run():
         check(th[:8] == [c for c in COLE if c not in ("Last", "First")] and "Last" not in th and "First" not in th, "template core columns = Cole's columns minus Last/First: " + ", ".join(th[:8]))
         dh = [c.value for c in next(openpyxl.load_workbook(os.path.join(ROOT, "downloads", "prevention-demo-data.xlsx")).worksheets[0].iter_rows(max_row=1))]
         check(dh[:10] == COLE, "demo workbook uses Cole's headers")
+        check(not any("marital" in str(h).lower() for h in th + dh), "no Marital Status column in the template or demo workbook")
         pg = page_new(); pg.goto("file://" + SINGLE); pg.wait_for_timeout(1500)
         # DTG parsing + header mapping
         P = lambda v: pg.evaluate("v => window.PreventionDash.parseWhen(v)", v)
@@ -84,7 +85,7 @@ def run():
         check(pg.locator("#cmdBullets > li").count() >= 4 and "Commander summary" in cs and "Recommended next steps" in cs, "commander summary at top with bullets + next steps")
         check(pg.evaluate("document.getElementById('cmdSummary').getBoundingClientRect().top < document.getElementById('kpis').getBoundingClientRect().top"), "commander summary above the KPIs")
         pg.emulate_media(media="print"); pg.evaluate("document.body.classList.add('print-cs')")
-        check(pg.is_visible("#cmdSummary") and not pg.is_visible("#kpis") and not pg.is_visible("#tDetail") and not pg.is_visible("#filters"), "print summary shows only the commander summary")
+        check(pg.is_visible("#cmdSummary") and not pg.is_visible("#kpis") and not pg.is_visible("#tDetail") and not pg.is_visible("#filters") and pg.is_visible("#mapPanel"), "print summary (with map) shows only the commander summary")
         pg.evaluate("document.body.classList.remove('print-cs')"); pg.emulate_media(media="screen")
         check(pg.locator("#corrList > li").count() >= 3 and "V = " in pg.inner_text("#corrList") and pg.locator("#tCorr td").count() > 100, "correlation matrix + ranked plain-English list")
         check(not pg.is_visible("#fTod") and not pg.is_visible("#tHeatDH"), "date-only data: Time of day filter and day x time heat map hidden")
@@ -93,9 +94,43 @@ def run():
         check("Weekend vs weekday" in cs and "weekday daily rate" in cs, "commander summary has the weekend vs weekday line")
         check("Weekends:" in foc, "weekend recommendation replaces peak hours")
         check("Holiday" in pg.inner_text("#weak") + cs and "drill" in cs.lower() and "payday" in cs.lower(), "holiday, payday and drill analysis kept")
-        for t in ["tHeat", "tHeatDM", "tHeatLM", "tHeatUD", "tHeatGM"]:
+        mt = pg.inner_text("main").lower()
+        check("marital" not in mt and "married" not in mt and pg.locator("#fMarital").count() == 0 and pg.locator("#tHeatGM, #cMarital").count() == 0, "no marital status anywhere on the page")
+        # incident map
+        nloc = pg.evaluate("new Set(window.PREV_DEMO.rows.map(r => r[window.PREV_DEMO.headers.indexOf('Location')])).size")
+        dots = pg.locator("#incMap .m-dot")
+        check(dots.count() == nloc and pg.locator("#incMap path.m-state").count() == 1 and pg.locator("#incMap path.m-county").count() == 1, f"map: Iowa outline + counties + one bubble per location ({dots.count()}/{nloc})")
+        info = pg.evaluate("""[...document.querySelectorAll('#incMap .m-dot')].map(g => ({ n: +g.dataset.n, r: +g.querySelector('circle').getAttribute('r'), c: g.querySelector('circle').style.fill, loc: g.dataset.loc }))""")
+        top = max(info, key=lambda d: d["n"]); low = min(info, key=lambda d: d["n"])
+        check(top["r"] == max(d["r"] for d in info) and top["c"] == "rgb(153, 0, 13)" and low["r"] < top["r"], f"map: biggest + deepest red bubble = most incidents ({top['loc']} {top['n']})")
+        check(abs(top["r"] / [d for d in info if d["n"] >= 5 and d["r"] > 5][-1]["r"] - (top["n"] / [d for d in info if d["n"] >= 5 and d["r"] > 5][-1]["n"]) ** .5) < 0.05, "map: radius scales with sqrt(count)")
+        check(sum(d["n"] for d in info) == E["incidents"] and "placed" in pg.inner_text("#mapNote") and pg.inner_text("#mapLegend").strip() != "", "map: counts add up; legend shown")
+        dots.filter(has=pg.locator("title", has_text=top["loc"])).first.hover(); pg.wait_for_timeout(150)
+        check(pg.is_visible("#mapTip") and top["loc"] in pg.inner_text("#mapTip") and str(top["n"]) in pg.inner_text("#mapTip"), "map: hover shows location + count")
+        pg.locator(f'#incMap .m-dot[data-loc="{top["loc"]}"]').click(); pg.wait_for_timeout(400)
+        check(pg.input_value("#fLoc") == top["loc"] and f"{top['n']:,}" in pg.inner_text("#kpis .kpi.inc"), "map: click a bubble filters to that location")
+        pg.click("#btnReset"); pg.wait_for_timeout(300)
+        pg.select_option("#fFy", "FY26"); pg.wait_for_timeout(400)
+        s26 = pg.evaluate("[...document.querySelectorAll('#incMap .m-dot')].reduce((a, g) => a + (+g.dataset.n || 0), 0)")
+        check(s26 == E["fy26"], f"map respects filters (FY26 total {s26})")
+        pg.select_option("#fGrade", "E-6"); pg.wait_for_timeout(400)
+        smallDots = pg.locator("#incMap .m-dot").evaluate_all("gs => gs.filter(g => +g.dataset.n < 5).length")
+        check(smallDots > 0 and pg.locator("#incMap .m-dot.small").count() == 0, "toggle off (default): real counts under 5 on the map")
+        pg.check("#hideSmall"); pg.wait_for_timeout(400)
+        sm = pg.locator("#incMap .m-dot.small")
+        check(sm.count() > 0 and sm.evaluate_all("gs => gs.every(g => g.dataset.n === '<5' && parseFloat(g.querySelector('circle').getAttribute('r')) === 4)") and "<5" in pg.inner_text("#mapLegend"), "toggle on: small locations = uniform neutral <5 dot, legend explains")
+        pg.uncheck("#hideSmall"); pg.click("#btnReset"); pg.wait_for_timeout(300)
+        for v, k in [("Camp Dodge", "Johnston"), ("Camp Dodge, Johnston", "Johnston"), ("Sioux City Air Base", "Sioux City"), ("185th ARW", "Sioux City"), ("Des Moines Air Base", "Des Moines"),
+                     ("Iowa City Readiness Center", "Iowa City"), ("Waterloo Armory", "Waterloo"), ("MUSCATINE, IA", "Muscatine"), ("Ft. Dodge RC", "Fort Dodge"), ("Mt Pleasant", "Mount Pleasant"),
+                     ("Iowa Falls", "Iowa Falls"), ("IAARNG Johnston", "Johnston"), ("Testville", None)]:
+            got = pg.evaluate("v => window.PreventionDash.placeOf(v)", v); check(got == k, f"place lookup {v!r} -> {k} (got {got})")
+        for t in ["tHeat", "tHeatDM", "tHeatUD"]:
             check(pg.locator(f"#{t} td.hot").count() > 0, f"heat map {t} rendered with clickable cells")
-        check("<5" in pg.inner_text("#tHeatLM"), "heat map suppresses cells under 5")
+        check("<5" not in pg.inner_text("#tHeatUD"), "toggle off (default): heat maps show real counts")
+        pg.check("#hideSmall"); pg.wait_for_timeout(400)
+        check("<5" in pg.inner_text("#tHeatUD"), "toggle on: heat map cells under 5 show <5")
+        pg.uncheck("#hideSmall"); pg.wait_for_timeout(300)
+        check("statistical stability" in pg.inner_text("#wsNote"), "note: rankings need 5+ incidents for stability")
         cell = pg.locator("#tHeatDM td.hot").first; cell.click(); pg.wait_for_timeout(400)
         check(pg.input_value("#fDow") != "" and pg.input_value("#fFm") != "", f"heat-map click filters day + fiscal month ({pg.input_value('#fDow')} {pg.input_value('#fFm')})")
         pg.click("#btnReset"); pg.wait_for_timeout(300)
@@ -120,7 +155,7 @@ def run():
         pg.select_option("#fGrade", "E-9") if "E-9" in pg.inner_text("#fGrade") else None
         pg.wait_for_timeout(300)
         if pg.input_value("#fGrade") == "E-9":
-            check("<5" in pg.inner_text("#kpis") or "Fewer than 5" in pg.inner_text("#weak"), "small selection shows <5 / suppressed")
+            check("Fewer than 5" in pg.inner_text("#weak"), "small selection: nothing ranked under 5")
         pg.click("#btnReset"); pg.wait_for_timeout(200)
         # GenAI pack
         pg.click("#btnGenAI"); pg.wait_for_timeout(500)
@@ -158,7 +193,14 @@ def run():
         check("per 1,000 assigned" in pg.inner_text("#kpis .kpi.inc"), "typed headcount gives a rate per 1,000")
         pg.click("#btnReset"); pg.wait_for_timeout(300)
         pg.select_option("#fUnit", "Tiny Co"); pg.wait_for_timeout(300)
-        check("<5" in pg.inner_text("#kpis .kpi.inc"), "unit with 3 incidents shows <5")
+        check(pg.inner_text("#kpis .kpi.inc").split("\n")[1].strip() == "3", "toggle off: unit with 3 incidents shows 3")
+        pg.check("#hideSmall"); pg.wait_for_timeout(300)
+        check("<5" in pg.inner_text("#kpis .kpi.inc"), "toggle on: unit with 3 incidents shows <5")
+        pg.click("#btnGenAI"); pg.wait_for_timeout(300); pg.uncheck("#hideSmall"); pg.wait_for_timeout(300)
+        pg.click("#btnGenAI"); pg.wait_for_timeout(400); clip3 = pg.evaluate("navigator.clipboard.readText()")
+        check("<5" in clip3 and not re.search(r"Tiny Co[^\n]*\b3\b", clip3), "GenAI pack suppresses under 5 even with the toggle off")
+        check("Testville (3)" in pg.inner_text("#mapMiss") or "Not placed: Testville" in pg.inner_text("#mapMiss"), "unmatched location listed under the map")
+        check("marital" not in clip3.lower(), "GenAI pack has no marital text")
         pg.click("#btnReset"); pg.wait_for_timeout(300)
         # headcount file
         pg.set_input_files("#addInput", [os.path.join(DIR, "prevention_roster_demo.xlsx")]); pg.wait_for_timeout(1500)

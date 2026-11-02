@@ -24,7 +24,9 @@
   function plural(x, w) { return K.fmt(x) + " " + w + (x === 1 ? "" : "s"); }
   function pct(a, b) { return b ? Math.round(a / b * 100) : null; }
   function pctS(a, b) { var p = pct(a, b); return p == null ? "\u2014" : p + "%"; }
-  function cnt(n) { return n > 0 && n < MIN_N ? "<" + MIN_N : K.fmt(n); }
+  // display threshold: real counts unless "Hide small groups" is ticked; the GenAI pack always suppresses (S.packMode)
+  function SUP() { return S.packMode || S.hideSmall ? MIN_N : 1; }
+  function cnt(n) { return n > 0 && n < SUP() ? "<" + MIN_N : K.fmt(n); }
   function cmpVal(a, b) { var na = +a, nb = +b; if (a !== "" && b !== "" && isFinite(na) && isFinite(nb)) return na - nb; return String(a).localeCompare(String(b), "en", { numeric: true, sensitivity: "base" }); }
 
   // Personal identifiers: skipped by header alone; their cells are never read.
@@ -51,7 +53,6 @@
     ["status", "Status", ["status", "dutytype", "membershipstatus", "component", "category", "personnelcategory", "tsagrtech"], "Optional: chart, filter (Traditional, AGR, Technician)"],
     ["mos", "MOS", ["mos", "pmos", "primarymos", "dmos", "aoc", "specialty"], "Optional: detail table, search"],
     ["tis", "Time in Service (yrs)", ["timeinservice", "timeinserviceyrs", "timeinserviceyears", "yearsofservice", "yos", "tis"], "Optional: correlations (service band)"],
-    ["marital", "Marital Status", ["maritalstatus", "marital"], "Optional: chart, filter, heat map"],
     ["deps", "Dependents", ["dependents", "numberofdependents", "numdependents", "dependentcount"], "Optional: correlations"],
     ["type", "Incident Type", ["incidenttype", "type", "offensetype", "incidentcategory"], "Optional: chart, filter"],
     ["msd", "Months Since Deployment", ["monthssincedeployment", "monthssincelastdeployment", "monthssinceredeployment", "monthssincedeploy", "monthspostdeployment"], "Optional: chart, filter (blank = never deployed)"],
@@ -217,7 +218,7 @@
       var d = w.d;
       if (w.h != null) rep.withTime++;
       var rec = { _row: rr + 1, d: d, date: iso(d), hour: w.h, min: w.mi, ty: val(raw.ty), pid: val(raw.pid), gender: normGender(raw.gender), loc: val(raw.loc), unit: val(raw.unit), status: normStatus(raw.status),
-        grade: normGrade(raw.grade), mos: val(raw.mos), marital: val(raw.marital), type: normType(raw.type), duty: normDuty(raw.duty),
+        grade: normGrade(raw.grade), mos: val(raw.mos), type: normType(raw.type), duty: normDuty(raw.duty),
         ref: yn(raw.ref), comp: yn(raw.comp), rep: yn(raw.rep), out: val(raw.out) };
       ["age", "tis", "deps", "msd", "prior"].forEach(function (k) { var x = k in raw ? num(raw[k]) : null; if (x !== null && isNaN(x)) { rep.badNum++; x = k === "msd" ? NaN : null; } rec[k] = x; });
       if (!("msd" in raw)) rec.msd = undefined;
@@ -401,7 +402,7 @@
   function rv(o, k) { return k === "loc" ? (o.loc || o.locD || "") : (o[k] || ""); }
   // Assigned per value of dim (or the total when dim is null) under the population filters in f; null when no table covers them.
   function assigned(dim, f) {
-    if (f.status || f.marital || f.msdBand) return null;                        // no headcount for these
+    if (f.status || f.msdBand) return null;                        // no headcount for these
     var need = POP.filter(function (k) { return f[k]; }); if (dim) need.push(dim);
     var tb = denomTables().filter(function (t) { return need.every(function (k) { return t.dims.indexOf(k) >= 0; }); })[0];
     if (!tb) return null;
@@ -423,8 +424,8 @@
 
   // ---------- filters ----------
   var DIMS = [["fy", "fFy", "All years"], ["q", "fQ", "All quarters"], ["fm", "fFm", "All months"], ["loc", "fLoc", "All"], ["unit", "fUnit", "All"], ["grade", "fGrade", "All"],
-    ["ageBand", "fAge", "All"], ["gender", "fGender", "All"], ["status", "fStatus", "All"], ["marital", "fMarital", "All"], ["type", "fType", "All"], ["duty", "fDuty", "All"], ["msdBand", "fMsd", "All"], ["win", "fWin", "All"], ["dow", "fDow", "All days"], ["tod", "fTod", "All times"]];
-  var DLABEL = { fy: "Fiscal year", q: "Quarter", fm: "Month", loc: "Location", unit: "Unit", grade: "Grade", ageBand: "Age", gender: "Gender", status: "Status", marital: "Marital status",
+    ["ageBand", "fAge", "All"], ["gender", "fGender", "All"], ["status", "fStatus", "All"], ["type", "fType", "All"], ["duty", "fDuty", "All"], ["msdBand", "fMsd", "All"], ["win", "fWin", "All"], ["dow", "fDow", "All days"], ["tod", "fTod", "All times"]];
+  var DLABEL = { fy: "Fiscal year", q: "Quarter", fm: "Month", loc: "Location", unit: "Unit", grade: "Grade", ageBand: "Age", gender: "Gender", status: "Status",
     type: "Incident type", duty: "Duty status", msdBand: "Since deployment", win: "Holiday / payday", hol: "Holiday", treat: "Treatment", dow: "Day of week", tod: "Time of day", ref: "Referred", comp: "Completed program", rep: "Repeat incident", tisBand: "Time in service", depsBand: "Dependents", priorBand: "Prior incidents", gg: "Grade group" };
   var ORDER = { dow: DOW, tod: TOD, fm: FY_MON, q: Q_L, ageBand: AGE_B, msdBand: MSD_B, win: WIN, tisBand: TIS_B, treat: TREAT, depsBand: ["No dependents", "1\u20132 dependents", "3+ dependents"], priorBand: ["No prior incidents", "1 prior incident", "2+ prior incidents"] };
   function sortVals(k, vals) {
@@ -454,9 +455,10 @@
     $("scopeLabel").textContent = scope.length ? scope.join(" \u00b7 ") : "All incidents";
     $("sourceLabel").textContent = S.source === "file" ? " \u00b7 Your files" : S.source === "saved" ? " \u00b7 Saved data" : S.source === "demo-roster" ? " \u00b7 Demo incidents + your headcount" : " \u00b7 Demo data";
     S.an = analyze(rows, f);
+    mapRender(f);
     kpis(rows, f); insights();
     monthChart(f); fyChart(f);
-    [["cGrade", "grade", false], ["cAge", "ageBand", false], ["cType", "type", true], ["cGender", "gender", false], ["cStatus", "status", true], ["cMarital", "marital", true],
+    [["cGrade", "grade", false], ["cAge", "ageBand", false], ["cType", "type", true], ["cGender", "gender", false], ["cStatus", "status", true],
      ["cLoc", "loc", true], ["cUnit", "unit", true], ["cDuty", "duty", false], ["cMsd", "msdBand", false], ["cWin", "win", false], ["cHol", "hol", true]].forEach(function (c) { barChart(c[0], c[1], c[2], rows, f); });
     repeatChart(rows); heatAll(rows); S.corr = correlations(rows, f); renderCorr(S.corr); commander(rows, f); S.base = rows; table();
   }
@@ -475,7 +477,7 @@
     return { cur: cur, n: curR.length, prev: prev.length, maxFm: maxFm, hasPrev: S.recs.some(function (r) { return r.fyN === cur - 1; }), part: maxFm < 12 };
   }
   function kpis(rows, f) {
-    var h = [], small = rows.length > 0 && rows.length < MIN_N, rp = repeatPeople(rows);
+    var h = [], small = rows.length > 0 && rows.length < SUP(), rp = repeatPeople(rows);
     var a = assigned(null, f), rt = a && a.total ? rate(rows.length, a.total, spanMonths(f)) : null;
     h.push(kpi("Total incidents", cnt(rows.length), rt != null && !small ? K.fmt(rt, 1) + " per 1,000 assigned / yr" : a ? "Headcount " + K.fmt(a.total) : "Add a headcount for rates", "inc"));
     h.push(kpi("Unique people", rp.people ? cnt(rp.people) : "\u2014", rp.people && !small ? (rows.length / rp.people).toFixed(2) + " incidents per person" : "Needs Person ID", "ppl"));
@@ -485,7 +487,7 @@
     h.push(kpi("% completed", small || !refY.length ? "\u2014" : pctS(compY.length, refY.length), refY.length && !small ? cnt(compY.length) + " of " + cnt(refY.length) + " referred" : "", "comp"));
     var t = trendInfo(f), tv = "\u2014", ts = "Needs two fiscal years";
     if (t && t.hasPrev) {
-      if (t.n < MIN_N || t.prev < MIN_N) { tv = "&lt;5"; ts = "Too few incidents to compare"; }
+      if (t.n < SUP() || t.prev < SUP() || !t.prev) { tv = t.prev ? "&lt;5" : "\u2014"; ts = "Too few incidents to compare"; }
       else { var d = Math.round((t.n - t.prev) / t.prev * 100); tv = '<span class="delta ' + (d > 0 ? "down" : d < 0 ? "up" : "flat") + '">' + (d > 0 ? "\u25b2 +" : d < 0 ? "\u25bc " : "") + d + "%</span>"; ts = "FY" + String(t.cur).slice(2) + " " + K.fmt(t.n) + " vs FY" + String(t.cur - 1).slice(2) + " " + K.fmt(t.prev) + (t.part ? " (Oct\u2013" + FY_MON[t.maxFm - 1] + ")" : ""); }
     }
     h.push(kpi("Trend vs prior FY", tv, ts, "trend"));
@@ -493,7 +495,7 @@
   }
 
   // ---------- analysis: weak spots, commonalities, correlations ----------
-  var RISK_DIMS = ["grade", "ageBand", "gender", "loc", "unit", "status", "marital", "msdBand", "duty", "tisBand", "depsBand", "priorBand", "type"];
+  var RISK_DIMS = ["grade", "ageBand", "gender", "loc", "unit", "status", "msdBand", "duty", "tisBand", "depsBand", "priorBand", "type"];
   var RATE_DIMS = ["grade", "ageBand", "gender", "loc", "unit"];
   function dayCounts(f) { // calendar days per holiday/payday window within the time filters
     var lo = Infinity, hi = -Infinity; S.recs.forEach(function (r) { if (+r.d < lo) lo = +r.d; if (+r.d > hi) hi = +r.d; });
@@ -555,8 +557,8 @@
     }
     var hg = group(rows, "hol"); out.hols = Object.keys(hg).filter(function (v) { return v !== BLANK && hg[v] >= MIN_N; }).map(function (v) { return { v: v, n: hg[v] }; }).sort(function (a, b) { return b.n - a.n; });
     var cm = Object.create(null);
-    rows.forEach(function (r) { if (!r.ageBand || !r.gg || !r.marital) return; var k = [r.gender || "", r.ageBand, r.gg, r.marital].join("|"); cm[k] = (cm[k] || 0) + 1; });
-    out.combos = Object.keys(cm).filter(function (k) { return cm[k] >= MIN_N; }).map(function (k) { var p = k.split("|"); return { g: p[0], age: p[1], gg: p[2], mar: p[3], n: cm[k], share: cm[k] / N }; }).sort(function (a, b) { return b.n - a.n; }).slice(0, 3);
+    rows.forEach(function (r) { if (!r.ageBand || !r.gg) return; var k = [r.gender || "", r.ageBand, r.gg].join("|"); cm[k] = (cm[k] || 0) + 1; });
+    out.combos = Object.keys(cm).filter(function (k) { return cm[k] >= MIN_N; }).map(function (k) { var p = k.split("|"); return { g: p[0], age: p[1], gg: p[2], n: cm[k], share: cm[k] / N }; }).sort(function (a, b) { return b.n - a.n; }).slice(0, 3);
     var tr = out.repeat.filter(function (x) { return x.dim === "treat"; }), comp = tr.filter(function (x) { return x.v === TREAT[0]; })[0], non = tr.filter(function (x) { return x.v !== TREAT[0]; }).sort(function (a, b) { return b.rate - a.rate; })[0];
     if (comp && non && comp.rate > 0) out.corr.push({ kind: "treat", comp: comp, non: non, ratio: non.rate / comp.rate });
     var dep = out.share.filter(function (x) { return x.dim === "msdBand" && (x.v === MSD_B[0] || x.v === MSD_B[1]); });
@@ -571,16 +573,16 @@
   function pillRR(rr) { return '<span class="rr' + (rr >= 1.5 ? "" : rr >= 1.2 ? " mid" : " info") + '">' + rr.toFixed(1) + "\u00d7</span>"; }
   function ev(s) { return '<span class="why"><strong>Evidence:</strong> ' + s + "</span>"; }
   function why(s) { return '<span class="why">' + s + "</span>"; }
-  function profile(c) { return [c.g, c.mar.toLowerCase(), c.gg, "age " + c.age].filter(Boolean).join(", "); }
+  function profile(c) { return [c.g, c.gg, "age " + c.age].filter(Boolean).join(", "); }
   function insights() {
     var A = S.an, w = [], fo = [];
     if (A.N < MIN_N) { $("weak").innerHTML = "<li>" + (A.N ? "Fewer than 5 incidents in this selection: nothing is ranked." : "No incidents match the current filters.") + "</li>"; $("focus").innerHTML = ""; $("wsNote").textContent = ""; return; }
-    $("wsNote").textContent = A.hasRates ? "Ranked by incidents per 1,000 assigned (annualized) against the overall rate" + (A.base ? " of " + K.fmt(A.base, 1) : "") + ". Groups under 5 are left out."
-      : "No headcount covers this selection, so rankings use shares of incidents and repeat rates. Add a headcount (file or the Headcount panel) for true rates.";
+    $("wsNote").textContent = A.hasRates ? "Ranked by incidents per 1,000 assigned (annualized) against the overall rate" + (A.base ? " of " + K.fmt(A.base, 1) : "") + ". Groups need 5+ incidents to be ranked (statistical stability)."
+      : "No headcount covers this selection, so rankings use shares of incidents and repeat rates. Add a headcount (file or the Headcount panel) for true rates. Groups need 5+ incidents to be ranked (statistical stability).";
     if (A.hasRates) A.rate.filter(function (x) { return x.rr >= 1.2; }).slice(0, 6).forEach(function (x) {
       w.push("<li>" + pillRR(x.rr) + "<strong>" + esc(DLABEL[x.dim] + " " + x.v) + "</strong>: " + K.fmt(x.rate, 1) + " incidents per 1,000 a year vs " + K.fmt(x.base, 1) + " overall" + why(K.fmt(x.n) + " incidents, " + K.fmt(x.assigned) + " assigned") + "</li>");
     });
-    else A.share.filter(function (x) { return ["grade", "ageBand", "marital", "unit", "loc", "gender"].indexOf(x.dim) >= 0 && x.share >= 0.2 && x.share < 0.95; }).slice(0, 5).forEach(function (x) {
+    else A.share.filter(function (x) { return ["grade", "ageBand", "unit", "loc", "gender"].indexOf(x.dim) >= 0 && x.share >= 0.2 && x.share < 0.95; }).slice(0, 5).forEach(function (x) {
       w.push('<li><span class="rr info">' + Math.round(x.share * 100) + "%</span><strong>" + esc(DLABEL[x.dim] + " " + x.v) + "</strong> accounts for " + Math.round(x.share * 100) + "% of incidents" + why(K.fmt(x.n) + " incidents (a share, not a rate)") + "</li>");
     });
     A.timing.filter(function (x) { return x.rr >= 1.15; }).forEach(function (x) { w.push("<li>" + pillRR(x.rr) + "<strong>" + esc(x.v) + "</strong>: " + Math.round(x.share * 100) + "% of incidents on " + Math.round(x.dayShare * 100) + "% of calendar days" + why(K.fmt(x.n) + " incidents; incidents per day compared with other days") + "</li>"); });
@@ -617,7 +619,7 @@
     if (A.N >= MIN_N) {
       var rp = repeatPeople(rows), refK = rows.filter(function (r) { return r.ref; }), refY = refK.filter(function (r) { return r.ref === "Y"; }), compY = refY.filter(function (r) { return r.comp === "Y"; });
       var top = A.hasRates ? A.rate.filter(function (x) { return x.rr >= 1.3; }).slice(0, 3).map(function (x) { return DLABEL[x.dim] + " " + x.v + " (" + x.rr.toFixed(1) + "\u00d7 the rate)"; })
-        : A.share.filter(function (x) { return ["grade", "ageBand", "marital", "unit", "loc"].indexOf(x.dim) >= 0 && x.share < 0.95; }).slice(0, 3).map(function (x) { return DLABEL[x.dim] + " " + x.v + " (" + Math.round(x.share * 100) + "% of incidents)"; });
+        : A.share.filter(function (x) { return ["grade", "ageBand", "unit", "loc"].indexOf(x.dim) >= 0 && x.share < 0.95; }).slice(0, 3).map(function (x) { return DLABEL[x.dim] + " " + x.v + " (" + Math.round(x.share * 100) + "% of incidents)"; });
       if (top.length) b.push("<li><strong>Where:</strong> " + esc(top.join("; ")) + (A.hasRates ? "." : ". Shares only; add a headcount for rates.") + "</li>");
       var hol = A.timing.filter(function (x) { return /Holiday/.test(x.v); })[0], pay = A.timing.filter(function (x) { return /Payday/.test(x.v); })[0], w = [];
       if (A.peak) w.push(Math.round(A.peak.share * 100) + "% between 1800 and 0259");
@@ -644,7 +646,7 @@
   }
   function summary(rows, f) {
     var A = S.an, s = [];
-    if (rows.length < MIN_N) { $("summary").textContent = rows.length ? "Fewer than 5 incidents match the current filters; details are suppressed." : "No incidents match the current filters."; return; }
+    if (rows.length < SUP()) { $("summary").textContent = rows.length ? "Fewer than 5 incidents match the current filters; details are suppressed." : "No incidents match the current filters."; return; }
     var rp = repeatPeople(rows), t = trendInfo(f);
     s.push(K.fmt(rows.length) + " incidents (" + dateRange(rows) + ")" + (rp.people ? " involving " + K.fmt(rp.people) + " people; " + pctS(rp.repeat, rp.people) + " had more than one" : "") + ".");
     if (t && t.hasPrev && t.n >= MIN_N && t.prev >= MIN_N) s.push("FY" + String(t.cur).slice(2) + " is " + (t.n > t.prev ? "up" : t.n < t.prev ? "down" : "flat") + " " + Math.abs(Math.round((t.n - t.prev) / t.prev * 100)) + "% on FY" + String(t.cur - 1).slice(2) + " over the same months.");
@@ -664,7 +666,7 @@
     var g = group(rows, k), vals = Object.keys(g).filter(function (v) { return v !== BLANK; });
     if (horiz && !ORDER[k]) vals.sort(function (a, b) { return g[b] - g[a] || cmpVal(a, b); }); else vals = sortVals(k, vals);
     if (vals.length > TOPN + 1) vals = vals.slice(0, TOPN);
-    var sup = vals.map(function (v) { return g[v] < MIN_N; }), canFilter = DIMS.some(function (d) { return d[0] === k; });
+    var sup = vals.map(function (v) { return g[v] < SUP(); }), canFilter = DIMS.some(function (d) { return d[0] === k; });
     var labels = vals.map(function (v, i) { return sup[i] ? v + " (<5)" : v; });
     var o = K.chartBase(); if (horiz) o.indexAxis = "y"; o.plugins.legend.display = false;
     o.scales[horiz ? "x" : "y"].beginAtZero = true;
@@ -690,7 +692,7 @@
     var ds = fys.map(function (fy, i) {
       var c = new Array(12).fill(0); rows.forEach(function (r) { if (r.fy === fy) c[r.fmN - 1]++; });
       var cur = f.fy ? f.fy === fy : i === fys.length - 1, col = FY_COLORS[(i + FY_COLORS.length - fys.length) % FY_COLORS.length];
-      return { label: fy, data: c.map(function (x) { if (x > 0 && x < MIN_N) { small = true; return null; } return x; }), borderColor: col, backgroundColor: col, borderWidth: cur ? 3 : 1.5, pointRadius: cur ? 3 : 1.5, tension: .25 };
+      return { label: fy, data: c.map(function (x) { if (x > 0 && x < SUP()) { small = true; return null; } return x; }), borderColor: col, backgroundColor: col, borderWidth: cur ? 3 : 1.5, pointRadius: cur ? 3 : 1.5, tension: .25 };
     });
     var o = K.chartBase(); o.scales.y.beginAtZero = true;
     o.onClick = function (e, els) { if (!els.length) return; $("fFy").value = fys[els[0].datasetIndex]; filterTo("fm", FY_MON[els[0].index]); };
@@ -701,15 +703,15 @@
   function fyChart(f) {
     var rows = rowsFor(f, "fy"), g = group(rows, "fy"), fys = Object.keys(g).filter(function (v) { return v !== BLANK; }).sort(), t = trendInfo(f);
     var o = K.chartBase(); o.plugins.legend.display = false; o.scales.y.beginAtZero = true;
-    o.onClick = function (e, els) { if (els.length && g[fys[els[0].index]] >= MIN_N) filterTo("fy", fys[els[0].index]); }; o.onHover = hover(function () { return true; });
+    o.onClick = function (e, els) { if (els.length && g[fys[els[0].index]] >= SUP()) filterTo("fy", fys[els[0].index]); }; o.onHover = hover(function () { return true; });
     o.plugins.tooltip.callbacks = { label: function (c) { return c.raw == null ? "Fewer than 5 (hidden)" : "Incidents: " + K.fmt(c.raw); } };
-    K.upsert("cFy", { type: "bar", data: { labels: fys.map(function (v) { return g[v] < MIN_N ? v + " (<5)" : v; }), datasets: [{ label: "Incidents", data: fys.map(function (v) { return g[v] < MIN_N ? null : g[v]; }), backgroundColor: fys.map(function (v) { return f.fy === v ? C2 : C1; }) }] }, options: o });
+    K.upsert("cFy", { type: "bar", data: { labels: fys.map(function (v) { return g[v] < SUP() ? v + " (<5)" : v; }), datasets: [{ label: "Incidents", data: fys.map(function (v) { return g[v] < SUP() ? null : g[v]; }), backgroundColor: fys.map(function (v) { return f.fy === v ? C2 : C1; }) }] }, options: o });
     $("fyNote").textContent = (t && t.part ? "FY" + String(t.cur).slice(2) + " is a part year (Oct\u2013" + FY_MON[t.maxFm - 1] + "). " : "") + "Click a bar to filter.";
   }
   function repeatChart(rows) {
     var by = {}; TREAT.forEach(function (t) { by[t] = { n: 0, y: 0 }; });
     rows.forEach(function (r) { if (!r.treat || !r.rep) return; by[r.treat].n++; if (r.rep === "Y") by[r.treat].y++; });
-    var sup = TREAT.map(function (t) { return by[t].n < MIN_N || (by[t].y > 0 && by[t].y < MIN_N); });
+    var sup = TREAT.map(function (t) { return !by[t].n || by[t].n < SUP() || (by[t].y > 0 && by[t].y < SUP()); });
     var o = K.chartBase(); o.plugins.legend.display = false; o.scales.y.beginAtZero = true; o.scales.y.max = 100; o.scales.y.ticks = { callback: function (v) { return v + "%"; } };
     o.plugins.tooltip.callbacks = { label: function (c) { var b = by[TREAT[c.dataIndex]]; return c.raw == null ? "Fewer than 5 (hidden)" : c.raw + "% repeated (" + K.fmt(b.y) + " of " + K.fmt(b.n) + ")"; } };
     K.upsert("cRepeat", { type: "bar", data: { labels: TREAT.map(function (t, i) { return sup[i] ? t + " (<5)" : t; }), datasets: [{ label: "Repeat rate", data: TREAT.map(function (t, i) { return sup[i] ? null : Math.round(by[t].y / by[t].n * 100); }), backgroundColor: [C4, C2, C3] }] }, options: o });
@@ -721,7 +723,7 @@
     return { m: m, hot: hot };
   }
   // generic heat map: rows x columns of incident counts; cells under 5 show <5; click a cell to filter by both
-  var HEATS = [["tHeat", "grade", "ageBand"], ["tHeatDH", "dow", "tod"], ["tHeatDM", "dow", "fm"], ["tHeatLM", "loc", "fm"], ["tHeatUD", "unit", "duty"], ["tHeatGM", "grade", "marital"]];
+  var HEATS = [["tHeat", "grade", "ageBand"], ["tHeatDH", "dow", "tod"], ["tHeatDM", "dow", "fm"], ["tHeatLM", "loc", "fm"], ["tHeatUD", "unit", "duty"]];
   function heatData(rows, rk, ck, maxRows) {
     var m = Object.create(null), rc = Object.create(null), mx = 0;
     rows.forEach(function (r) { var a = r[rk], b = r[ck]; if (!a || !b) return; var k = a + "|" + b; m[k] = (m[k] || 0) + 1; rc[a] = (rc[a] || 0) + 1; if (m[k] > mx) mx = m[k]; });
@@ -738,7 +740,7 @@
       el.innerHTML = !ok ? "<tbody><tr><td class=\"sup\">No data in this selection</td></tr></tbody>" : "<thead><tr><th></th>" + H.cols.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") + "</tr></thead><tbody>" + H.rows.map(function (a) {
         return '<tr><th class="rowh">' + esc(a) + "</th>" + H.cols.map(function (b) {
           var n = H.m[a + "|" + b] || 0;
-          return n === 0 ? '<td class="sup">0</td>' : n < MIN_N ? '<td class="sup">&lt;5</td>' : '<td class="hot" data-r="' + esc(a) + '" data-c="' + esc(b) + '" style="background:' + K.heatColor(n / H.mx) + '" title="' + esc(a + " \u00b7 " + b + ": " + n + " (click to filter)") + '">' + n + "</td>";
+          return n === 0 ? '<td class="sup">0</td>' : n < SUP() ? '<td class="sup">&lt;5</td>' : '<td class="hot" data-r="' + esc(a) + '" data-c="' + esc(b) + '" style="background:' + K.heatColor(n / H.mx) + '" title="' + esc(a + " \u00b7 " + b + ": " + n + " (click to filter)") + '">' + n + "</td>";
         }).join("") + "</tr>";
       }).join("") + "</tbody>" + (H.more > 0 ? '<caption class="muted small">Top ' + H.rows.length + " by incidents; " + H.more + " more not shown.</caption>" : "");
       el.setAttribute("data-rk", h[1]); el.setAttribute("data-ck", h[2]);
@@ -753,11 +755,11 @@
   function heatCells(rows) { var H = heatData(rows, "grade", "ageBand"); return { hot: H.hot.map(function (x) { return { grade: x.a, age: x.b, n: x.n }; }) }; }
 
   // ---------- correlations: bias-corrected Cramer's V between categorical / binned fields ----------
-  var CF = ["grade", "ageBand", "gender", "status", "marital", "loc", "unit", "type", "duty", "msdBand", "win", "dow", "tod", "fy", "tisBand", "depsBand", "priorBand", "ref", "comp", "rep"];
-  var CSHORT = { grade: "Grade", ageBand: "Age", gender: "Gender", status: "Status", marital: "Marital", loc: "Location", unit: "Unit", type: "Type", duty: "Duty", msdBand: "Since dep.", win: "Hol/pay",
+  var CF = ["grade", "ageBand", "gender", "status", "loc", "unit", "type", "duty", "msdBand", "win", "dow", "tod", "fy", "tisBand", "depsBand", "priorBand", "ref", "comp", "rep"];
+  var CSHORT = { grade: "Grade", ageBand: "Age", gender: "Gender", status: "Status", loc: "Location", unit: "Unit", type: "Type", duty: "Duty", msdBand: "Since dep.", win: "Hol/pay",
     dow: "Day", tod: "Time", fy: "FY", tisBand: "Service", depsBand: "Deps", priorBand: "Prior", ref: "Referred", comp: "Completed", rep: "Repeat" };
   var EXPECTED = { "unit|loc": "units sit at a location", "ref|comp": "only referred people can complete", "grade|tisBand": "grade follows time in service", "ageBand|tisBand": "service grows with age",
-    "grade|ageBand": "grade follows age", "depsBand|marital": "dependents go with marriage", "marital|depsBand": "dependents go with marriage", "type|duty": "duty-related incidents happen on duty", "duty|type": "duty-related incidents happen on duty", "tisBand|fy": "the same people gain service each year", "fy|tisBand": "the same people gain service each year", "priorBand|rep": "both count repeat incidents", "comp|ref": "only referred people can complete" };
+    "grade|ageBand": "grade follows age", "type|duty": "duty-related incidents happen on duty", "duty|type": "duty-related incidents happen on duty", "tisBand|fy": "the same people gain service each year", "fy|tisBand": "the same people gain service each year", "priorBand|rep": "both count repeat incidents", "comp|ref": "only referred people can complete" };
   function levels(rows, k) { // levels with 5+ incidents; smaller ones pooled as Other (dropped if the pool is still under 5)
     var g = group(rows, k), big = Object.keys(g).filter(function (v) { return v !== BLANK && g[v] >= MIN_N; }), small = Object.keys(g).filter(function (v) { return v !== BLANK && g[v] < MIN_N; });
     var other = K.sum(small, function (v) { return g[v]; }), map = {};
@@ -813,12 +815,73 @@
   }
   function pillV(v) { return '<span class="rr' + (v >= 0.3 ? "" : v >= 0.2 ? " mid" : " info") + '">V ' + v.toFixed(2) + "</span>"; }
 
+
+  // ---------- incident map: Iowa outline + county lines (offline, data/iowa_geo.js) and a bubble per Location ----------
+  var MAP_ALIAS = { "camp dodge": "johnston", "camp dodge johnston": "johnston", "johnston camp dodge": "johnston", "jfhq": "johnston", "joint force headquarters": "johnston", "joint forces headquarters": "johnston",
+    "sioux city air base": "sioux city", "sioux city ang": "sioux city", "sioux city angb": "sioux city", "sioux gateway": "sioux city", "sioux gateway airport": "sioux city", "185th": "sioux city", "185th arw": "sioux city", "185th air refueling wing": "sioux city",
+    "des moines air base": "des moines", "des moines ang": "des moines", "des moines angb": "des moines", "des moines airport": "des moines", "132nd": "des moines", "132nd wing": "des moines", "132d wing": "des moines" };
+  var SITE_WORDS = /\b(army|national|guard|ng|iarng|iaarng|iaang|arng|ia ng|iang|ang|angb|armory|armoury|readiness|center|centre|rc|afrc|armed|forces|reserve|fms|field|maintenance|shop|uts|cms|air|base|airport|facility|bldg|building)\b/g;
+  function mapNorm(v) { return String(v).toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").replace(/\bsaint\b/g, "st").replace(/\bft\b/g, "fort").replace(/\bmt\b/g, "mount").replace(/\s+/g, " ").trim(); }
+  var MAP_CACHE = {};
+  function placeOf(loc) {
+    if (!window.IOWA_GEO || !loc) return null;
+    if (loc in MAP_CACHE) return MAP_CACHE[loc];
+    var P = IOWA_GEO.places, n = mapNorm(loc), site = n.replace(SITE_WORDS, " ").replace(/\s+/g, " ").trim(), noSt = site.replace(/(^|\s)(iowa|ia)(\s|$)/g, " ").replace(/\s+/g, " ").trim(), hit = null;
+    [n, site, site.replace(/\s(iowa|ia)$/, ""), noSt].some(function (c) { if (!c) return false; var k = MAP_ALIAS[c] || c; if (P[k]) { hit = P[k]; return true; } return false; });
+    return (MAP_CACHE[loc] = hit);
+  }
+  function mapColor(t) { var a = [252, 187, 161], b = [153, 0, 13]; return "rgb(" + a.map(function (x, i) { return Math.round(x + (b[i] - x) * t); }).join(",") + ")"; }
+  function mapRender(f) {
+    var box = $("incMap"); if (!box) return;
+    if (!window.IOWA_GEO) { box.textContent = "Map data not loaded."; return; }
+    var G = IOWA_GEO, rows = rowsFor(f, "loc"), g = group(rows, "loc"), sel = f.loc, cut = SUP();
+    var pts = [], miss = [];
+    Object.keys(g).forEach(function (loc) { if (loc === BLANK) return; var p = placeOf(loc); if (p) pts.push({ loc: loc, n: g[loc], x: p[1], y: p[2], place: p[0] }); else miss.push({ loc: loc, n: g[loc] }); });
+    var big = pts.filter(function (p) { return p.n >= cut; }), mx = Math.max.apply(null, big.map(function (p) { return p.n; }).concat([1]));
+    var RMAX = 34, RMIN = 4;
+    pts.forEach(function (p) { p.small = p.n < cut; p.t = p.small ? 0 : Math.sqrt(p.n / mx); p.r = p.small ? 4 : Math.max(RMIN + 1, RMAX * p.t); });
+    pts.sort(function (a, b) { return b.r - a.r; });
+    var h = ['<svg viewBox="0 0 ' + G.w + " " + G.h + '" role="img" aria-label="Map of Iowa with incident counts by location">',
+      '<path class="m-county" d="' + G.counties + '"/>', '<path class="m-state" d="' + G.state + '"/>'];
+    pts.forEach(function (p) {
+      var lab = p.small ? "&lt;5" : K.fmt(p.n), cls = "m-dot" + (p.small ? " small" : "") + (sel && sel !== p.loc ? " dim" : "") + (sel === p.loc ? " on" : "");
+      h.push('<g class="' + cls + '" data-loc="' + esc(p.loc) + '" data-n="' + (p.small ? "&lt;5" : p.n) + '" tabindex="0"><circle cx="' + p.x + '" cy="' + p.y + '" r="' + p.r.toFixed(1) + '"' + (p.small ? "" : ' style="fill:' + mapColor(p.t) + '"') + "/>" +
+        (p.r >= 10 ? '<text x="' + p.x + '" y="' + (p.y + 4) + '"' + (p.r < 13 ? ' style="font-size:10px"' : "") + '>' + lab + "</text>" : "") + "<title>" + esc(p.loc) + ": " + (p.small ? "<5" : K.fmt(p.n)) + " incident" + (p.n === 1 && !p.small ? "" : "s") + "</title></g>");
+    });
+    // labels for the 6 largest places so the map reads on paper
+    big.slice().sort(function (a, b) { return b.n - a.n; }).slice(0, 6).forEach(function (p) { var east = p.x > G.w - 190; h.push('<text class="m-name" x="' + (east ? p.x - p.r - 4 : p.x + p.r + 4) + '" y="' + (p.y - p.r * 0.4) + '"' + (east ? ' text-anchor="end"' : "") + ">" + esc(p.loc) + "</text>"); });
+    h.push("</svg>");
+    box.innerHTML = h.join("");
+    var lg = [];
+    if (big.length) {
+      var mid = Math.max(cut, Math.round(mx / 4)), sm = Math.max(cut, Math.round(mx / 16));
+      [mx, mid, sm].filter(function (v, i, a) { return a.indexOf(v) === i; }).forEach(function (v) { var t = Math.sqrt(v / mx), r = Math.max(RMIN + 1, RMAX * t) * 0.55; lg.push('<span class="lg-item"><svg width="' + Math.ceil(2 * r + 2) + '" height="' + Math.ceil(2 * r + 2) + '"><circle cx="' + (r + 1) + '" cy="' + (r + 1) + '" r="' + r.toFixed(1) + '" style="fill:' + mapColor(t) + '"/></svg>' + K.fmt(v) + "</span>"); });
+      lg.unshift('<span class="lg-ramp" title="Light = fewer, deep red = more"></span><span class="lg-cap">fewer \u2192 more incidents (area \u221d count)</span>');
+    }
+    if (pts.some(function (p) { return p.small; })) lg.push('<span class="lg-item"><svg width="10" height="10"><circle class="lg-small" cx="5" cy="5" r="4"/></svg>&lt;5 (small group, not scaled)</span>');
+    $("mapLegend").innerHTML = lg.join("");
+    $("mapMiss").textContent = miss.length ? "Not placed: " + miss.sort(function (a, b) { return b.n - a.n; }).map(function (m) { return m.loc + " (" + cnt(m.n) + ")"; }).join(", ") + ". Use a town name in Location to place these." : "";
+    var placed = K.sum(pts, function (p) { return p.n; }), blank = g[BLANK] || 0;
+    $("mapNote").textContent = (rows.length ? cnt(placed) + " of " + cnt(rows.length) + " incidents placed" + (blank ? "; " + cnt(blank) + " with no location" : "") + ". " : "") + (sel ? "Showing " + sel + " (click it again to clear). " : "") + "Click a bubble to filter to that location.";
+  }
+  function mapTip(e) {
+    var gEl = e.target.closest && e.target.closest(".m-dot"), tip = $("mapTip"), wrap = $("incMap");
+    if (!gEl) { tip.hidden = true; return; }
+    var b = wrap.getBoundingClientRect(); tip.hidden = false;
+    tip.innerHTML = "<strong>" + esc(gEl.getAttribute("data-loc")) + "</strong><br>" + esc(gEl.getAttribute("data-n")) + " incident" + (gEl.getAttribute("data-n") === "1" ? "" : "s");
+    tip.style.left = Math.min(b.width - 160, e.clientX - b.left + 12) + "px"; tip.style.top = (e.clientY - b.top + 12) + "px";
+  }
+  function mapClick(e) {
+    var gEl = e.target.closest && e.target.closest(".m-dot"); if (!gEl) return;
+    var loc = gEl.getAttribute("data-loc"); filterTo("loc", $("fLoc").value === loc ? "" : loc);
+  }
+
   // ---------- detail table ----------
   var TCOLS = [["date", "Date"], ["time", "Time"], ["dow", "Day"], ["ty", "TY"], ["fy", "FY"], ["pid", "Person ID"], ["age", "Age", 1], ["gender", "Gender"], ["grade", "Grade"], ["status", "Status"], ["loc", "Location"], ["unit", "Unit"],
-    ["mos", "MOS"], ["tis", "TIS (yrs)", 1], ["marital", "Marital"], ["deps", "Deps", 1], ["type", "Incident Type"], ["duty", "Duty Status"], ["msd", "Mo. Since Dep.", 1], ["prior", "Prior", 1],
+    ["mos", "MOS"], ["tis", "TIS (yrs)", 1], ["deps", "Deps", 1], ["type", "Incident Type"], ["duty", "Duty Status"], ["msd", "Mo. Since Dep.", 1], ["prior", "Prior", 1],
     ["ref", "Referred"], ["comp", "Completed"], ["rep", "Repeat"], ["out", "Outcome"]];
   function tcols() { return S.hasTime ? TCOLS : TCOLS.filter(function (c) { return c[0] !== "time"; }); }
-  var SEARCH = ["pid", "unit", "loc", "mos", "type", "grade", "status", "out", "duty", "marital", "gender"];
+  var SEARCH = ["pid", "unit", "loc", "mos", "type", "grade", "status", "out", "duty", "gender"];
   function cellv(r, k) { var v = r[k]; return v == null || (typeof v === "number" && isNaN(v)) ? "" : v; }
   function table() {
     var on = $("showRows").checked;
@@ -858,7 +921,8 @@
     "6. Data gaps and what to collect next.",
     "Do not try to identify any individual. Use plain language and keep it to about one page.",
     ""];
-  function packText() {
+  function packText() { S.packMode = true; try { return packText_(); } finally { S.packMode = false; } }
+  function packText_() {
     var f = F(), rows = rowsFor(f), A = analyze(rows, f), L = PROMPT.slice(), months = spanMonths(f);
     var scope = DIMS.filter(function (d) { return f[d[0]]; }).map(function (d) { return DLABEL[d[0]] + " = " + f[d[0]]; });
     L.push("=== AGGREGATED DATA (" + (S.source === "file" || S.source === "saved" ? "loaded from local files" : "FICTIONAL demo data") + ") ===");
@@ -874,7 +938,7 @@
     L.push("", "-- Incidents by fiscal month (Oct..Sep), per fiscal year --");
     K.uniq(all.map(function (r) { return r.fy; })).sort().forEach(function (fy) { var c = new Array(12).fill(0); all.forEach(function (r) { if (r.fy === fy) c[r.fmN - 1]++; }); L.push(fy + ": " + c.map(function (x, i) { return FY_MON[i] + " " + cnt(x); }).join(", ")); });
     L.push("", "-- Counts by segment (with rate per 1,000/yr and relative risk where a headcount covers it) --");
-    ["grade", "ageBand", "gender", "status", "marital", "loc", "unit", "type", "duty", "msdBand", "win", "hol", "tisBand", "depsBand", "priorBand"].forEach(function (k) {
+    ["grade", "ageBand", "gender", "status", "loc", "unit", "type", "duty", "msdBand", "win", "hol", "tisBand", "depsBand", "priorBand"].forEach(function (k) {
       if (f[k]) return; var g = group(rows, k), a = RATE_DIMS.indexOf(k) >= 0 ? assigned(k, f) : null, vals = sortVals(k, Object.keys(g).filter(function (v) { return v !== BLANK; }));
       if (!vals.length) return;
       L.push(DLABEL[k] + ": " + vals.map(function (v) {
@@ -1049,6 +1113,10 @@
     $("btnPrint").addEventListener("click", function () { window.print(); });
     $("btnGenAI").addEventListener("click", copyPack);
     $("btnPrintCs").addEventListener("click", printSummary);
+    $("hideSmall").addEventListener("change", function () { S.hideSmall = this.checked; render(); });
+    $("incMap").addEventListener("mousemove", mapTip); $("incMap").addEventListener("mouseleave", function () { $("mapTip").hidden = true; });
+    $("incMap").addEventListener("click", mapClick);
+    $("incMap").addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); mapClick(e); } });
     $("showRows").addEventListener("change", function () { S.showAll = false; table(); });
     document.querySelector("main").addEventListener("click", heatClick);
     $("btnGenAITxt").addEventListener("click", downloadPack);
@@ -1077,6 +1145,6 @@
     SAVED = readSaved();
     if (SAVED) { showBanner(); document.title = "REAL DATA \u00b7 " + document.title; loadSaved(); } else loadDemo();
   }
-  window.PreventionDash = { packText: packText, analysis: function () { return S.an; }, correlations: function () { return S.corr; }, state: S, parseWhen: function (v) { var w = parseWhen(v); return w ? { date: iso(w.d), h: w.h, mi: w.mi, dow: DOW[(w.d.getUTCDay() + 6) % 7] } : w; }, mapHeader: function (h) { return isPii(h) ? "SKIP" : ALIAS[norm(h)] || null; } };
+  window.PreventionDash = { packText: packText, placeOf: function (v) { var p = placeOf(v); return p ? p[0] : null; }, analysis: function () { return S.an; }, correlations: function () { return S.corr; }, state: S, parseWhen: function (v) { var w = parseWhen(v); return w ? { date: iso(w.d), h: w.h, mi: w.mi, dow: DOW[(w.d.getUTCDay() + 6) % 7] } : w; }, mapHeader: function (h) { return isPii(h) ? "SKIP" : ALIAS[norm(h)] || null; } };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 })();
