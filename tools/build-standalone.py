@@ -29,6 +29,8 @@ PAGES = {
     "readiness-dashboard": dict(dir="dashboards/readiness", title="Readiness Command Dashboard", templates=["readiness_template.csv"]),
     "finance-dashboard": dict(dir="dashboards/finance", title="Status of Funds Dashboard",
                               templates=["funds_template.xlsx", "funds_template.csv", "funding_template.xlsx", "spendplan_template.xlsx", "accountkey_template.xlsx", "cikey_template.xlsx"], save_prefix="FUNDS", pa_template=True),
+    "prevention-dashboard": dict(dir="dashboards/prevention", title="Alcohol Incident Trends & Prevention Dashboard",
+                                 templates=["prevention_template.xlsx", "roster_template.xlsx"], save_prefix="PREVENTION"),
 }
 
 def read(p, mode="r"):
@@ -68,7 +70,7 @@ def build_single(page_dir, html):
     html = common_rewrites(html)
     assert not re.search(r'<(script|link)[^>]+(src|href)="(?!data:|#)', html), "unresolved local reference"
     assert not re.search(r'https?://', re.sub(r'<script>.*?</script>|<style>.*?</style>', '', html, flags=re.S)), "external URL in offline build"
-    for sid in ("safety", "finance"):
+    for sid in ("safety", "finance", "prevention"):
         assert ('<script id="' + sid + 'Saved"') not in html, "embedded data found in a public build"
     return "<!-- Offline copy of the dashboard. Runs entirely in the browser; makes no network requests. -->\n" + html
 
