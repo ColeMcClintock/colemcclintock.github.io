@@ -83,3 +83,8 @@ h3.sub{font-size:.9rem;margin:10px 0 6px;color:#c9d6e6}
 .hint{font-size:.85rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 0}
 .hint[hidden]{display:none}
 @media(max-width:900px){.pacegrid{grid-template-columns:1fr}}
+/* account / commitment item keys */
+.flag{display:inline-block;font-size:.72rem;font-weight:700;padding:0 6px;border-radius:999px;background:rgba(227,179,76,.16);border:1px solid rgba(227,179,76,.55);color:#f0d595;vertical-align:1px}
+#tFund td.fas{max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c9d6e6}
+#tFund .fan{display:inline-block;min-width:18px;text-align:center;font-size:.72rem;font-weight:700;border-radius:6px;background:var(--bg2);border:1px solid var(--line);margin-right:4px}
+#tFund tr.unmapped td{color:var(--warn)}

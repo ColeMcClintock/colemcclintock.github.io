@@ -28,7 +28,7 @@ PAGES = {
                              templates=["asmis_template.xlsx", "asmis_template.csv"], guide=True, save_prefix="SAFETY"),
     "readiness-dashboard": dict(dir="dashboards/readiness", title="Readiness Command Dashboard", templates=["readiness_template.csv"]),
     "finance-dashboard": dict(dir="dashboards/finance", title="Status of Funds Dashboard",
-                              templates=["funds_template.xlsx", "funds_template.csv", "funding_template.xlsx", "spendplan_template.xlsx"], save_prefix="FUNDS", pa_template=True),
+                              templates=["funds_template.xlsx", "funds_template.csv", "funding_template.xlsx", "spendplan_template.xlsx", "accountkey_template.xlsx", "cikey_template.xlsx"], save_prefix="FUNDS", pa_template=True),
 }
 
 def read(p, mode="r"):

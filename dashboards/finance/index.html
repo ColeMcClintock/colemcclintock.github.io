@@ -45,6 +45,10 @@
       <input type="file" id="fundInput" accept=".xlsx,.xls,.csv" multiple hidden>
       <button class="btn ghost sm" id="btnPlan" type="button" title="Choose the spend plan (Fiscal Month, Planned Amount)">Spend plan</button>
       <input type="file" id="planInput" accept=".xlsx,.xls,.csv" multiple hidden>
+      <button class="btn ghost sm" id="btnKey" type="button" title="Choose the Account Key (Functional Area, Account, Sag, MDEP)">Account Key</button>
+      <input type="file" id="keyInput" accept=".xlsx,.xls,.csv" multiple hidden>
+      <button class="btn ghost sm" id="btnCiKey" type="button" title="Choose the Commitment Item Key (Commitment Item, Description)">CI Key</button>
+      <input type="file" id="ciKeyInput" accept=".xlsx,.xls,.csv" multiple hidden>
       <button class="btn ghost sm" id="btnAdd" type="button" hidden title="Add more exports to the current set">Add more files</button>
       <button class="btn ghost sm" id="btnClear" type="button" hidden title="Remove loaded files">Clear</button>
       <button class="btn sm save" id="btnSave" type="button" disabled title="Load your files first">&#128190; Save with data</button>
@@ -56,8 +60,10 @@
     <div>
       <h3>Load the funds export and the funding file (stays on this device)</h3>
       <p><strong>1. Funds export</strong> (<strong>.xlsx</strong> or <strong>.csv</strong>): Obligation, Disbursement and Commitments by line. Several exports are added together, so load each one only once. Only the nine columns below are read; every other column is ignored, and personal identifier columns (such as social security number) are skipped without being read. Lines whose Commitment Item is <strong>ALLOBJ</strong> are removed completely before anything is counted. The file is read by this browser tab only; nothing is uploaded, stored, or sent anywhere.</p>
-      <p><strong>2. Funding file</strong>: one row per Functional Area (optionally also Fiscal Year, Appropriation, Sag, MDEP, Commitment Item) with <strong>TDP</strong> (full-year funding), <strong>AFP</strong> (funded to date) and <strong>Reservations</strong> (known costs not yet obligated). An optional <strong>Account</strong> column names each Functional Area. Funding is matched to the export lines on every column both files share. </p>
-      <p><strong>3. Spend plan</strong> (optional): Fiscal Year, Functional Area or Account (both optional), Fiscal Month (1&ndash;12 where 1 = Oct, or a month name) and Planned Amount. It draws the plan line on the trend charts.</p>
+      <p><strong>2. Account Key</strong>: Functional Area, Account, Sag, MDEP. Rolls each Functional Area up to its Account (several Functional Areas can share one Account) and gives each Account its one Sag and MDEP. Functional Areas not in the key are shown as <em>Unmapped</em>: they count in the totals but are not matched to funding.</p>
+      <p><strong>3. Funding file</strong>: Fiscal Year (optional), Account, <strong>TDP</strong> (full-year funding), <strong>AFP</strong> (funded to date), <strong>Reservations</strong> (known costs not yet obligated), one row per Account per year. Account names must match the Account Key (case and extra spaces are ignored). An older file with Functional Area instead of Account is mapped through the key.</p>
+      <p><strong>4. Commitment Item Key</strong> (optional): Commitment Item, Description. Descriptions replace the codes everywhere; the code stays in the CI Code column. Codes not in the key show as the raw code, flagged Unmapped.</p>
+      <p><strong>5. Spend plan</strong> (optional): Fiscal Year, Account (or Functional Area; both optional), Fiscal Month (1&ndash;12 where 1 = Oct, or a month name) and Planned Amount. It draws the plan line on the trend charts.</p>
       <p>You can choose all the files at once; each is recognized by its headers.</p>
       <p>
         <label class="btn filebtn">Choose files&hellip;<input type="file" id="fileInput" accept=".xlsx,.xls,.csv" multiple></label>
@@ -65,6 +71,8 @@
         <a class="btn ghost" href="funds_template.xlsx" download>&#8681; Blank template (.xlsx)</a>
         <a class="btn ghost" href="funds_template.csv" download>&#8681; Blank template (.csv)</a>
         <a class="btn ghost" href="funding_template.xlsx" download>&#8681; Blank funding file (.xlsx)</a>
+        <a class="btn ghost" href="accountkey_template.xlsx" download>&#8681; Blank Account Key (.xlsx)</a>
+        <a class="btn ghost" href="cikey_template.xlsx" download>&#8681; Blank Commitment Item Key (.xlsx)</a>
         <a class="btn ghost" href="spendplan_template.xlsx" download>&#8681; Blank spend plan (.xlsx)</a>
         <button class="btn ghost" id="btnDemo" type="button">Restore demo data</button>
       </p>
@@ -81,6 +89,7 @@
     <label>Appropriation<select id="fAppn"></select></label>
     <label>Sag<select id="fSag"></select></label>
     <label>MDEP<select id="fMdep"></select></label>
+    <label>Account<select id="fAcct"></select></label>
     <label>Functional Area<select id="fFa"></select></label>
     <label>Commitment Item<select id="fCi"></select></label>
     <label>Fiscal Month<select id="fFm"></select></label>
@@ -126,7 +135,7 @@
     <section class="panel"><h2>By MDEP</h2><div class="chartbox tall"><canvas id="cMdep"></canvas></div></section>
   </div>
   <div class="row r2b">
-    <section class="panel"><h2>By Functional Area</h2><div class="chartbox tall"><canvas id="cFa"></canvas></div></section>
+    <section class="panel"><h2>By Account</h2><div class="chartbox tall"><canvas id="cAcct"></canvas></div></section>
     <section class="panel"><h2>By Commitment Item</h2><div class="chartbox tall"><canvas id="cCi"></canvas></div></section>
   </div>
   <p class="muted small chartnote no-print">Largest 10 values by amount; the rest are grouped as Other. Click a bar to filter by it.</p>
@@ -138,7 +147,7 @@
   </section>
   <section class="panel fundneed" id="fundNeed" hidden>
     <h2>Funding vs execution</h2>
-    <p>TDP, AFP, Reservations and Balance come from the funding file. <button class="btn sm" type="button" data-fund="1">Load funding file</button> <a class="btn ghost sm" href="funding_template.xlsx" download>&#8681; Blank funding file</a></p>
+    <p>TDP, AFP, Reservations and Balance come from the funding file. <button class="btn sm" type="button" data-fund="1">Load funding file</button> <a class="btn ghost sm" href="accountkey_template.xlsx" download>&#8681; Blank Account Key</a> <a class="btn ghost sm" href="funding_template.xlsx" download>&#8681; Blank funding file</a></p>
   </section>
 
   <section class="panel">
@@ -156,8 +165,9 @@
       <li><strong>Fiscal Month</strong> comes from the export's fiscal_month (1 = Oct, 2 = Nov &hellip; 12 = Sep) and is shown as &ldquo;1 - Oct&rdquo;. Values like 01, 1.0, P01 or a month name are accepted; anything else counts as blank.</li>
       <li><strong>Spending trend</strong>: each line's amount counts in its fiscal month. &ldquo;Spent&rdquo; is Obligation + Disbursement by default (the same amounts Balance subtracts); you can switch it to Obligation or Disbursement only. The straight-line pace is TDP &times; month &divide; 12. The spend plan line is the cumulative Planned Amount.</li>
       <li><strong>Where we should be</strong> compares % of TDP spent with % of the year elapsed. For the current fiscal year, elapsed uses today's fiscal month (October = 1/12); a past year counts as 12/12. The trend shows the Fiscal Year filter if set; otherwise the current fiscal year once it has two months of data, else the latest earlier year.</li>
-      <li>Funding rows are matched to the lines on Functional Area plus any of Fiscal Year, Appropriation, Sag, MDEP and Commitment Item that both files have. Funding rows with the same match values are added together. Lines with no funding row still count in Obligation and Balance and are listed as &ldquo;no funding row&rdquo;.</li>
-      <li>When a filter uses a column the funding file does not have (for example Commitment Item when funding is by Functional Area), funding cannot be split, so the funding rows that have matching lines are shown at their full amount.</li>
+      <li><strong>Accounts</strong>: each export line's Functional Area is looked up in the Account Key to get its Account, Sag and MDEP (Sag and MDEP are not read from the export). Obligation and Disbursement are added up per Account (and Fiscal Year when the funding file has it), then Balance is worked out per Account. Functional Areas not in the key are listed as Unmapped and count in the totals only.</li>
+      <li>When a filter uses something funding is not set by (Functional Area, Commitment Item, Appropriation, Fiscal Month), funding cannot be split, so the Accounts with matching lines are shown at their full funding. Sag and MDEP filters pick whole Accounts.</li>
+      <li><strong>Sign</strong>: the export carries obligations, commitments and disbursements as negative numbers; they are multiplied by &minus;1 when read (setting FLIP_EXPORT_SIGN at the top of finance.js). Funding, spend plan and key files are used as given.</li>
       <li><strong>ALLOBJ</strong> lines (Commitment Item equal to ALLOBJ, any case or spacing) are removed when the file is read. They are never counted, charted, listed, exported, or saved.</li>
       <li><strong>Documents</strong> = distinct Document Numbers among the lines shown. A document can have several lines (one per Commitment Item).</li>
       <li>Amounts accept commas, dollar signs, parentheses and trailing minus signs for negatives. Blank, #REF! and other error cells count as blank ($0 in totals).</li>

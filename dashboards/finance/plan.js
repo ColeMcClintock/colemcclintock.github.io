@@ -64,9 +64,9 @@
     if (filtered) {
       if (plan.hasFa || plan.hasAcct) {
         var fas = Object.create(null), accts = Object.create(null);
-        scopeRows.forEach(function (r) { if (r.fa) { fas[L.kn("fa", r.fa)] = 1; var a = L.account(fund, r.fa); if (a) accts[a.toLowerCase()] = 1; } });
-        rows = rows.filter(function (r) { return r.fa ? fas[L.kn("fa", r.fa)] : r.acct ? accts[r.acct.toLowerCase()] : false; });
-        note = "Plan limited to the Functional Areas in the current filters.";
+        scopeRows.forEach(function (r) { if (r.fa) fas[L.kn("fa", r.fa)] = 1; if (r.acct) accts[L.an(r.acct)] = 1; });
+        rows = rows.filter(function (r) { return r.acct ? accts[L.an(r.acct)] : r.fa ? fas[L.kn("fa", r.fa)] || accts[L.an(L.acctOf(r.fa))] : false; });
+        note = "Plan limited to the Accounts in the current filters.";
       } else note = "The plan has no Functional Area or Account, so it is not split by the filters.";
     }
     var m = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
