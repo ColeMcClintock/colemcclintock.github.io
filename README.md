@@ -14,6 +14,7 @@ Data analytics and automation portfolio: interactive dashboards and tools that r
 | Readiness Command Dashboard | Live | [`dashboards/readiness/`](dashboards/readiness/index.html) |
 | Safety & Mishaps Dashboard | Live | [`dashboards/safety/`](dashboards/safety/index.html) |
 | Status of Funds Dashboard | Live | [`dashboards/finance/`](dashboards/finance/index.html) |
+| Alcohol Incident Prevention Dashboard | Live | [`dashboards/prevention/`](dashboards/prevention/index.html) |
 | Power BI Starter Kit | Live | [`powerbi-kit/`](powerbi-kit/index.html) |
 | Automated Report Generator | Coming soon | |
 | Data Quality & Reconciliation Tool | Coming soon | |
@@ -33,6 +34,10 @@ Blank templates: [`asmis_template.xlsx`](dashboards/safety/asmis_template.xlsx),
 
 ### Status of Funds Dashboard
 Reads the GFEBS funds management export (Excel or CSV, any number of columns) and uses nine of them, renamed: Document Number, Commitment Item, Functional Area, Appropriation, Fiscal Year, Obligation, Commitments, Sag and MDEP. Lines whose Commitment Item is ALLOBJ are removed before anything is counted, and personal identifier columns are skipped without being read. KPI totals, breakdowns by fiscal year, appropriation, Sag, MDEP, functional area and commitment item (top 10 + Other, click to filter), a searchable, sortable line table with CSV export, multi-file load, Save with data, and a Power Automate template (`downloads/finance-dashboard-template.html`, expressions in `downloads/funds-flow.html`). Demo data is fictional (`data-generation/generate_funds_data.py`); `tools/test-finance.py` runs the headless-Chrome checks. The older fictional program-level CSVs remain in `dashboards/finance/data/` for the Power BI kit.
+
+
+### Alcohol Incident Prevention Dashboard
+Fictional demonstration data only; not an official Iowa Army National Guard product. Reads incident files locally in the browser, with name and ID columns skipped, mailing addresses reduced to town only, and DOB used only as an age fallback without retention. Includes separate incident-location and home-of-record maps, a descriptive Iowa DOT OWI-revocation benchmark estimate (not age- or sex-adjusted), marital-status and broad/company-unit breakdowns, and optional local unit-strength rates with a 1.5× flag. The single-file offline copy is built with `python3 tools/build-standalone.py`. Never put real or CUI data in this public repository.
 
 ### Power BI Starter Kit
 Two schema-validated report themes, a DAX measures library (readiness; ASMIS overdue investigations, days since last Class A/B, cost totals and accidents per 1,000; obligation and burn rates, EOY projection, variance, ranking, dynamic titles), Power Query (M) scripts (parameter, loader, an ASMIS export query that cleans headers, renames Tech to MSC and parses DD-Mon-YY dates and currency, folder load, date table, dims, facts, unpivots), a star-schema diagram, a page-by-page report layout, step-by-step build instructions, and the fictional CSVs. A `.pbix` is not included because it can only be built in Power BI Desktop; the kit rebuilds it in about 30-60 minutes. Download: [`powerbi-kit/powerbi-starter-kit.zip`](powerbi-kit/powerbi-starter-kit.zip).

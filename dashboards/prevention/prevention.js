@@ -30,9 +30,10 @@
   function cmpVal(a, b) { var na = +a, nb = +b; if (a !== "" && b !== "" && isFinite(na) && isFinite(nb)) return na - nb; return String(a).localeCompare(String(b), "en", { numeric: true, sensitivity: "base" }); }
 
   // Personal identifiers: skipped by header alone; their cells are never read.
-  var PII_EXACT = /^(name|names|fullname|firstname|lastname|middlename|middleinitial|mi|fname|lname|first|last|surname|givenname|soldiername|membername|personname|servicemembername|employeename|lastfirst|namelastfirst|rankname|ssn|ssan|social|dob|edipi|edipn|dodid)$/;
+  var PII_EXACT = /^(name|names|fullname|firstname|lastname|middlename|middleinitial|mi|fname|lname|first|last|surname|givenname|soldiername|membername|personname|servicemembername|employeename|lastfirst|namelastfirst|rankname|ssn|ssan|social|dob|dateofbirth|edipi|edipn|dodid|id)$/;
   function isPii(h) {
     var s = decodeX(h).toLowerCase(), n = norm(h);
+    if (/^(dob|dateofbirth|birthdate|mailingaddress|hometown|homeofrecord|homecity|horcity)$/.test(n)) return false;
     if (PII_EXACT.test(n)) return true;
     if (/social\s*_?security|ssn|ssan|dod\s*_?id|dodid|edipi|edipn|birth|e-?mail|phone|street|address/.test(s)) return true;
     return s.split(/[^a-z0-9]+/).some(function (t) { return t === "dob" || t === "name" || t === "names" || t === "ssn"; }) && !/^(unit|armory|location|program|course|company)/.test(n);
@@ -44,12 +45,16 @@
     ["ty", "TY", ["ty", "year", "calendaryear", "cy", "incidentyear"], "Detail table (the federal fiscal year is worked out from the DTG)"],
     ["grade", "Grade", ["grade", "paygrade", "rank", "rankgrade"], "Chart, filter, heat maps, rates"],
     ["date", "DTG of Incident", ["dtgofincident", "dtg", "incidentdtg", "dtgincident", "datetimegroup", "dtgofevent", "incidentdate", "date", "dateofincident", "eventdate", "offensedate", "incidentdatetime"], "Required: the date (a time is optional and used only when present); weekday; fiscal year, month, quarter; holiday / payday windows"],
-    ["loc", "Location", ["location", "armory", "locationarmory", "readinesscenter", "station", "city"], "Chart, filter, heat maps, rates"],
+    ["loc", "Location", ["location", "armory", "locationarmory", "readinesscenter", "station", "city"], "Incident map, chart, filter"],
+    ["homeTown", "Home Town", ["hometown", "homeofrecord", "horcity", "homecity", "mailingaddress"], "Home-of-record map; town only retained"],
     ["duty", "Duty Status", ["dutystatus", "dutystays", "dutystaus", "dutystat", "duty", "onoffduty"], "Chart, filter, heat map"],
     ["age", "Age", ["age", "ageatincident", "ageattimeofincident"], "Age band chart, filter, heat map"],
     ["gender", "Gender", ["gender", "sex"], "Chart, filter, rates"],
-    ["unit", "Unit", ["unit", "unitname", "company", "organization", "org"], "Chart, filter, heat map, rates (matches the headcount)"],
-    ["pid", "Person ID", ["personid", "pid", "pseudoid", "pseudonymousid", "memberid", "recordid", "participantid", "caseid", "id"], "Optional: unique people, repeat rate (pseudonymous ID only)"],
+    ["unit", "Unit", ["unit", "unitname", "company", "organization", "org", "unitofassignment"], "Company/unit chart and filter"],
+    ["unitBroad", "Broad Unit", ["broadunit", "battalion", "unitofassignmentbroad"], "Broad-unit chart and filter"],
+    ["marital", "Marital Status", ["maritalstatus", "marital"], "Chart and filter"],
+    ["pebd", "PEBD", ["pebd", "payentrybasdate", "payentrybasdate"], "Used only to derive rounded service years at incident"],
+    ["pid", "Person ID", ["personid", "pid", "pseudoid", "pseudonymousid", "memberid", "recordid", "participantid", "caseid"], "Optional: unique people, repeat rate (pseudonymous ID only)"],
     ["status", "Status", ["status", "dutytype", "membershipstatus", "component", "category", "personnelcategory", "tsagrtech"], "Optional: chart, filter (Traditional, AGR, Technician)"],
     ["mos", "MOS", ["mos", "pmos", "primarymos", "dmos", "aoc", "specialty"], "Optional: detail table, search"],
     ["tis", "Time in Service (yrs)", ["timeinservice", "timeinserviceyrs", "timeinserviceyears", "yearsofservice", "yos", "tis"], "Optional: correlations (service band)"],
@@ -67,6 +72,8 @@
     ["gender", "Gender", ["gender", "sex"]], ["ageBand", "Age Band", ["ageband", "agegroup", "agerange"]], ["count", "Count", ["count", "headcount", "assigned", "strength", "personnel", "number", "n", "total"]]];
   function aliasMap(cols) { var m = {}; cols.forEach(function (c) { m[norm(c[1])] = c[0]; c[2].forEach(function (a) { if (!m[a]) m[a] = c[0]; }); }); return m; }
   var ALIAS = aliasMap(COLS), RALIAS = aliasMap(RCOLS);
+  // DOB is an age-only source: map internally, but do not list it in the visible schema, detail table, or snapshots.
+  ["dob", "dateofbirth", "birthdate"].forEach(function (a) { ALIAS[a] = "dob"; });
 
   // ---------- value normalizers ----------
   var RANKS = { PVT: "E-1", PV1: "E-1", PV2: "E-2", PFC: "E-3", SPC: "E-4", CPL: "E-4", SGT: "E-5", SSG: "E-6", SFC: "E-7", MSG: "E-8", "1SG": "E-8", SGM: "E-9", CSM: "E-9",
@@ -93,9 +100,12 @@
     return "";
   }
   function normDuty(v) {
-    var s = val(v), l = s.toLowerCase(); if (!s) return "";
-    if (/^at$|annual/.test(l)) return "AT"; if (/drill|idt|uta|mut/.test(l)) return "Drill";
-    if (/off/.test(l)) return "Off Duty"; if (/on/.test(l)) return "On Duty"; return s;
+    var s = val(v), l = s.toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, " ").trim(); if (!s) return "";
+    if (/^m-?day\s*-?\s*not\s+on\s+duty$/.test(l) || /^(off duty|off-duty)$/.test(l)) return "M-Day - NOT ON DUTY";
+    if (/^m-?day\s*-?\s*idt$/.test(l) || /drill|idt|uta|mut/.test(l)) return "M-Day - IDT";
+    if (/^m-?day\s*-?\s*at$/.test(l) || /^at$|annual/.test(l)) return "M-Day - AT";
+    if (/^ados\s*-?\s*t32$/.test(l)) return "ADOS - T32"; if (/^agr$/.test(l)) return "AGR"; if (/^tech\s*-?\s*t32$|^technician$/.test(l)) return "Tech - T32";
+    if (/on/.test(l)) return "On Duty"; return s;
   }
   function normType(v) {
     var s = val(v), l = s.toLowerCase(); if (!s) return "";
@@ -185,7 +195,7 @@
     var map = {}, extra = [], dupes = [], pii = [];
     for (var ci = 0; ci < src.cols; ci++) {
       var hv = src.get(hi, ci); if (hv == null || txt(hv) === "") continue;
-      if (isPii(hv)) { pii.push(txt(decodeX(hv))); continue; }               // header only; no cell in this column is read
+      if (isPii(hv) && !/^(dob|dateofbirth|birthdate|mailingaddress|hometown|homeofrecord|homecity|horcity)$/.test(norm(hv))) { pii.push(txt(decodeX(hv))); continue; }               // header only; no cell in this column is read
       var k = alias[norm(hv)];
       if (!k) { extra.push(txt(decodeX(hv))); continue; }
       if (map[k] != null) { dupes.push(txt(decodeX(hv))); continue; }
@@ -201,6 +211,20 @@
   }
 
   // ---------- parsing ----------
+  function townOnly(v) {
+    var s = txt(v); if (!s) return "";
+    // Accept town-only values, or discard street/ZIP by retaining the penultimate comma-separated address component.
+    var parts = s.split(",").map(function (x) { return x.trim(); }).filter(Boolean);
+    if (parts.length > 1) {
+      while (parts.length > 1 && (/^\d{5}(?:-\d{4})?$/.test(parts[parts.length - 1]) || /^(?:IA|Iowa)(?:\s+\d{5}(?:-\d{4})?)?$/i.test(parts[parts.length - 1]))) parts.pop();
+      s = parts[parts.length - 1];
+    }
+    s = s.replace(/\s+\d{5}(?:-\d{4})?\s*$/, "").replace(/,?\s+(?:IA|Iowa)$/i, "").trim();
+    return /^[A-Za-z .'-]{2,60}$/.test(s) ? s : "";
+  }
+  function dateCell(v) { var w = parseWhen(v); return w && w.d ? w.d : null; }
+  function yearsAt(start, incident) { if (!start || !incident || start > incident) return null; var n = incident.getUTCFullYear() - start.getUTCFullYear(); if (incident.getUTCMonth() < start.getUTCMonth() || (incident.getUTCMonth() === start.getUTCMonth() && incident.getUTCDate() < start.getUTCDate())) n--; return Math.max(0, n); }
+
   function parseIncidents(src) {
     var hm = mapHeaders(src, ALIAS), map = hm.map;
     var rep = { kind: "incidents", headerRow: hm.hi + 1, matched: COLS.filter(function (c) { return map[c[0]] != null; }).map(function (c) { return c[1]; }),
@@ -217,10 +241,12 @@
       if (!w) { rep.badDate++; if (rep.badDateEx.length < 5) rep.badDateEx.push({ row: rr + 1, value: txt(raw.date) }); continue; }
       var d = w.d;
       if (w.h != null) rep.withTime++;
-      var rec = { _row: rr + 1, d: d, date: iso(d), hour: w.h, min: w.mi, ty: val(raw.ty), pid: val(raw.pid), gender: normGender(raw.gender), loc: val(raw.loc), unit: val(raw.unit), status: normStatus(raw.status),
-        grade: normGrade(raw.grade), mos: val(raw.mos), type: normType(raw.type), duty: normDuty(raw.duty),
-        ref: yn(raw.ref), comp: yn(raw.comp), rep: yn(raw.rep), out: val(raw.out) };
+      var rec = { _row: rr + 1, d: d, date: iso(d), hour: w.h, min: w.mi, ty: val(raw.ty), pid: val(raw.pid), gender: normGender(raw.gender), loc: val(raw.loc), homeTown: townOnly(raw.homeTown), unit: val(raw.unit), unitBroad: val(raw.unitBroad), marital: val(raw.marital), status: normStatus(raw.status),
+        grade: normGrade(raw.grade), mos: val(raw.mos), type: normType(raw.type), duty: normDuty(raw.duty), ref: yn(raw.ref), comp: yn(raw.comp), rep: yn(raw.rep), out: val(raw.out) };
       ["age", "tis", "deps", "msd", "prior"].forEach(function (k) { var x = k in raw ? num(raw[k]) : null; if (x !== null && isNaN(x)) { rep.badNum++; x = k === "msd" ? NaN : null; } rec[k] = x; });
+      if (rec.age == null && raw.dob != null) { var birth = dateCell(raw.dob); if (birth) rec.age = d.getUTCFullYear() - birth.getUTCFullYear() - (d.getUTCMonth() < birth.getUTCMonth() || (d.getUTCMonth() === birth.getUTCMonth() && d.getUTCDate() < birth.getUTCDate()) ? 1 : 0); }
+      var pebd = dateCell(raw.pebd); if (pebd) rec.tis = yearsAt(pebd, d);
+      if (rec.unit && !rec.unitBroad) { var pair = rec.unit.split(/\s*,\s*/); if (pair.length > 1) { rec.unit = pair[0]; rec.unitBroad = pair.slice(1).join(", "); } }
       if (!("msd" in raw)) rec.msd = undefined;
       derive(rec); out.push(rec);
     }
@@ -231,7 +257,7 @@
     var d = r.d, y = d.getUTCFullYear(), m = d.getUTCMonth() + 1;
     r.fyN = m >= 10 ? y + 1 : y; r.fy = "FY" + String(r.fyN).slice(2); r.fmN = (m + 2) % 12 + 1; r.fm = FY_MON[r.fmN - 1];
     r.q = Q_L[Math.floor((r.fmN - 1) / 3)]; r.ym = y * 12 + m - 1;
-    r.ageBand = ageBand(r.age); r.msdBand = r.msd === undefined ? "" : msdBand(r.msd); r.tisBand = tisBand(r.tis);
+    r.ageBand = ageBand(r.age); r.msdBand = r.msd === undefined ? "" : msdBand(r.msd); r.tis = r.tis == null ? null : Math.round(r.tis); r.tisBand = tisBand(r.tis);
     r.win = winOf(d); r.hol = nearHoliday(d); r.gg = gradeGroup(r.grade);
     r.depsBand = r.deps == null ? "" : r.deps === 0 ? "No dependents" : r.deps <= 2 ? "1\u20132 dependents" : "3+ dependents";
     r.priorBand = r.prior == null ? "" : r.prior === 0 ? "No prior incidents" : r.prior === 1 ? "1 prior incident" : "2+ prior incidents";
@@ -319,7 +345,7 @@
   function loadDemo() {
     var D = window.PREV_DEMO, p = parseIncidents(aoaSource([D.headers].concat(D.rows))), rp = parseRoster(aoaSource([D.roster.headers].concat(D.roster.rows)));
     S.files = []; S.failed = null; S.dupRemoved = 0;
-    applyData(p.records, { files: ["Demo headcount"], rows: rp.rows, dims: rp.report.dims }, "demo"); renderReport();
+    applyData(p.records, null, "demo"); renderReport();
   }
   function applyData(recs, roster, source) {
     recs.forEach(function (r, i) { r._i = i; });
@@ -423,9 +449,9 @@
   function rate(n, a, months) { return a > 0 ? n / a * 1000 * 12 / months : null; }
 
   // ---------- filters ----------
-  var DIMS = [["fy", "fFy", "All years"], ["q", "fQ", "All quarters"], ["fm", "fFm", "All months"], ["loc", "fLoc", "All"], ["unit", "fUnit", "All"], ["grade", "fGrade", "All"],
+  var DIMS = [["fy", "fFy", "All years"], ["q", "fQ", "All quarters"], ["fm", "fFm", "All months"], ["loc", "fLoc", "All"], ["homeTown", "fHomeTown", "All towns"], ["unit", "fUnit", "All"], ["grade", "fGrade", "All"],
     ["ageBand", "fAge", "All"], ["gender", "fGender", "All"], ["status", "fStatus", "All"], ["type", "fType", "All"], ["duty", "fDuty", "All"], ["msdBand", "fMsd", "All"], ["win", "fWin", "All"], ["dow", "fDow", "All days"], ["tod", "fTod", "All times"]];
-  var DLABEL = { fy: "Fiscal year", q: "Quarter", fm: "Month", loc: "Location", unit: "Unit", grade: "Grade", ageBand: "Age", gender: "Gender", status: "Status",
+  var DLABEL = { fy: "Fiscal year", q: "Quarter", fm: "Month", loc: "Incident location", homeTown: "Home town", unit: "Unit", grade: "Grade", ageBand: "Age", gender: "Gender", status: "Status",
     type: "Incident type", duty: "Duty status", msdBand: "Since deployment", win: "Holiday / payday", hol: "Holiday", treat: "Treatment", dow: "Day of week", tod: "Time of day", ref: "Referred", comp: "Completed program", rep: "Repeat incident", tisBand: "Time in service", depsBand: "Dependents", priorBand: "Prior incidents", gg: "Grade group" };
   var ORDER = { dow: DOW, tod: TOD, fm: FY_MON, q: Q_L, ageBand: AGE_B, msdBand: MSD_B, win: WIN, tisBand: TIS_B, treat: TREAT, depsBand: ["No dependents", "1\u20132 dependents", "3+ dependents"], priorBand: ["No prior incidents", "1 prior incident", "2+ prior incidents"] };
   function sortVals(k, vals) {
@@ -455,11 +481,10 @@
     $("scopeLabel").textContent = scope.length ? scope.join(" \u00b7 ") : "All incidents";
     $("sourceLabel").textContent = S.source === "file" ? " \u00b7 Your files" : S.source === "saved" ? " \u00b7 Saved data" : S.source === "demo-roster" ? " \u00b7 Demo incidents + your headcount" : " \u00b7 Demo data";
     S.an = analyze(rows, f);
-    mapRender(f);
-    kpis(rows, f); insights();
+    mapRender(f, "loc", "incMap"); mapRender(f, "homeTown", "homeMap");
+    kpis(rows, f); benchmark(rows, f); renderUnitRates(f); insights();
     monthChart(f); fyChart(f);
-    [["cGrade", "grade", false], ["cAge", "ageBand", false], ["cType", "type", true], ["cGender", "gender", false], ["cStatus", "status", true],
-     ["cLoc", "loc", true], ["cUnit", "unit", true], ["cDuty", "duty", false], ["cMsd", "msdBand", false], ["cWin", "win", false], ["cHol", "hol", true]].forEach(function (c) { barChart(c[0], c[1], c[2], rows, f); });
+    [["cGrade", "grade", false], ["cAge", "ageBand", false], ["cType", "type", true], ["cGender", "gender", false], ["cStatus", "status", true], ["cMarital", "marital", false], ["cLoc", "loc", true], ["cUnit", "unitBroad", true], ["cCompany", "unit", true], ["cDuty", "duty", false], ["cMsd", "msdBand", false], ["cWin", "win", false], ["cHol", "hol", true]].forEach(function (c) { barChart(c[0], c[1], c[2], rows, f); });
     repeatChart(rows); heatAll(rows); S.corr = correlations(rows, f); renderCorr(S.corr); commander(rows, f); S.base = rows; table();
   }
   function dateRange(rows) {
@@ -492,6 +517,34 @@
     }
     h.push(kpi("Trend vs prior FY", tv, ts, "trend"));
     $("kpis").innerHTML = h.join("");
+  }
+
+  // ---------- Iowa benchmark and locally entered unit strengths ----------
+  var UNIT_KEY = "preventionDash.unitStrength.v1";
+  function unitStrengths() { try { return JSON.parse(localStorage.getItem(UNIT_KEY) || "{}"); } catch (e) { return {}; } }
+  function benchmark(rows, f) {
+    var strength = 3500, months = spanMonths(f), off = rows.filter(function (r) { return r.duty === "M-Day - NOT ON DUTY"; });
+    var rateAll = rows.length / strength * 1000 * 12 / months, rateOff = off.length / strength * 1000 * 12 / months;
+    $("benchmarkSummary").innerHTML = '<div class="benchmark-card"><strong>' + rateAll.toFixed(2) + '</strong><span>Guard incidents per 1,000 / year</span><small>' + K.fmt(rows.length) + ' incidents; approx. 3,500-person force</small></div>' +
+      '<div class="benchmark-card"><strong>' + rateOff.toFixed(2) + '</strong><span>M-Day not-on-duty incidents per 1,000 / year</span><small>' + K.fmt(off.length) + ' incidents in this duty-status category</small></div>' +
+      '<div class="benchmark-card"><strong>4.25</strong><span>Iowa DOT 2024: 13,786 OWI revocations; approximately 4.25 per 1,000 adults (estimated)</span><small>Revocations and Guard incidents differ; context only</small></div>' +
+      '<div class="benchmark-card"><strong>' + (rateAll / 4.25).toFixed(2) + '×</strong><span>Crude Guard-rate / Iowa DOT-rate ratio</span><small>Not like-for-like; no age or sex adjustment</small></div>';
+    var opt = K.chartBase(); opt.indexAxis = "y"; opt.scales.x.beginAtZero = true; opt.scales.x.title = { display: true, text: "Rate per 1,000 per year (estimate)" }; opt.plugins.legend.display = false;
+    K.upsert("cBenchmark", { type: "bar", data: { labels: ["Guard incidents (all)", "M-Day - NOT ON DUTY", "Iowa DOT 2024 OWI revocations"], datasets: [{ data: [rateAll, rateOff, 4.25], backgroundColor: [C1, C3, C2], borderRadius: 5 }] }, options: opt });
+  }
+  function renderUnitRates(f) {
+    var box = $("unitRates"); if (!box) return;
+    var strengths = unitStrengths(), rows = rowsFor(f, "unit"), counts = Object.create(null), companies = Object.create(null);
+    rows.forEach(function (r) { if (r.unitBroad) { counts[r.unitBroad] = (counts[r.unitBroad] || 0) + 1; companies[r.unitBroad] = companies[r.unitBroad] || Object.create(null); if (r.unit) companies[r.unitBroad][r.unit] = 1; } });
+    var keys = Object.keys(counts).sort(cmpVal); if (!keys.length) { box.innerHTML = '<p class="muted">No units in the current selection.</p>'; return; }
+    var totalStrength = keys.reduce(function (a, k) { return a + (+strengths[k] || 0); }, 0), totalN = keys.reduce(function (a, k) { return a + ((+strengths[k] || 0) ? counts[k] : 0); }, 0), totalRate = totalStrength ? totalN / totalStrength * 1000 * 12 / spanMonths(f) : null;
+    var h = '<div class="tablewrap"><table class="units"><thead><tr><th>Broad unit</th><th>Companies / elements</th><th>Incidents</th><th>Strength</th><th>Rate / 1,000 / year</th><th>Comparison</th></tr></thead><tbody>' + keys.map(function (k) {
+      var n = counts[k], st = +strengths[k] || 0, r = st ? n / st * 1000 * 12 / spanMonths(f) : null, flag = r != null && totalRate != null && totalRate > 0 && r >= 1.5 * totalRate;
+      var memberList = Object.keys(companies[k] || {}).sort(cmpVal).join(", ");
+      return '<tr' + (flag ? ' class="unit-flag"' : '') + '><td>' + esc(k) + '</td><td>' + esc(memberList) + '</td><td>' + cnt(n) + '</td><td><input type="number" min="0" step="1" inputmode="numeric" data-strength="' + esc(k) + '" value="' + (st || '') + '" aria-label="Strength for ' + esc(k) + '"></td><td>' + (r == null ? '—' : r.toFixed(2)) + '</td><td>' + (r == null ? 'Enter strength' : (flag ? 'At least 1.5× overall' : totalRate == null ? 'Overall strength incomplete' : (r / totalRate).toFixed(2) + '× overall')) + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+    if (totalRate != null) h += '<p class="muted small">Overall entered-strength rate: ' + totalRate.toFixed(2) + ' per 1,000 / year (' + K.fmt(totalStrength) + ' total strength).</p>';
+    box.innerHTML = h;
   }
 
   // ---------- analysis: weak spots, commonalities, correlations ----------
@@ -756,7 +809,7 @@
 
   // ---------- correlations: bias-corrected Cramer's V between categorical / binned fields ----------
   var CF = ["grade", "ageBand", "gender", "status", "loc", "unit", "type", "duty", "msdBand", "win", "dow", "tod", "fy", "tisBand", "depsBand", "priorBand", "ref", "comp", "rep"];
-  var CSHORT = { grade: "Grade", ageBand: "Age", gender: "Gender", status: "Status", loc: "Location", unit: "Unit", type: "Type", duty: "Duty", msdBand: "Since dep.", win: "Hol/pay",
+  var CSHORT = { grade: "Grade", ageBand: "Age", gender: "Gender", status: "Status", loc: "Incident location", homeTown: "Home town", unit: "Unit", type: "Type", duty: "Duty", msdBand: "Since dep.", win: "Hol/pay",
     dow: "Day", tod: "Time", fy: "FY", tisBand: "Service", depsBand: "Deps", priorBand: "Prior", ref: "Referred", comp: "Completed", rep: "Repeat" };
   var EXPECTED = { "unit|loc": "units sit at a location", "ref|comp": "only referred people can complete", "grade|tisBand": "grade follows time in service", "ageBand|tisBand": "service grows with age",
     "grade|ageBand": "grade follows age", "type|duty": "duty-related incidents happen on duty", "duty|type": "duty-related incidents happen on duty", "tisBand|fy": "the same people gain service each year", "fy|tisBand": "the same people gain service each year", "priorBand|rep": "both count repeat incidents", "comp|ref": "only referred people can complete" };
@@ -831,21 +884,22 @@
     return (MAP_CACHE[loc] = hit);
   }
   function mapColor(t) { var a = [252, 187, 161], b = [153, 0, 13]; return "rgb(" + a.map(function (x, i) { return Math.round(x + (b[i] - x) * t); }).join(",") + ")"; }
-  function mapRender(f) {
-    var box = $("incMap"); if (!box) return;
+  function mapRender(f, key, boxId) {
+    key = key || "loc"; boxId = boxId || "incMap";
+    var box = $(boxId); if (!box) return;
     if (!window.IOWA_GEO) { box.textContent = "Map data not loaded."; return; }
-    var G = IOWA_GEO, rows = rowsFor(f, "loc"), g = group(rows, "loc"), sel = f.loc, cut = SUP();
+    var G = IOWA_GEO, rows = rowsFor(f, key), g = group(rows, key), sel = f[key], cut = SUP();
     var pts = [], miss = [];
     Object.keys(g).forEach(function (loc) { if (loc === BLANK) return; var p = placeOf(loc); if (p) pts.push({ loc: loc, n: g[loc], x: p[1], y: p[2], place: p[0] }); else miss.push({ loc: loc, n: g[loc] }); });
     var big = pts.filter(function (p) { return p.n >= cut; }), mx = Math.max.apply(null, big.map(function (p) { return p.n; }).concat([1]));
     var RMAX = 34, RMIN = 4;
     pts.forEach(function (p) { p.small = p.n < cut; p.t = p.small ? 0 : Math.sqrt(p.n / mx); p.r = p.small ? 4 : Math.max(RMIN + 1, RMAX * p.t); });
     pts.sort(function (a, b) { return b.r - a.r; });
-    var h = ['<svg viewBox="0 0 ' + G.w + " " + G.h + '" role="img" aria-label="Map of Iowa with incident counts by location">',
+    var h = ['<svg viewBox="0 0 ' + G.w + " " + G.h + '" role="img" aria-label="Map of Iowa with incident counts by ' + (key === "loc" ? "incident location" : "home town") + '">',
       '<path class="m-county" d="' + G.counties + '"/>', '<path class="m-state" d="' + G.state + '"/>'];
     pts.forEach(function (p) {
       var lab = p.small ? "&lt;5" : K.fmt(p.n), cls = "m-dot" + (p.small ? " small" : "") + (sel && sel !== p.loc ? " dim" : "") + (sel === p.loc ? " on" : "");
-      h.push('<g class="' + cls + '" data-loc="' + esc(p.loc) + '" data-n="' + (p.small ? "&lt;5" : p.n) + '" tabindex="0"><circle cx="' + p.x + '" cy="' + p.y + '" r="' + p.r.toFixed(1) + '"' + (p.small ? "" : ' style="fill:' + mapColor(p.t) + '"') + "/>" +
+      h.push('<g class="' + cls + '" data-loc="' + esc(p.loc) + '" data-key="' + esc(key) + '" data-n="' + (p.small ? "&lt;5" : p.n) + '" tabindex="0"><circle cx="' + p.x + '" cy="' + p.y + '" r="' + p.r.toFixed(1) + '"' + (p.small ? "" : ' style="fill:' + mapColor(p.t) + '"') + "/>" +
         (p.r >= 10 ? '<text x="' + p.x + '" y="' + (p.y + 4) + '"' + (p.r < 13 ? ' style="font-size:10px"' : "") + '>' + lab + "</text>" : "") + "<title>" + esc(p.loc) + ": " + (p.small ? "<5" : K.fmt(p.n)) + " incident" + (p.n === 1 && !p.small ? "" : "s") + "</title></g>");
     });
     // labels for the 6 largest places so the map reads on paper
@@ -859,21 +913,24 @@
       lg.unshift('<span class="lg-ramp" title="Light = fewer, deep red = more"></span><span class="lg-cap">fewer \u2192 more incidents (area \u221d count)</span>');
     }
     if (pts.some(function (p) { return p.small; })) lg.push('<span class="lg-item"><svg width="10" height="10"><circle class="lg-small" cx="5" cy="5" r="4"/></svg>&lt;5 (small group, not scaled)</span>');
-    $("mapLegend").innerHTML = lg.join("");
-    $("mapMiss").textContent = miss.length ? "Not placed: " + miss.sort(function (a, b) { return b.n - a.n; }).map(function (m) { return m.loc + " (" + cnt(m.n) + ")"; }).join(", ") + ". Use a town name in Location to place these." : "";
+    $(boxId === "incMap" ? "mapLegend" : "homeMapLegend").innerHTML = lg.join("");
+    var missEl = $(boxId === "incMap" ? "mapMiss" : "homeMapMiss"), noteEl = $(boxId === "incMap" ? "mapNote" : "homeMapNote");
+    missEl.textContent = miss.length ? "Not placed: " + miss.sort(function (a, b) { return b.n - a.n; }).map(function (m) { return m.loc + " (" + cnt(m.n) + ")"; }).join(", ") + "." : "";
     var placed = K.sum(pts, function (p) { return p.n; }), blank = g[BLANK] || 0;
-    $("mapNote").textContent = (rows.length ? cnt(placed) + " of " + cnt(rows.length) + " incidents placed" + (blank ? "; " + cnt(blank) + " with no location" : "") + ". " : "") + (sel ? "Showing " + sel + " (click it again to clear). " : "") + "Click a bubble to filter to that location.";
+    noteEl.textContent = (rows.length ? cnt(placed) + " of " + cnt(rows.length) + " incidents placed" + (blank ? "; " + cnt(blank) + " with no " + (key === "loc" ? "incident location" : "home town") : "") + ". " : "") + (sel ? "Showing " + sel + " (click it again to clear). " : "") + "Click a bubble to filter.";
   }
   function mapTip(e) {
-    var gEl = e.target.closest && e.target.closest(".m-dot"), tip = $("mapTip"), wrap = $("incMap");
-    if (!gEl) { tip.hidden = true; return; }
+    var gEl = e.target.closest && e.target.closest(".m-dot");
+    if (!gEl) { $("mapTip").hidden = true; $("homeMapTip").hidden = true; return; }
+    var home = gEl.getAttribute("data-key") === "homeTown", tip = $(home ? "homeMapTip" : "mapTip"), map = $(home ? "homeMap" : "incMap"), wrap = map.closest(".mapwrap");
     var b = wrap.getBoundingClientRect(); tip.hidden = false;
     tip.innerHTML = "<strong>" + esc(gEl.getAttribute("data-loc")) + "</strong><br>" + esc(gEl.getAttribute("data-n")) + " incident" + (gEl.getAttribute("data-n") === "1" ? "" : "s");
-    tip.style.left = Math.min(b.width - 160, e.clientX - b.left + 12) + "px"; tip.style.top = (e.clientY - b.top + 12) + "px";
+    tip.style.left = Math.max(0, Math.min(b.width - 160, e.clientX - b.left + 12)) + "px"; tip.style.top = (e.clientY - b.top + 12) + "px";
   }
   function mapClick(e) {
     var gEl = e.target.closest && e.target.closest(".m-dot"); if (!gEl) return;
-    var loc = gEl.getAttribute("data-loc"); filterTo("loc", $("fLoc").value === loc ? "" : loc);
+    var loc = gEl.getAttribute("data-loc"), key = gEl.getAttribute("data-key") || "loc", id = key === "homeTown" ? "fHomeTown" : "fLoc", el = $(id);
+    if (el) filterTo(key, el.value === loc ? "" : loc);
   }
 
   // ---------- detail table ----------
@@ -1054,7 +1111,7 @@
       if (rep.badDate) { w++; h.push('<p class="warn">' + rep.badDate + " row(s) skipped because the Incident Date could not be read. Examples: " + rep.badDateEx.map(function (x) { return "row " + x.row + " = &ldquo;" + esc(x.value) + "&rdquo;"; }).join("; ") + ".</p>"); }
       if (rep.badNum) { w++; h.push('<p class="warn">' + rep.badNum + " number cell(s) (age, time in service, dependents, months, prior incidents) could not be read and count as blank.</p>"); }
     }
-    h.push(rep.pii.length ? '<p class="ok"><strong>Personal identifier columns skipped without reading:</strong> ' + codes(rep.pii) + ". Their values are never read, shown, exported or saved.</p>" : '<p class="muted">No name, SSN, DoD ID or date of birth columns found.</p>');
+    h.push(rep.pii.length ? '<p class="ok"><strong>Personal identifier columns skipped without reading:</strong> ' + codes(rep.pii) + ". Their values are never read, shown, exported or saved.</p>" : '<p class="muted">Name, ID, SSN and DoD ID values are skipped by header. DOB is read only if Age is blank and is never retained; Mailing address is reduced to town only.</p>');
     if (rep.extra.length) h.push('<details class="muted"><summary>' + plural(rep.extra.length, "other column") + " ignored</summary><p class=\"muted\">" + codes(rep.extra) + "</p></details>");
     if (rep.dupes.length) h.push('<p class="muted">Repeated columns ignored (first one used): ' + codes(rep.dupes) + "</p>");
     return { html: h.join(""), warns: w };
@@ -1067,8 +1124,8 @@
       setBar("err", "Could not load " + (S.failed.length === 1 ? S.failed[0].name : S.failed.length + " files") + " \u00b7 still showing the previous data", 1); return;
     }
     if (S.source === "demo") {
-      el.innerHTML = '<p class="muted">Showing the built-in FICTIONAL demo: ' + plural(S.recs.length, "incident") + " across " + plural(K.uniq(S.recs.map(function (r) { return r.unit; })).length, "unit") + " and a fictional headcount of " + K.fmt(K.sum(S.roster.rows, function (o) { return o.count; })) + ". No real people; Person IDs are random. Choose your files, or drop them here.</p>";
-      setBar("ok", "Demo data (fictional) \u00b7 " + plural(S.recs.length, "incident") + " \u00b7 demo headcount", 0); return;
+      el.innerHTML = '<p class="muted">Showing the built-in FICTIONAL demo: ' + plural(S.recs.length, "incident") + " across " + plural(K.uniq(S.recs.map(function (r) { return r.unit; })).length, "company / element") + ". No real people or operational data. Choose a fictional test file, or use the demo.</p>";
+      setBar("ok", "Demo data (fictional) \u00b7 " + plural(S.recs.length, "incident"), 0); return;
     }
     S.files.forEach(function (e) {
       var fl = fileLines(e); warns += fl.warns;
@@ -1114,9 +1171,9 @@
     $("btnGenAI").addEventListener("click", copyPack);
     $("btnPrintCs").addEventListener("click", printSummary);
     $("hideSmall").addEventListener("change", function () { S.hideSmall = this.checked; render(); });
-    $("incMap").addEventListener("mousemove", mapTip); $("incMap").addEventListener("mouseleave", function () { $("mapTip").hidden = true; });
-    $("incMap").addEventListener("click", mapClick);
-    $("incMap").addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); mapClick(e); } });
+    ["incMap", "homeMap"].forEach(function (id) { $(id).addEventListener("mousemove", mapTip); $(id).addEventListener("mouseleave", function () { $(id === "homeMap" ? "homeMapTip" : "mapTip").hidden = true; }); $(id).addEventListener("click", mapClick); $(id).addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); mapClick(e); } }); });
+    $("unitRates").addEventListener("change", function (e) { var x = e.target.closest("[data-strength]"); if (!x) return; var o = unitStrengths(); if (x.value === "") delete o[x.getAttribute("data-strength")]; else o[x.getAttribute("data-strength")] = Math.max(0, +x.value || 0); try { localStorage.setItem(UNIT_KEY, JSON.stringify(o)); } catch (err) {} x.blur(); render(); });
+    $("clearUnitStrength").addEventListener("click", function () { try { localStorage.removeItem(UNIT_KEY); } catch (e) {} render(); });
     $("showRows").addEventListener("change", function () { S.showAll = false; table(); });
     document.querySelector("main").addEventListener("click", heatClick);
     $("btnGenAITxt").addEventListener("click", downloadPack);
@@ -1145,6 +1202,6 @@
     SAVED = readSaved();
     if (SAVED) { showBanner(); document.title = "REAL DATA \u00b7 " + document.title; loadSaved(); } else loadDemo();
   }
-  window.PreventionDash = { packText: packText, placeOf: function (v) { var p = placeOf(v); return p ? p[0] : null; }, analysis: function () { return S.an; }, correlations: function () { return S.corr; }, state: S, parseWhen: function (v) { var w = parseWhen(v); return w ? { date: iso(w.d), h: w.h, mi: w.mi, dow: DOW[(w.d.getUTCDay() + 6) % 7] } : w; }, mapHeader: function (h) { return isPii(h) ? "SKIP" : ALIAS[norm(h)] || null; } };
+  window.PreventionDash = { packText: packText, placeOf: function (v) { var p = placeOf(v); return p ? p[0] : null; }, townOnly: townOnly, normalizeDuty: normDuty, yearsAt: yearsAt, analysis: function () { return S.an; }, correlations: function () { return S.corr; }, state: S, parseWhen: function (v) { var w = parseWhen(v); return w ? { date: iso(w.d), h: w.h, mi: w.mi, dow: DOW[(w.d.getUTCDay() + 6) % 7] } : w; }, mapHeader: function (h) { return isPii(h) ? "SKIP" : ALIAS[norm(h)] || null; } };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 })();

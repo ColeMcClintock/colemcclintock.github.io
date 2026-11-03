@@ -24,46 +24,33 @@
   </div>
   <div class="titlebar">
     <div>
-      <div class="eyebrow">Iowa Army National Guard &middot; Prevention Program</div>
-      <h1>Alcohol Incident Trends &amp; Prevention</h1>
+      <div class="eyebrow">Iowa Army National Guard &middot; Fictional demo data only</div>
+      <h1>Alcohol Incident Prevention Dashboard</h1>
       <div class="asof"><strong id="asofLabel">&mdash;</strong> &middot; <span id="scopeLabel">All incidents</span><span id="sourceLabel"></span></div>
     </div>
-    <div class="actions no-print">
-      <button class="btn" id="btnGenAI" type="button" title="Copy an aggregated summary (no names, IDs or individual records; groups under 5 hidden) plus a ready-made prompt">&#128203; Copy for GenAI</button>
-      <button class="btn ghost" id="btnGenAITxt" type="button" title="Download the same aggregated pack as a .txt file">&#8681; GenAI pack (.txt)</button>
-      <button class="btn ghost" id="btnPresent" type="button" aria-pressed="false" title="Hide loading and help panels (Esc exits)">Presentation mode</button>
-      <button class="btn ghost" id="btnPrint" type="button">Print / PDF</button>
-    </div>
+
   </div>
-  <p class="genai-note no-print chrome" id="genaiNote"><strong>Paste only into your agency-approved GenAI tool.</strong> The pack holds aggregated counts and rates only: no names, IDs, individual records or exact dates, and any group under 5 is hidden. <span id="genaiStatus" class="searchnote" role="status"></span></p>
 
   <div class="loadbar no-print chrome" id="loadBar" role="status">
     <span class="lb-icon" id="lbIcon" aria-hidden="true">&#10003;</span>
     <span class="lb-text" id="lbText">Demo data</span>
     <span class="lb-badge" id="lbBadge" hidden></span>
     <span class="lb-actions">
-      <button class="btn ghost sm" id="btnDetails" type="button" aria-expanded="false" aria-controls="loadPanel">Show details</button>
-      <button class="btn sm" id="btnLoad" type="button" title="Choose the incident file and/or the headcount (roster) file; each is recognized by its headers">Load files</button>
-      <button class="btn ghost sm" id="btnAdd" type="button" hidden title="Add more files to the current set">Add more files</button>
-      <button class="btn ghost sm" id="btnClear" type="button" hidden title="Remove loaded files">Clear</button>
-      <button class="btn sm save" id="btnSave" type="button" disabled title="Load your files first">&#128190; Save with data</button>
-      <a class="btn ghost sm dl-only" id="btnDownload" href="../../downloads/prevention-dashboard.html" download="prevention-dashboard.html" title="Single HTML file that runs offline">&#8681; Download dashboard</a>
+      <button class="btn sm" id="btnLoad" type="button" title="Choose an incident file; the dashboard processes it locally">Upload incident file</button>
     </span>
   </div>
 
   <div class="loadpanel no-print chrome" id="loadPanel" hidden>
     <div>
-      <h3>Load the incident file and the headcount (stays on this device)</h3>
-      <p><strong>1. Incident file</strong> (<strong>.xlsx</strong> or <strong>.csv</strong>): one row per incident, columns listed in the guide below. Several files are combined and exact duplicate rows are removed. <strong>Names, SSN, DoD ID / EDIPI and date of birth columns are skipped by their header and never read</strong>; the load report lists them. Use a pseudonymous Person ID (for example P-0001) so repeats by the same person can be counted.</p>
-      <p><strong>2. Headcount / roster</strong> (optional): one row per group with Unit, Grade, Gender and Count (Location and Age Band optional). No names or IDs. It turns counts into <strong>incidents per 1,000 assigned</strong>, and the weak-spot rankings switch from shares to rates. You can also type headcounts in the Headcount panel below the filters.</p>
+      <h3>Load incident file (local browser processing)</h3>
+      <p><strong>1. Incident file</strong> (<strong>.xlsx</strong> or <strong>.csv</strong>): one row per incident, columns listed in the guide below. Several files are combined and exact duplicate rows are removed. <strong>Names, ID, SSN and DoD ID / EDIPI are skipped by header; DOB is used only if Age is blank and never retained</strong>; the load report lists them. Use a pseudonymous Person ID (for example P-0001) so repeats by the same person can be counted.</p>
+      <p>Optional unit strength estimates are entered in the unit-rate section below the charts. No roster file is needed.</p>
       <p>Files are read by this browser tab only; nothing is uploaded, stored, or sent anywhere. Close or reload the tab to clear them.</p>
       <p>
         <label class="btn filebtn">Choose files&hellip;<input type="file" id="fileInput" accept=".xlsx,.xls,.csv" multiple></label>
         <input type="file" id="addInput" accept=".xlsx,.xls,.csv" multiple hidden>
         <a class="btn ghost" href="prevention_template.xlsx" download>&#8681; Blank incident template (.xlsx)</a>
-        <a class="btn ghost" href="roster_template.xlsx" download>&#8681; Blank headcount template (.xlsx)</a>
         <a class="btn ghost" href="prevention_demo.xlsx" download>&#8681; Demo incidents (.xlsx)</a>
-        <a class="btn ghost" href="prevention_roster_demo.xlsx" download>&#8681; Demo headcount (.xlsx)</a>
         <button class="btn ghost" id="btnDemo" type="button">Restore demo data</button>
       </p>
       <div id="loadReport" class="loadreport" role="status"></div>
@@ -78,7 +65,8 @@
     <label>Fiscal year<select id="fFy"></select></label>
     <label>Quarter<select id="fQ"></select></label>
     <label>Month<select id="fFm"></select></label>
-    <label>Location<select id="fLoc"></select></label>
+    <label>Incident location<select id="fLoc"></select></label>
+    <label>Home town<select id="fHomeTown"></select></label>
     <label>Unit<select id="fUnit"></select></label>
     <label>Pay grade<select id="fGrade"></select></label>
     <label>Age band<select id="fAge"></select></label>
@@ -94,7 +82,7 @@
     <button class="btn ghost" id="btnReset" type="button">Reset</button>
   </div>
 
-  <details class="panel hcpanel no-print chrome" id="hcPanel">
+  <details class="panel hcpanel no-print chrome" id="hcPanel" hidden>
     <summary><h2>Headcount (for rates per 1,000)</h2> <span class="muted small" id="hcSummary"></span></summary>
     <p class="muted small">Type how many people are assigned. Units and grades are listed from the incident data. Numbers stay in this browser tab (and on this device only if you tick &ldquo;Remember&rdquo;); they are never uploaded and are included when you &ldquo;Save with data&rdquo;. A loaded headcount file is used first when it covers the current filters.</p>
     <div class="hctools">
@@ -107,6 +95,8 @@
     <div id="hcBody"></div>
   </details>
 
+  <section class="kpis k6" id="kpis" aria-label="Key indicators"></section>
+
   <section class="panel summary cmd" id="cmdSummary">
     <div class="tablehead"><h2>Commander summary</h2><div class="no-print"><button class="btn sm" id="btnPrintCs" type="button" title="Print or save as PDF just this summary">&#128424; Print summary</button></div></div>
     <p class="muted small" id="cmdScope"></p>
@@ -115,7 +105,6 @@
     <p class="muted small">Auto-generated on this device from the current filters. Rankings and recommendations need at least 5 incidents per group, for statistical stability. Tick &ldquo;Hide small groups&rdquo; to show counts under 5 as &lt;5. Associations in the data are not proof of cause.</p>
   </section>
 
-  <section class="kpis k6" id="kpis" aria-label="Key indicators"></section>
 
   <section class="panel mappanel" id="mapPanel" data-req="loc">
     <h2>Incident map</h2>
@@ -125,6 +114,18 @@
     <p class="muted small" id="mapNote"></p>
     <p class="small warnline" id="mapMiss"></p>
     <p class="muted small">Outline, county lines and town positions: U.S. Census Bureau cartographic boundary and Gazetteer files (public domain), built into this file. Location matching ignores case, punctuation and words like Armory, Readiness Center, RC, IA or Iowa; Camp Dodge places at Johnston and the air bases at Sioux City and Des Moines.</p>
+  </section>
+
+  <section class="panel" id="benchmarkPanel">
+    <h2>Us vs. Iowa benchmark</h2><p class="muted small">Iowa DOT 2024 OWI revocations: 13,786, approximately 4.25 per 1,000 adults (estimate). The side-by-side and crude ratio are not like-for-like; no age or sex adjustment is applied.</p>
+    <div id="benchmarkSummary" class="benchmark-grid" aria-live="polite"></div>
+    <div class="chartbox" style="height:250px;margin-top:12px"><canvas id="cBenchmark" aria-label="Annualized Guard incident rates compared with the estimated Iowa DOT OWI revocation rate"></canvas></div>
+  </section>
+  <section class="panel mappanel" id="homeMapPanel">
+    <h2>Home of record map</h2>
+    <p class="muted small">Incidents grouped by Home Town derived from Mailing Address. Only the town is retained; street address, ZIP, and the source address are never displayed or saved. Missing or out-of-state towns are omitted from this map only.</p>
+    <div class="mapwrap"><div id="homeMap" class="incmap"></div><div id="homeMapTip" class="maptip" hidden></div></div>
+    <div id="homeMapLegend" class="maplegend"></div><p class="muted small" id="homeMapNote"></p><p class="small warnline" id="homeMapMiss"></p>
   </section>
 
   <div class="row r2b">
@@ -153,11 +154,18 @@
   <div class="row r3b">
     <section class="panel" data-req="gender"><h2>Gender</h2><div class="chartbox short"><canvas id="cGender"></canvas></div></section>
     <section class="panel" data-req="status"><h2>Status</h2><div class="chartbox short"><canvas id="cStatus"></canvas></div></section>
+    <section class="panel" data-req="marital"><h2>Marital status</h2><div class="chartbox short"><canvas id="cMarital"></canvas></div></section>
   </div>
   <div class="row r2b">
     <section class="panel" data-req="loc"><h2>Location / armory</h2><div class="chartbox tall"><canvas id="cLoc"></canvas></div></section>
-    <section class="panel" data-req="unit"><h2>Unit</h2><div class="chartbox tall"><canvas id="cUnit"></canvas></div></section>
+    <section class="panel" data-req="unitBroad"><h2>Broad unit</h2><div class="chartbox tall"><canvas id="cUnit"></canvas></div></section>
+    <section class="panel" data-req="unit"><h2>Company / element</h2><div class="chartbox tall"><canvas id="cCompany"></canvas></div></section>
   </div>
+  <section class="panel" id="unitRatesPanel">
+    <h2>Unit rates &amp; optional strength</h2><p class="muted small">Enter estimated unit strengths to calculate annualized incidents per 1,000 and compare each unit with the overall rate. Entries remain in this browser only. Units at 1.5× or more of the overall rate are flagged; this is a descriptive signal, not a causal finding.</p>
+    <div id="unitRates"></div><button class="btn ghost sm" id="clearUnitStrength" type="button">Clear unit strengths</button>
+  </section>
+
   <div class="row r3b">
     <section class="panel" data-req="duty"><h2>Duty status</h2><div class="chartbox"><canvas id="cDuty"></canvas></div></section>
     <section class="panel" data-req="date"><h2>Months since deployment</h2><div class="chartbox"><canvas id="cMsd"></canvas></div></section>
@@ -208,10 +216,24 @@
       <li><strong>Without a headcount</strong>, weak spots use the share of incidents, the repeat rate compared with the overall repeat rate, and (for timing) incidents per day compared with other days.</li>
       <li><strong>Holiday window</strong> = within 3 days of a federal holiday, New Year&rsquo;s Eve or St. Patrick&rsquo;s Day. <strong>Payday window</strong> = 0&ndash;3 days after the 1st or 15th. Their relative risk compares incidents per calendar day inside vs outside the window.</li>
       <li><strong>Small groups</strong>: counts are shown in full on the dashboard by default. &ldquo;Hide small groups (&lt;5)&rdquo; shows any group under 5 as &lt;5 on the map, charts, heat maps and summary. Rankings and recommendations always need 5+ incidents per group, for statistical stability. The Copy for GenAI pack and .txt always hide groups under 5, whatever the setting, because that text leaves the dashboard.</li>
-      <li><strong>Privacy</strong>: columns whose header is a name, SSN, DoD ID / EDIPI or date of birth are skipped without reading. Blank, #REF! and other Excel error cells count as blank. Everything runs in this browser; no network requests.</li>
+      <li><strong>Privacy</strong>: name, ID, SSN and DoD ID / EDIPI columns are skipped without reading; DOB is read only when Age is blank and is not retained. Mailing addresses are reduced to town only. Blank, #REF! and other Excel error cells count as blank. Everything runs in this browser; no network requests.</li>
       <li><strong>Correlations</strong>: bias-corrected Cram&eacute;r&rsquo;s V from a chi-square test on each pair of fields (values under 5 pooled), needing 30+ incidents. Pairs that are related by design (unit and location, referred and completed, grade and age or service) are listed separately and not ranked.</li>
       <li>Automated recommendations are generated from the data to start a discussion. They are not clinical or legal advice.</li>
     </ul>
+  </details>
+  <details class="panel no-print chrome" id="lowerTools"><summary><strong>Export, presentation &amp; GenAI tools</strong></summary>
+    <div class="actions">
+      <button class="btn ghost sm" id="btnDetails" type="button" aria-expanded="false" aria-controls="loadPanel">Show upload details</button>
+      <button class="btn ghost sm" id="btnAdd" type="button" hidden>Add more files</button>
+      <button class="btn ghost sm" id="btnClear" type="button" hidden>Clear loaded files</button>
+      <button class="btn sm save" id="btnSave" type="button" disabled>Save with data</button>
+      <a class="btn ghost sm dl-only" id="btnDownload" href="../../downloads/prevention-dashboard.html" download="prevention-dashboard.html">Download offline dashboard</a>
+      <button class="btn" id="btnGenAI" type="button">Copy aggregated GenAI pack</button>
+      <button class="btn ghost" id="btnGenAITxt" type="button">Download GenAI pack (.txt)</button>
+      <button class="btn ghost" id="btnPresent" type="button" aria-pressed="false">Presentation mode</button>
+      <button class="btn ghost" id="btnPrint" type="button">Print / PDF</button>
+    </div>
+    <p class="genai-note" id="genaiNote"><strong>Use only agency-approved tools.</strong> The pack contains aggregates only; groups under 5 are suppressed. <span id="genaiStatus" class="searchnote" role="status"></span></p>
   </details>
 </main>
 

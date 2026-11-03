@@ -124,3 +124,7 @@ table.corrm{width:100%}
   .m-dot circle,.lg-ramp{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 @media print{.mapwrap{max-width:5.6in}#mapPanel>p.muted.small:last-child{display:none}}
+
+/* New schema: paired Iowa maps, benchmark cards, and phone-safe unit-rate editor. */
+#homeMapPanel .mapwrap{max-width:980px}.benchmark-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.benchmark-card{display:flex;flex-direction:column;gap:5px;padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--bg2)}.benchmark-card strong{font-size:1.6rem;color:var(--sand);font-variant-numeric:tabular-nums}.benchmark-card span{font-weight:700}.benchmark-card small{color:var(--muted)}#unitRates input{width:92px;background:var(--bg2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px;font:inherit}.unit-flag{background:rgba(224,100,92,.13)}.unit-flag td:last-child{color:#ffcf99;font-weight:700}
+@media(max-width:640px){.benchmark-grid{grid-template-columns:1fr}.filters label{min-width:calc(50% - 8px)}#unitRates table{min-width:720px}}
