@@ -165,7 +165,7 @@ def run():
         # drawer: breakdown is there when opened
         pg.click("#btnInfo"); pg.wait_for_timeout(300)
         dr = pg.text_content("#drawer")
-        check(pg.is_visible("#drawer") and "ALLOBJ" in pg.text_content("#loadReport") and "Same content as" in dr and "Could not tell the level" in dr, "drawer: file breakdown, duplicate copy, file without level")
+        check(pg.is_visible("#drawer") and "ALLOBJ" not in pg.inner_text("body") and "Same content as" in dr and "Could not tell the level" in dr, "drawer: file breakdown (no ALLOBJ note), duplicate copy, file without level")
         check("appear in more than one level" in pg.text_content("#prReport") and "repeated the same Total Value" in pg.text_content("#prReport"), "drawer: PR notes")
         check(SSN not in pg.content(), "ssn never read")
         with pg.expect_download() as dl: pg.click("#btnSave")

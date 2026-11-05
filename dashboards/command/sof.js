@@ -12,7 +12,7 @@
   var n = L.n, full = L.full, plural = L.plural, cmpVal = L.cmpVal, idText = L.idText, BLANK = L.BLANK, PAGE = L.PAGE, MAXROWS = L.MAXROWS;
   var COLS = [
     ["doc", "Document Number", ["contractdocno"], "id", "Line table, search, document count"],
-    ["ci", "Commitment Item", ["commitmentitemfipex", "commitmentitem"], "text", "Shown as its description from the Commitment Item Key; ALLOBJ lines removed"],
+    ["ci", "Commitment Item", ["commitmentitemfipex", "commitmentitem"], "text", "Shown as its description from the Commitment Item Key"],
     ["fa", "Functional Area", ["functionalareafarea", "functionalarea"], "text", "Filter; rolled up to Account, Sag and MDEP through the Account Key"],
     ["appn", "Appropriation", ["appropriationtype", "appropriation"], "text", "Chart, filter"],
     ["fy", "Fiscal Year", ["fiscalyear"], "fy", "Chart, filter, funding match, trend year"],
@@ -42,7 +42,7 @@
     var rep = { kind: "export", headerRow: hm.hi + 1, matched: COLS.filter(function (c) { return map[c[0]] != null; }).map(function (c) { return c[1]; }),
       missing: COLS.filter(function (c) { return map[c[0]] == null; }).map(function (c) { return EXPORT_NAME[c[0]] + " (" + c[1] + ")"; }),
       extra: hm.extra, dupes: hm.dupes, pii: hm.pii, rowsRead: 0, rowsLoaded: 0, blankRows: 0, allobj: 0, badNumber: 0, badNumberExamples: [], badMonth: 0, badMonthExamples: [], fatal: null };
-    if (map.ci == null) { rep.fatal = "No Commitment Item column (commitment_item_fipex) was found, so ALLOBJ lines cannot be removed. The file was not loaded."; return { records: [], report: rep }; }
+    if (map.ci == null) { rep.fatal = "No Commitment Item column (commitment_item_fipex) was found. The file was not loaded."; return { records: [], report: rep }; }
     if (map.obl == null && map.disb == null && map.com == null) { rep.fatal = "No obligation_amt_cum or disbursement_amt_cum column was found. The file was not loaded."; return { records: [], report: rep }; }
     var keys = Object.keys(map), out = [];
     for (var rr = hm.hi + 1; rr < src.rows; rr++) {
@@ -162,7 +162,6 @@
     if (e.kind !== "export") { var fl = (e.kind === "plan" ? TR : L).fileLines(e, codes); h.push(fl.html); warns += fl.warns; }
     else {
       h.push('<p class="' + (rep.rowsLoaded ? "ok" : "err") + '">Funds export: loaded ' + plural(rep.rowsLoaded, "line") + " of " + K.fmt(rep.rowsRead) + " read (header row " + rep.headerRow + ")." + (rep.blankRows ? ' <span class="muted">' + K.fmt(rep.blankRows) + " blank row(s) ignored.</span>" : "") + "</p>");
-      h.push('<p class="ok"><strong>' + plural(rep.allobj, "ALLOBJ line") + " removed</strong> (not counted anywhere).</p>");
       h.push('<p class="' + (rep.flipped ? "ok" : "muted") + '">' + (rep.flipped ? "Amounts sign-flipped (&times; &minus;1): obligation, commitment and disbursement come through negative and are shown as positive." : "Amounts used as saved (already sign-flipped; not flipped again).") + "</p>");
       var ok = rep.matched.length === COLS.length;
       h.push('<p class="' + (ok ? "ok" : "warn") + '">' + rep.matched.length + " of " + COLS.length + " columns matched.</p>");
@@ -189,7 +188,7 @@
       : '<p class="ok">Commitment Item Key: ' + plural(L.ciInfo().size, "code") + " with descriptions.</p>" + (sh.length ? '<p class="muted">' + plural(sh.length, "description") + " shared by several codes, added together: " + sh.slice(0, 10).map(function (x) { return esc(x.desc) + " (" + esc(x.codes.join(", ")) + ")"; }).join("; ") + ".</p>" : "")
         + (ciList.length ? '<p class="warn">' + plural(ciList.length, "unmapped commitment item") + " shown as the raw code: " + codes(ciList.slice(0, 15)) + ".</p>" : "");
     if (ciList.length) warns++;
-    h.push('<div class="combined"><p class="ok"><strong>Combined: ' + plural(S.recs.length, "line") + " from " + plural(ex.length, "export file") + "</strong> \u00b7 " + plural(S.allobj, "ALLOBJ line") + " removed.</p>" + fu.html + ci + (S.plan ? '<p class="ok">Spend plan: ' + plural(S.plan.rows.length, "row") + ".</p>" : '<p class="muted">No spend plan loaded (optional).</p>') + "</div>");
+    h.push('<div class="combined"><p class="ok"><strong>Combined: ' + plural(S.recs.length, "line") + " from " + plural(ex.length, "export file") + "</strong></p>" + fu.html + ci + (S.plan ? '<p class="ok">Spend plan: ' + plural(S.plan.rows.length, "row") + ".</p>" : '<p class="muted">No spend plan loaded (optional).</p>') + "</div>");
     return { html: h.join(""), warns: warns };
   }
 
