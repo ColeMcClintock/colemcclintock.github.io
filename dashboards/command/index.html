@@ -100,39 +100,33 @@
     </div>
     <section class="kpis" id="kpis" aria-label="Key indicators"></section>
     <section class="panel summary"><h2>Resource Manager summary</h2><p id="summary">&nbsp;</p></section>
-    <section class="panel"><h2>Where the money stands</h2><div class="chartbox short"><canvas id="cPos"></canvas></div><p class="muted small" id="posNote"></p></section>
+    <section class="panel">
+      <div class="tablehead"><h2>Total Expenditure by Account vs TDP</h2><div class="tabletools"><label>Sort by <select id="acctSort" aria-label="Sort accounts"><option value="te">Total Expenditure</option><option value="pct">% expended</option></select></label></div></div>
+      <div class="chartbox"><canvas id="cAcctTe"></canvas></div>
+      <p class="muted small" id="acctNote"></p>
+    </section>
     <section class="panel" id="trendPanel">
-      <div class="tablehead"><h2>Spending trend</h2><div class="tabletools">
+      <div class="tablehead"><h2>Total Expenditure trend</h2><div class="tabletools">
         <label>Year <select id="tFy" aria-label="Trend fiscal year"></select></label>
-        <label>Spent = <select id="tMetric" aria-label="What counts as spent"><option value="od">Total Expenditure (Obl. + Disb.)</option><option value="o">Obligation</option><option value="d">Disbursement</option></select></label>
+        <label hidden>Spent = <select id="tMetric" aria-label="What counts as spent"><option value="od">Total Expenditure</option><option value="o">Obligation</option><option value="d">Disbursement</option></select></label>
       </div></div>
       <h3 class="sub">Where we should be</h3>
       <div id="pace" class="pace"></div>
       <div class="row r2">
-        <div><h3 class="sub">Cumulative spent vs straight-line pace and spend plan</h3><div class="chartbox"><canvas id="cCum"></canvas></div><p class="hint" id="paceHint" hidden>The straight-line pace appears once the funding file is loaded.</p></div>
-        <div><h3 class="sub">Monthly spend</h3><div class="chartbox"><canvas id="cMon"></canvas></div><p class="hint" id="planHint" hidden>No spend plan loaded.</p></div>
+        <div><h3 class="sub">Cumulative Total Expenditure vs straight-line pace (TDP &times; month &divide; 12) and spend plan</h3><div class="chartbox"><canvas id="cCum"></canvas></div><p class="hint" id="paceHint" hidden>The straight-line pace appears once the funding file is loaded.</p></div>
+        <div><h3 class="sub">Monthly Total Expenditure</h3><div class="chartbox"><canvas id="cMon"></canvas></div><p class="hint" id="planHint" hidden>No spend plan loaded.</p></div>
       </div>
       <p class="muted small" id="trendNote"></p>
     </section>
     <div class="row r2">
-      <section class="panel"><h2>By Fiscal Year</h2><div class="chartbox"><canvas id="cFy"></canvas></div></section>
-      <section class="panel"><h2>By Appropriation</h2><div class="chartbox"><canvas id="cAppn"></canvas></div></section>
+      <section class="panel"><h2>Commitment items within accounts</h2><div class="chartbox"><canvas id="cCiAcct"></canvas></div><p class="muted small">Total Expenditure per Account, split by commitment item (items sharing a description are combined). Click an account to filter.</p></section>
+      <section class="panel"><h2 id="ciSelTitle">Commitment items</h2><div class="chartbox"><canvas id="cCi"></canvas></div><p class="muted small">Total Expenditure by commitment item for the selected account. Click a bar to filter by it.</p></section>
     </div>
-    <div class="row r2">
-      <section class="panel"><h2>By Sag</h2><div class="chartbox tall"><canvas id="cSag"></canvas></div></section>
-      <section class="panel"><h2>By MDEP</h2><div class="chartbox tall"><canvas id="cMdep"></canvas></div></section>
-    </div>
-    <div class="row r2">
-      <section class="panel"><h2>By Account</h2><div class="chartbox tall"><canvas id="cAcct"></canvas></div></section>
-      <section class="panel"><h2>By Commitment Item</h2><div class="chartbox tall"><canvas id="cCi"></canvas></div></section>
-    </div>
-    <p class="muted small chartnote">Largest 10 values; the rest are grouped as Other. Click a bar to filter by it.</p>
-    <section class="panel" id="fundPanel">
-      <div class="tablehead"><h2>Funding vs execution</h2><div class="tabletools"><button class="btn ghost sm" id="btnFundCsv" type="button">Export CSV</button><button class="btn ghost sm" id="btnFundAll" type="button">Show all</button></div></div>
-      <p class="muted small" id="fundNote"></p>
-      <div class="tablewrap scrolly"><table class="grid" id="tFund"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+    <section class="panel" id="acctPanel">
+      <div class="tablehead"><h2>Accounts</h2><div class="tabletools"><button class="btn ghost sm" id="btnAcctCsv" type="button">Export CSV</button></div></div>
+      <p class="muted small" id="acctTableNote"></p>
+      <div class="tablewrap scrolly"><table class="grid acct" id="tAcct"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
     </section>
-    <section class="panel fundneed" id="fundNeed" hidden><h2>Funding vs execution</h2><p class="muted">TDP, AFP and Balance appear once the funding file is loaded.</p></section>
     <section class="panel">
       <div class="tablehead"><h2>Document detail</h2><div class="tabletools"><input type="search" id="fSearch" placeholder="Search document number, MDEP, account&hellip;" aria-label="Search lines" autocomplete="off"><button class="btn ghost sm" id="btnCsv" type="button">Export CSV</button><button class="btn ghost sm" id="btnAll" type="button">Show all</button></div></div>
       <p class="muted small">One row per line. Click a column header to sort. <span id="searchNote" class="searchnote"></span></p>
@@ -254,7 +248,8 @@
         <li>Total Expenditure (commitment_amt_cum) and Disbursement (disbursement_amt_cum) are the export's cumulative amounts, sign-flipped (&times; &minus;1) because the export carries them negative. A funds export needs both columns.</li>
         <li>Obligation is calculated: Obligation = Total Expenditure &minus; Disbursement (on the raw export: disbursement &minus; commitment). obligation_amt_cum is not read. Spent = Obligation + Disbursement = Total Expenditure.</li>
         <li>TDP and AFP come only from the funding file (Fiscal Year, Account, TDP, AFP), per Account. Functional Areas roll up to Accounts (with their Sag and MDEP) through the Account Key. Commitment items sharing a description in the Commitment Item Key are added together.</li>
-        <li>Balance = TDP &minus; Obligation &minus; Disbursement. Straight-line pace = TDP &times; fiscal month &divide; 12 (October = 1).</li>
+        <li>Balance = TDP &minus; Total Expenditure (= TDP &minus; Obligation &minus; Disbursement). Straight-line pace = TDP &times; fiscal month &divide; 12 (October = 1). The page opens on the current fiscal year once it has two months of lines, otherwise the latest earlier year.</li>
+        <li>Accounts: % expended = Total Expenditure &divide; TDP. Pace compares it with the share of the fiscal year elapsed (days since 1 October): within &plusmn;10% is on pace, above is over, below is under. Commitment items are measured by Total Expenditure.</li>
       </ul>
       <h4>PR Tracker</h4>
       <ul>

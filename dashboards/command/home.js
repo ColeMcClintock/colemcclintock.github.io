@@ -16,7 +16,7 @@
     $("hLead").textContent = last ? C.asOfText(last) : any ? "Funds, purchase requests and fuel in one place." : "Upload your Excel files to see funds, purchase requests and fuel in one place.";
     $("fyRing").innerHTML = ring(p) + '<div><div class="rv">' + C.pct(p.pct) + '</div><div class="rl">of FY' + fy + " elapsed</div></div>";
     $("homeEmpty").hidden = any; $("homeOverview").hidden = !any;
-    $("tsSof").textContent = sof ? (sof.bal != null ? "Balance " + K.money(sof.bal) + " \u00b7 FY" + sof.fy : "Obligated " + K.money(sof.obl)) : "No data loaded";
+    $("tsSof").textContent = sof ? (sof.pct != null ? C.pct(sof.pct) + " of TDP expended \u00b7 FY" + sof.fy : "Total Expenditure " + K.money(sof.te)) : "No data loaded";
     $("tsPr").textContent = pr ? (pr.types ? pr.types.map(function (t) { return t.type + " " + K.money(t.value); }).join(" \u00b7 ") : plural(pr.count, "PR") + " \u00b7 " + K.money(pr.value)) : "No data loaded";
     $("tsFuel").textContent = fu ? (fu.used != null ? C.pct(fu.used) + " of budget used \u00b7 FY" + fu.fy : K.money(fu.spent) + " spent") : "No data loaded";
     if (!any) return;
@@ -24,14 +24,18 @@
     var h = head("t-sof", "i-sof", "Status of Funds" + (sof && sof.fy ? " \u00b7 FY" + sof.fy : ""), C.mods.sof);
     if (!sof) h += '<div class="empty">No Status of Funds files loaded.</div>';
     else {
-      var spent = sof.obl + sof.disb;
       h += '<div class="big3">' + stat("TDP", sof.tdp == null ? "\u2014" : K.money(sof.tdp), sof.tdp == null ? "Funding file not loaded" : "AFP " + K.money(sof.afp)) +
-        stat("Obligated", K.money(sof.obl), "Disbursed " + K.money(sof.disb)) +
-        stat("Balance", sof.bal == null ? "\u2014" : K.money(sof.bal), "TDP \u2212 Oblig. \u2212 Disb.", sof.bal == null ? "" : sof.bal < 0 ? "bad" : "good") + "</div>";
+        stat("Total Expenditure", K.money(sof.te), sof.pct == null ? plural(sof.lines, "line") : C.pct(sof.pct) + " of TDP") +
+        stat("Balance", sof.bal == null ? "\u2014" : K.money(sof.bal), "TDP \u2212 Total Expenditure", sof.bal == null ? "" : sof.bal < 0 ? "bad" : "good") + "</div>";
       if (sof.tdp) {
-        var sp = spent / sof.tdp, st = C.pace(sp, sof.elapsed);
-        h += '<div class="gauge" style="margin-top:22px"><div class="g" style="background:linear-gradient(90deg,#60a5fa,#2563eb);width:' + Math.min(100, sp * 100).toFixed(1) + '%"></div><div class="mk" data-l="Pace ' + C.pct(sof.elapsed) + '" style="left:' + (sof.elapsed * 100).toFixed(1) + '%"></div></div>' +
-          '<div class="gnote"><span>' + C.pct(sp) + " of TDP spent (obligation + disbursement)</span><span>" + (sof.elapsed ? '<span class="pill ' + st.k + '">' + st.t + "</span>" : "") + "</span></div>";
+        var sp = sof.te / sof.tdp, st = C.pace(sp, sof.elapsed);
+        h += '<div class="gauge" style="margin-top:22px"><div class="g" style="background:linear-gradient(90deg,#60a5fa,#2563eb);width:' + Math.min(100, sp * 100).toFixed(1) + '%"></div><div class="mk" data-l="FY elapsed ' + C.pct(sof.elapsed) + '" style="left:' + (sof.elapsed * 100).toFixed(1) + '%"></div></div>' +
+          '<div class="gnote"><span>' + C.pct(sp) + " of TDP expended</span><span>" + (sof.elapsed ? '<span class="pill ' + st.k + '">' + st.t + "</span>" : "") + "</span></div>";
+      }
+      if (sof.top && sof.top.length) {
+        h += '<div class="hacc"><h4>Accounts by % expended</h4>' + sof.top.map(function (a) {
+          return '<div class="ha"><span class="nm" title="' + esc(a.label) + '">' + esc(a.label) + '</span><div class="tr"><div class="fi' + (a.pct > 1 ? " over" : "") + '" style="width:' + Math.min(100, a.pct * 100).toFixed(1) + '%"></div>' + (sof.elapsed ? '<div class="mk2" style="left:' + (sof.elapsed * 100).toFixed(1) + '%"></div>' : "") + '</div><span class="nv">' + C.pct(a.pct) + " \u00b7 " + K.money(a.te) + "</span></div>";
+        }).join("") + "</div>";
       }
     }
     $("oSof").innerHTML = h;

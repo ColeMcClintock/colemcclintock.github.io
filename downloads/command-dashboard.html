@@ -254,6 +254,24 @@ table.grid td.wrapc{white-space:normal;min-width:220px;max-width:420px}
 .htypes .hv{font-size:1.25rem;font-weight:750;margin:4px 0 2px;font-variant-numeric:tabular-nums}
 .htypes .hl{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
 @media (max-width:760px){.types,.htypes{grid-template-columns:1fr}}
+/* SOF accounts table */
+table.acct th.sec,table.acct td.sec{color:var(--muted);font-size:.84em}
+table.acct .caret{border:0;background:none;cursor:pointer;color:var(--muted);width:20px;padding:0;font-size:.9rem}
+table.acct .alink{border:0;background:none;cursor:pointer;color:var(--ink,inherit);font:inherit;font-weight:650;padding:0;text-align:left}
+table.acct .alink:hover{color:var(--accent);text-decoration:underline}
+table.acct tr.cirow td{background:color-mix(in srgb,var(--line2) 45%,transparent);font-size:.88em}
+table.acct tr.cirow td.ci{padding-left:34px}
+.xbar{display:inline-block;width:46px;height:6px;border-radius:999px;background:var(--line2);margin-right:6px;vertical-align:middle;overflow:hidden}
+.xbar i{display:block;height:100%;background:#2563eb;border-radius:999px}
+.hacc{display:flex;flex-direction:column;gap:7px;margin-top:14px}
+.hacc .ha{display:grid;grid-template-columns:minmax(0,1.4fr) 1fr 110px;gap:10px;align-items:center;font-size:.85rem}
+.hacc .ha .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.hacc .tr{height:9px;background:var(--line2);border-radius:999px;position:relative;overflow:visible}
+.hacc .fi{height:100%;border-radius:999px;background:#2563eb}
+.hacc .fi.over{background:#dc2626}
+.hacc .mk2{position:absolute;top:-3px;width:2px;height:15px;background:#334155}
+.hacc .nv{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.hacc h4{margin:4px 0 0;font-size:.74rem;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
 
 </style>
 </head>
@@ -350,39 +368,33 @@ table.grid td.wrapc{white-space:normal;min-width:220px;max-width:420px}
     </div>
     <section class="kpis" id="kpis" aria-label="Key indicators"></section>
     <section class="panel summary"><h2>Resource Manager summary</h2><p id="summary">&nbsp;</p></section>
-    <section class="panel"><h2>Where the money stands</h2><div class="chartbox short"><canvas id="cPos"></canvas></div><p class="muted small" id="posNote"></p></section>
+    <section class="panel">
+      <div class="tablehead"><h2>Total Expenditure by Account vs TDP</h2><div class="tabletools"><label>Sort by <select id="acctSort" aria-label="Sort accounts"><option value="te">Total Expenditure</option><option value="pct">% expended</option></select></label></div></div>
+      <div class="chartbox"><canvas id="cAcctTe"></canvas></div>
+      <p class="muted small" id="acctNote"></p>
+    </section>
     <section class="panel" id="trendPanel">
-      <div class="tablehead"><h2>Spending trend</h2><div class="tabletools">
+      <div class="tablehead"><h2>Total Expenditure trend</h2><div class="tabletools">
         <label>Year <select id="tFy" aria-label="Trend fiscal year"></select></label>
-        <label>Spent = <select id="tMetric" aria-label="What counts as spent"><option value="od">Total Expenditure (Obl. + Disb.)</option><option value="o">Obligation</option><option value="d">Disbursement</option></select></label>
+        <label hidden>Spent = <select id="tMetric" aria-label="What counts as spent"><option value="od">Total Expenditure</option><option value="o">Obligation</option><option value="d">Disbursement</option></select></label>
       </div></div>
       <h3 class="sub">Where we should be</h3>
       <div id="pace" class="pace"></div>
       <div class="row r2">
-        <div><h3 class="sub">Cumulative spent vs straight-line pace and spend plan</h3><div class="chartbox"><canvas id="cCum"></canvas></div><p class="hint" id="paceHint" hidden>The straight-line pace appears once the funding file is loaded.</p></div>
-        <div><h3 class="sub">Monthly spend</h3><div class="chartbox"><canvas id="cMon"></canvas></div><p class="hint" id="planHint" hidden>No spend plan loaded.</p></div>
+        <div><h3 class="sub">Cumulative Total Expenditure vs straight-line pace (TDP &times; month &divide; 12) and spend plan</h3><div class="chartbox"><canvas id="cCum"></canvas></div><p class="hint" id="paceHint" hidden>The straight-line pace appears once the funding file is loaded.</p></div>
+        <div><h3 class="sub">Monthly Total Expenditure</h3><div class="chartbox"><canvas id="cMon"></canvas></div><p class="hint" id="planHint" hidden>No spend plan loaded.</p></div>
       </div>
       <p class="muted small" id="trendNote"></p>
     </section>
     <div class="row r2">
-      <section class="panel"><h2>By Fiscal Year</h2><div class="chartbox"><canvas id="cFy"></canvas></div></section>
-      <section class="panel"><h2>By Appropriation</h2><div class="chartbox"><canvas id="cAppn"></canvas></div></section>
+      <section class="panel"><h2>Commitment items within accounts</h2><div class="chartbox"><canvas id="cCiAcct"></canvas></div><p class="muted small">Total Expenditure per Account, split by commitment item (items sharing a description are combined). Click an account to filter.</p></section>
+      <section class="panel"><h2 id="ciSelTitle">Commitment items</h2><div class="chartbox"><canvas id="cCi"></canvas></div><p class="muted small">Total Expenditure by commitment item for the selected account. Click a bar to filter by it.</p></section>
     </div>
-    <div class="row r2">
-      <section class="panel"><h2>By Sag</h2><div class="chartbox tall"><canvas id="cSag"></canvas></div></section>
-      <section class="panel"><h2>By MDEP</h2><div class="chartbox tall"><canvas id="cMdep"></canvas></div></section>
-    </div>
-    <div class="row r2">
-      <section class="panel"><h2>By Account</h2><div class="chartbox tall"><canvas id="cAcct"></canvas></div></section>
-      <section class="panel"><h2>By Commitment Item</h2><div class="chartbox tall"><canvas id="cCi"></canvas></div></section>
-    </div>
-    <p class="muted small chartnote">Largest 10 values; the rest are grouped as Other. Click a bar to filter by it.</p>
-    <section class="panel" id="fundPanel">
-      <div class="tablehead"><h2>Funding vs execution</h2><div class="tabletools"><button class="btn ghost sm" id="btnFundCsv" type="button">Export CSV</button><button class="btn ghost sm" id="btnFundAll" type="button">Show all</button></div></div>
-      <p class="muted small" id="fundNote"></p>
-      <div class="tablewrap scrolly"><table class="grid" id="tFund"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+    <section class="panel" id="acctPanel">
+      <div class="tablehead"><h2>Accounts</h2><div class="tabletools"><button class="btn ghost sm" id="btnAcctCsv" type="button">Export CSV</button></div></div>
+      <p class="muted small" id="acctTableNote"></p>
+      <div class="tablewrap scrolly"><table class="grid acct" id="tAcct"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
     </section>
-    <section class="panel fundneed" id="fundNeed" hidden><h2>Funding vs execution</h2><p class="muted">TDP, AFP and Balance appear once the funding file is loaded.</p></section>
     <section class="panel">
       <div class="tablehead"><h2>Document detail</h2><div class="tabletools"><input type="search" id="fSearch" placeholder="Search document number, MDEP, account&hellip;" aria-label="Search lines" autocomplete="off"><button class="btn ghost sm" id="btnCsv" type="button">Export CSV</button><button class="btn ghost sm" id="btnAll" type="button">Show all</button></div></div>
       <p class="muted small">One row per line. Click a column header to sort. <span id="searchNote" class="searchnote"></span></p>
@@ -504,7 +516,8 @@ table.grid td.wrapc{white-space:normal;min-width:220px;max-width:420px}
         <li>Total Expenditure (commitment_amt_cum) and Disbursement (disbursement_amt_cum) are the export's cumulative amounts, sign-flipped (&times; &minus;1) because the export carries them negative. A funds export needs both columns.</li>
         <li>Obligation is calculated: Obligation = Total Expenditure &minus; Disbursement (on the raw export: disbursement &minus; commitment). obligation_amt_cum is not read. Spent = Obligation + Disbursement = Total Expenditure.</li>
         <li>TDP and AFP come only from the funding file (Fiscal Year, Account, TDP, AFP), per Account. Functional Areas roll up to Accounts (with their Sag and MDEP) through the Account Key. Commitment items sharing a description in the Commitment Item Key are added together.</li>
-        <li>Balance = TDP &minus; Obligation &minus; Disbursement. Straight-line pace = TDP &times; fiscal month &divide; 12 (October = 1).</li>
+        <li>Balance = TDP &minus; Total Expenditure (= TDP &minus; Obligation &minus; Disbursement). Straight-line pace = TDP &times; fiscal month &divide; 12 (October = 1). The page opens on the current fiscal year once it has two months of lines, otherwise the latest earlier year.</li>
+        <li>Accounts: % expended = Total Expenditure &divide; TDP. Pace compares it with the share of the fiscal year elapsed (days since 1 October): within &plusmn;10% is on pace, above is over, below is under. Commitment items are measured by Total Expenditure.</li>
       </ul>
       <h4>PR Tracker</h4>
       <ul>
@@ -1574,14 +1587,14 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   LABEL.acctL = "Account"; LABEL.ciL = "Commitment Item"; LABEL.sag = "Sag"; LABEL.mdep = "MDEP";
   var TCOLS = [["doc", "Document Number", "id"], ["ciL", "Commitment Item", "ciL"], ["ci", "CI Code", "text"], ["fa", "Functional Area", "text"], ["acctL", "Account", "acct"],
     ["sag", "Sag", "keyed"], ["mdep", "MDEP", "keyed"], ["appn", "Appropriation", "text"], ["fy", "Fiscal Year", "fy"], ["fm", "Fiscal Month", "fm"],
-    ["obl", "Obligation", "money"], ["com", "Total Expenditure", "money"], ["disb", "Disbursement", "money"]];
+    ["com", "Total Expenditure", "money"], ["obl", "Obligation", "money"], ["disb", "Disbursement", "money"]];
   var ALIAS = L.aliasMap(COLS);
   var DIMS = [["fy", "fFy", "cFy", "All years"], ["appn", "fAppn", "cAppn", "All"], ["sag", "fSag", "cSag", "All"], ["mdep", "fMdep", "cMdep", "All"], ["acctL", "fAcct", "cAcct", "All"], ["fa", "fFa", null, "All"], ["ciL", "fCi", "cCi", "All"], ["fm", "fFm", null, "All months"]];
   var DIM_KEYS = DIMS.map(function (d) { return d[0]; });
   var TEXT_KEYS = ["doc", "ci", "ciL", "fa", "acctL", "appn", "fy", "fm", "sag", "mdep"];
-  var TOPN = 10, C_TDP = "#b08968", C_OBL = "#3b82f6", C_DISB = "#84cc16", C_BAL = "#16a34a";
+  var TOPN = 10;
   var KIND_LABEL = { "export": "Funds export", funding: "Funding file", plan: "Spend plan", key: "Account Key", cikey: "Commitment Item Key" };
-  var S = { files: [], recs: [], fund: null, plan: null, allobj: 0, showAll: false, sort: { k: "obl", dir: -1 }, shown: [], order: 0 };
+  var S = { files: [], recs: [], fund: null, plan: null, allobj: 0, showAll: false, sort: { k: "com", dir: -1 }, asort: { k: "te", dir: -1 }, open: {}, shown: [], order: 0 };
 
   // ---------- export parsing (only header cells and the mapped columns are ever read) ----------
   // saved = a saved copy's own data: amounts are already flipped and Obligation already calculated (read as stored, never recalculated)
@@ -1634,18 +1647,6 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     else if (!r.amts.length) { r.fatal = "No TDP or AFP column was found."; p.rows = []; r.rowsLoaded = 0; }
     return p;
   }
-  function fundTable(j) {   // shared funding table without its Reservations column
-    L.table.render(S.fund, j);
-    var fn = $("fundNote"); if (fn) fn.textContent = fn.textContent.replace("TDP \u2212 Reservations \u2212 Obligation", "TDP \u2212 Obligation");
-    var t = $("tFund"), th = t.tHead.querySelector('th[data-k="res"]'); if (!th) return;
-    var i = Array.prototype.indexOf.call(th.parentNode.children, th);
-    [t.tHead, t.tBodies[0], t.tFoot].forEach(function (sec) { Array.prototype.forEach.call(sec.rows, function (tr) { if (tr.cells.length > i && !(tr.cells.length === 1 && tr.cells[0].colSpan > 1)) tr.deleteCell(i); }); });
-  }
-  function fundCsv() {   // same CSV as the shared table, minus Reservations
-    var dl = K.downloadCsv;
-    K.downloadCsv = function (name, head, rows) { var i = head.indexOf("Reservations"); if (i >= 0) { head = head.filter(function (x, k) { return k !== i; }); rows = rows.map(function (r) { return r.filter(function (x, k) { return k !== i; }); }); } return dl.call(K, name, head, rows); };
-    try { L.table.exportCsv(); } finally { K.downloadCsv = dl; }
-  }
   function parseAs(kind, src, noFlip) { return kind === "funding" ? parseFunding(src) : kind === "plan" ? TR.parsePlan(src) : kind === "key" ? L.parseKey(src) : kind === "cikey" ? L.parseCiKey(src) : parseExport(src, noFlip); }
   function derive(recs) {
     var ciLoaded = L.ciInfo().size > 0;
@@ -1692,6 +1693,8 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     S.showAll = false;
     S.files.forEach(function (e) { e.count = e.kind === "export" ? (e.records || []).length : (e.rows || []).length; var fl = fileLines(e); e.warns = fl.warns; });
     buildFilters(true);
+    var fy = autoFy(); if (fy && $("fFy").querySelector('option[value="' + fy + '"]')) $("fFy").value = fy;   // open on one fiscal year (pace needs one)
+    S.open = {};
   }
   function aoa(t) { return L.aoaSource([t.headers].concat(t.rows)); }
   function demo() {
@@ -1790,98 +1793,199 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   function F() { var f = {}; DIMS.forEach(function (d) { f[d[0]] = $(d[1]).value; }); return f; }
   function pass(r, f) { for (var k in f) if (f[k] && dv(r, k) !== f[k]) return false; return true; }
 
-  // ---------- render ----------
+  // ---------- render (account-centric: Total Expenditure by Account vs TDP) ----------
+  // Total Expenditure (TE) = commitment_amt_cum = Obligation + Disbursement; Balance = TDP - TE (= TDP - Obligation - Disbursement)
+  var C_TE = "#2563eb", C_REM = "#cbd5e1", C_AFP = "#b45309";
+  var CI_COLORS = ["#2563eb", "#0d9488", "#f59e0b", "#7c3aed", "#db2777", "#65a30d", "#ea580c", "#0891b2", "#94a3b8"];
   function money(v) { return K.money(v); }
   function docCount(rows) { var s = Object.create(null), c = 0; rows.forEach(function (r) { if (r.doc && !s[r.doc]) { s[r.doc] = 1; c++; } }); return c; }
+  function te(r) { return n(r.com); }
+  function r2(x) { return Math.round(x * 100) / 100; }
+  // the year the page opens on: current FY once it has 2 months of lines, else the latest earlier year
+  function autoFy() {
+    var years = K.uniq(S.recs.map(function (r) { return r.fy; }).filter(Boolean)).sort(), now = L.fiscalNow(new Date()), mby = {};
+    S.recs.forEach(function (r) { if (r.fy && r.fmn) { mby[r.fy] = mby[r.fy] || {}; mby[r.fy][r.fmn] = 1; } });
+    return years.indexOf(now.fy) >= 0 && Object.keys(mby[now.fy] || {}).length >= 2 ? now.fy : (years.filter(function (y) { return +y < +now.fy; }).pop() || years[years.length - 1] || "");
+  }
+  function scopeFy(f, rows) { if (f.fy && f.fy !== BLANK) return f.fy; var ys = K.uniq(rows.map(function (r) { return r.fy; }).filter(Boolean)); return ys.length === 1 ? ys[0] : ""; }
+  function elapsedOf(fy) { return fy ? C.fyProgress(fy).pct : null; }
+  // one row per Account (funding joined across the years in scope) with its commitment items
+  function accounts(rows, j, el) {
+    var m = Object.create(null), out = [];
+    function get(label) { var a = m[label]; if (!a) { a = m[label] = { label: label, unmapped: label === L.UNMAPPED, tdp: 0, afp: 0, funded: false, obl: 0, disb: 0, te: 0, lines: 0, ci: {} }; out.push(a); } return a; }
+    if (j) j.groups.forEach(function (g) { var a = get(g.acctL); if (g.funded) { a.funded = true; a.tdp += n(g.tdp); a.afp += n(g.afp); } });
+    rows.forEach(function (r) {
+      var a = get(r.acctL || L.UNMAPPED); a.obl += n(r.obl); a.disb += n(r.disb); a.te += te(r); a.lines++;
+      var k = r.ciL || BLANK, c = a.ci[k] || (a.ci[k] = { label: k, te: 0, obl: 0, disb: 0, lines: 0 }); c.te += te(r); c.obl += n(r.obl); c.disb += n(r.disb); c.lines++;
+    });
+    var info = L.keyInfo().info || {};
+    out.forEach(function (a) {
+      a.te = r2(a.te); a.obl = r2(a.obl); a.disb = r2(a.disb);
+      var i = a.unmapped ? {} : info[L.an(a.label)] || {}; a.sag = i.sag || ""; a.mdep = i.mdep || "";
+      a.bal = a.funded ? r2(a.tdp - a.te) : null; a.pct = a.funded && a.tdp ? a.te / a.tdp : null;
+      a.pace = a.pct != null && el ? C.pace(a.pct, el) : { k: "na", t: "\u2014" };
+      a.cis = Object.keys(a.ci).map(function (k) { return a.ci[k]; }).sort(function (x, y) { return y.te - x.te; });
+    });
+    return out.filter(function (a) { return a.funded || a.lines; });
+  }
   function render() {
     var f = F(), rows = S.recs.filter(function (r) { return pass(r, f); }), j = L.joined(S.fund, rows, f, DIM_KEYS);
     var scope = DIMS.filter(function (d) { return f[d[0]]; }).map(function (d) { return LABEL[d[0]] + " " + f[d[0]]; });
     $("asofLabel").textContent = plural(rows.length, "line") + " \u00b7 " + plural(docCount(rows), "document");
     $("scopeLabel").textContent = scope.length ? scope.join(" \u00b7 ") : "All funds";
-    kpis(rows, j); position(rows, j); trend(f); summary(rows, f, j);
-    DIMS.forEach(function (d) { chart(d, rows, j); });
-    fundTable(j);
+    var fy = scopeFy(f, rows), el = elapsedOf(fy), acc = accounts(rows, j, el);
+    S.view = { f: f, fy: fy, el: el, acc: acc, j: j, rows: rows };
+    kpis(rows, j, fy, el); trend(f); summary(rows, f, j, acc, fy, el);
+    acctChart(acc); ciAcctChart(acc); ciSelChart(acc, f);
+    acctTable();
     S.base = rows; table();
   }
   function trend(f) {
     var f2 = {}; Object.keys(f).forEach(function (k) { f2[k] = k === "fy" || k === "fm" ? "" : f[k]; });
     var scope = S.recs.filter(function (r) { return pass(r, f2); }), filtered = DIM_KEYS.some(function (k) { return f2[k]; });
+    $("tMetric").value = "od";                                   // Total Expenditure = Obligation + Disbursement
     S.trend = TR.render({ rows: scope, f: f, fund: S.fund, plan: S.plan, filtered: filtered, source: "file",
       joinedFor: function (fy) { var f3 = {}; Object.keys(f2).forEach(function (k) { f3[k] = f2[k]; }); f3.fy = fy; return L.joined(S.fund, scope.filter(function (r) { return r.fy === fy; }), f3, DIM_KEYS); } });
+    // shared trend code says "Obligation + Disbursement"; on this page that is Total Expenditure
+    [["cCum", ["Cumulative Total Expenditure"]], ["cMon", ["Total Expenditure"]]].forEach(function (x) {
+      var ch = w.Chart && w.Chart.getChart(x[0]); if (!ch || !ch.data.datasets.length) return; ch.data.datasets[0].label = x[1][0]; ch.update("none");
+    });
+    ["pace", "trendNote"].forEach(function (id) { var el = $(id); if (el) el.innerHTML = el.innerHTML.replace(/\s*\(?Obligation \+ Disbursement\)?/g, function (m) { return /\(/.test(m) ? " (Total Expenditure)" : " Total Expenditure"; }).replace("% of TDP spent", "% of TDP expended"); });
   }
   function kpi(lbl, val, sub, cls, title) { return '<div class="kpi' + (cls ? " " + cls : "") + '"' + (title ? ' title="' + esc(title) + '"' : "") + '><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div><div class="sub">' + (sub || "&nbsp;") + "</div></div>"; }
   function needKpi(lbl, cls) { return kpi(lbl, "Not loaded", "Comes from the funding file", cls + " need"); }
-  function kpis(rows, j) {
-    var o = K.sum(rows, function (r) { return n(r.obl); }), d = K.sum(rows, function (r) { return n(r.disb); }), h = [];
+  function kpis(rows, j, fy, el) {
+    var t = K.sum(rows, te), h = [];
     if (j) {
-      var t = j.totals, nk = j.nonKey.length ? "Set per " + L.keyLabel(S.fund.keys) + "; not split by " + j.nonKey.map(function (k) { return LABEL[k]; }).join(", ") : "";
-      h.push(kpi("TDP", money(t.tdp), nk || "Full-year funding", "tdp", full(t.tdp)));
-      h.push(kpi("AFP", money(t.afp), "Funded to date" + (t.tdp ? " \u00b7 " + Math.round(t.afp / t.tdp * 100) + "% of TDP" : ""), "afp", full(t.afp)));
+      var tt = j.totals, nk = j.nonKey.length ? "Set per " + L.keyLabel(S.fund.keys) + "; not split by " + j.nonKey.map(function (k) { return LABEL[k]; }).join(", ") : "";
+      h.push(kpi("TDP", money(tt.tdp), nk || (fy ? "FY" + fy + " funding" : "Full-year funding"), "tdp", full(tt.tdp)));
+      h.push(kpi("AFP", money(tt.afp), "Funded to date" + (tt.tdp ? " \u00b7 " + Math.round(tt.afp / tt.tdp * 100) + "% of TDP" : ""), "afp", full(tt.afp)));
     } else { h.push(needKpi("TDP", "tdp")); h.push(needKpi("AFP", "afp")); }
-    h.push(kpi("Obligation", money(o), plural(rows.length, "line") + " \u00b7 " + plural(docCount(rows), "doc"), "obl", full(o)));
-    h.push(kpi("Disbursement", money(d), "Total Expenditure " + money(o + d), "disb", full(d)));
-    if (j) { var b = j.totals.bal; h.push(kpi("Balance", money(b), "TDP \u2212 Oblig. \u2212 Disb.", "bal " + (b < 0 ? "bad" : "good"), full(b))); }
-    else h.push(needKpi("Balance", "bal"));
+    h.push(kpi("Total Expenditure", money(t), plural(rows.length, "line") + " \u00b7 " + plural(docCount(rows), "doc"), "te", full(t)));
+    if (j) {
+      var b = r2(j.totals.tdp - t); h.push(kpi("Balance", money(b), "TDP \u2212 Total Expenditure", "bal " + (b < 0 ? "bad" : "good"), full(b)));
+      var p = j.totals.tdp ? t / j.totals.tdp : null, st = p != null && el ? C.pace(p, el) : null;
+      h.push(kpi("% of TDP expended", C.pct(p), el != null ? "vs " + C.pct(el) + " of FY" + fy + " elapsed" + (st ? ' <span class="pill ' + st.k + '">' + st.t + "</span>" : "") : "Pick one fiscal year to compare with the year elapsed", "pct", p == null ? "" : (p * 100).toFixed(1) + "% expended"));
+    } else { h.push(needKpi("Balance", "bal")); h.push(needKpi("% of TDP expended", "pct")); }
     $("kpis").innerHTML = h.join("");
   }
-  function group(rows, k) {
-    var m = Object.create(null), out = [];
-    rows.forEach(function (r) { var key = L.kn(k, r[k]), g = m[key]; if (!g) { g = m[key] = { label: dv(r, k), obl: 0, disb: 0, tdp: null, lines: 0 }; out.push(g); } g.obl += n(r.obl); g.disb += n(r.disb); g.lines++; });
-    return out;
-  }
-  function groupJoined(j, k) {
-    var m = Object.create(null), out = [];
-    j.groups.forEach(function (x) { var key = L.kn(k, x[k]), g = m[key]; if (!g) { g = m[key] = { label: x[k] || BLANK, obl: 0, disb: 0, tdp: 0, lines: 0 }; out.push(g); } g.obl += x.obl; g.disb += x.disb; g.tdp += n(x.tdp); g.lines += x.lines; });
-    return out;
-  }
-  function mag(g) { return Math.max(Math.abs(g.obl), Math.abs(g.disb), Math.abs(n(g.tdp))); }
-  function summary(rows, f, j) {
+  function summary(rows, f, j, acc, fy, el) {
     if (!rows.length && !(j && j.groups.length)) { $("summary").textContent = S.recs.length ? "No lines match the current filters." : "No Status of Funds data loaded."; return; }
-    var o = K.sum(rows, function (r) { return n(r.obl); }), d = K.sum(rows, function (r) { return n(r.disb); }), s = [];
-    s.push(plural(rows.length, "line") + " across " + plural(docCount(rows), "document") + ": Obligation " + full(o) + " and Disbursement " + full(d) + ".");
-    if (j) {
-      var t = j.totals;
-      s.push("TDP " + full(t.tdp) + ", AFP " + full(t.afp) + "; Balance (TDP \u2212 Obligation \u2212 Disbursement) " + full(t.bal) + ".");
-      var neg = j.groups.filter(function (g) { return g.funded && g.bal < 0; }).sort(function (a, b) { return a.bal - b.bal; });
-      if (neg.length) s.push(plural(neg.length, "account") + " " + (neg.length === 1 ? "has" : "have") + " a negative balance; the largest is " + (neg[0].label || neg[0].acct) + (neg[0].fy ? " (FY" + neg[0].fy + ")" : "") + " at " + full(neg[0].bal) + ".");
-      if (t.unfundedLines) s.push(plural(t.unfundedLines, "line") + " (" + money(t.unfundedObl) + " obligated) have no matching funding row.");
+    var t = K.sum(rows, te), s = [];
+    if (j && j.totals.tdp) s.push((fy ? "FY" + fy + ": " : "") + "Total Expenditure " + full(t) + " of TDP " + full(j.totals.tdp) + " (" + C.pct(t / j.totals.tdp) + (el != null ? " with " + C.pct(el) + " of the year elapsed" : "") + "); balance " + full(r2(j.totals.tdp - t)) + ".");
+    else s.push("Total Expenditure " + full(t) + " across " + plural(rows.length, "line") + ".");
+    var funded = acc.filter(function (a) { return a.pct != null; });
+    if (funded.length > 1 && !f.acctL) {
+      var hi = funded.slice().sort(function (a, b) { return b.pct - a.pct; })[0]; s.push("Highest % expended: " + hi.label + " at " + C.pct(hi.pct) + ".");
+      var over = funded.filter(function (a) { return a.pace.k === "over"; }), neg = funded.filter(function (a) { return a.bal < 0; });
+      if (el != null) s.push(plural(over.length, "account") + " over pace, " + funded.filter(function (a) { return a.pace.k === "under"; }).length + " under, " + funded.filter(function (a) { return a.pace.k === "on"; }).length + " on pace.");
+      if (neg.length) s.push(plural(neg.length, "account") + " " + (neg.length === 1 ? "is" : "are") + " over TDP.");
     }
-    if (S.trend && S.trend.tdp) { var sp = S.trend.total / S.trend.tdp; s.push("FY" + S.trend.fy + ": " + Math.round(sp * 100) + "% of TDP spent with " + Math.round(S.trend.elapsed / 12 * 100) + "% of the year elapsed."); }
-    if (!f.ciL) { var g = group(rows, "ciL").sort(function (a, b) { return b.obl - a.obl; }); if (g.length > 1 && g[0].obl > 0) s.push("Largest commitment item by obligation: " + g[0].label + " (" + money(g[0].obl) + ", " + Math.round(g[0].obl / (o || 1) * 100) + "%)."); }
+    var one = f.acctL ? acc.filter(function (a) { return a.label === f.acctL; })[0] : null, cis = one ? one.cis : null;
+    if (!cis) { var m = {}; rows.forEach(function (r) { var k = r.ciL || BLANK; m[k] = (m[k] || 0) + te(r); }); cis = Object.keys(m).map(function (k) { return { label: k, te: m[k] }; }).sort(function (a, b) { return b.te - a.te; }); }
+    if (cis.length > 1 && cis[0].te > 0 && !f.ciL) s.push("Largest commitment item" + (one ? " in " + one.label : "") + ": " + cis[0].label + " (" + money(cis[0].te) + ", " + Math.round(cis[0].te / (t || 1) * 100) + "%).");
     $("summary").textContent = s.join(" ");
   }
   function moneyAxis(o, ax) { o.scales[ax].ticks = { callback: function (v) { return money(v); } }; o.plugins.tooltip.callbacks = { label: function (c) { return c.dataset.label + ": " + full(c.raw); } }; return o; }
-  function position(rows, j) {
-    var o = moneyAxis(K.chartBase(), "x"); o.indexAxis = "y"; o.scales.x.stacked = true; o.scales.y.stacked = true;
-    var ob = K.sum(rows, function (r) { return n(r.obl); }), di = K.sum(rows, function (r) { return n(r.disb); }), t = j ? j.totals : null;
-    var ds = [{ label: "Obligation", data: [ob], backgroundColor: C_OBL }, { label: "Disbursement", data: [di], backgroundColor: C_DISB }];
-    if (t) { ds.push({ label: "Balance", data: [Math.max(0, t.bal)], backgroundColor: C_BAL }); }
-    K.upsert("cPos", { type: "bar", data: { labels: [t ? "TDP " + money(t.tdp) : "Spent"], datasets: ds }, options: o });
-    $("posNote").textContent = t ? (t.bal < 0 ? "Over TDP by " + full(-t.bal) + "." : full(t.bal) + " left (" + (t.tdp ? Math.round(t.bal / t.tdp * 100) : 0) + "% of TDP).") : "";
+  function sizeBox(id, count) { var box = $(id).parentNode; box.style.height = Math.max(220, 56 + count * 30) + "px"; }
+  function pickAcct(label) { if (!label || !Array.prototype.some.call($("fAcct").options, function (o) { return o.value === label; })) return; $("fAcct").value = $("fAcct").value === label ? "" : label; S.showAll = false; render(); }
+  function sortedAcc(acc) {
+    var by = $("acctSort").value || "te";
+    return acc.slice().sort(function (a, b) { return by === "pct" ? (b.pct == null ? -1 : b.pct) - (a.pct == null ? -1 : a.pct) || b.te - a.te : b.te - a.te || cmpVal(a.label, b.label); });
   }
-  function chart(d, rows, j) {
-    if (!d[2]) return;
-    var k = d[0], horiz = k !== "fy" && k !== "appn", withTdp = j && S.fund.keys.indexOf(k === "acctL" ? "acct" : k) >= 0 && S.fund.amts.indexOf("tdp") >= 0;
-    var g = withTdp ? groupJoined(j, k) : group(rows, k);
-    if (k === "fy") g.sort(function (a, b) { return a.label === BLANK ? 1 : b.label === BLANK ? -1 : cmpVal(a.label, b.label); });
-    else {
-      g.sort(function (a, b) { return mag(b) - mag(a) || cmpVal(a.label, b.label); });
-      if (g.length > TOPN + 1) {
-        var rest = g.slice(TOPN), oth = { label: "Other (" + rest.length + ")", obl: 0, disb: 0, tdp: 0, other: true };
-        rest.forEach(function (x) { oth.obl += x.obl; oth.disb += x.disb; oth.tdp += n(x.tdp); });
-        g = g.slice(0, TOPN).concat([oth]);
-      }
-    }
-    var o = moneyAxis(K.chartBase(), horiz ? "x" : "y");
-    if (horiz) o.indexAxis = "y";
-    o.onClick = function (e, els) { if (!els.length) return; var x = g[els[0].index]; if (!x || x.other) return; $(d[1]).value = x.label; S.showAll = false; render(); };
-    o.onHover = function (e, els) { e.native.target.style.cursor = els.length && g[els[0].index] && !g[els[0].index].other ? "pointer" : "default"; };
-    var ds = [];
-    if (withTdp) ds.push({ label: "TDP", data: g.map(function (x) { return x.tdp; }), backgroundColor: C_TDP });
-    ds.push({ label: "Obligation", data: g.map(function (x) { return x.obl; }), backgroundColor: C_OBL });
-    ds.push({ label: "Disbursement", data: g.map(function (x) { return x.disb; }), backgroundColor: C_DISB });
-    if (withTdp) ds.push({ label: "Balance", data: g.map(function (x) { return x.other ? null : n(x.tdp) - x.obl - x.disb; }), backgroundColor: C_BAL });
-    K.upsert(d[2], { type: "bar", data: { labels: g.map(function (x) { return x.label; }), datasets: ds }, options: o });
+  // primary chart: TE vs TDP per Account (TE + remaining = TDP), AFP marker, % expended in the label
+  function acctChart(acc) {
+    var list = sortedAcc(acc); sizeBox("cAcctTe", list.length);
+    var o = moneyAxis(K.chartBase(), "x"); o.indexAxis = "y"; o.scales.x.stacked = true; o.scales.y.stacked = true;
+    o.plugins.tooltip.mode = "index"; o.plugins.tooltip.intersect = false;
+    o.plugins.tooltip.callbacks = {
+      title: function (it) { return list[it[0].dataIndex].label; },
+      label: function () { return null; },
+      afterBody: function (it) { var a = list[it[0].dataIndex]; return ["Total Expenditure: " + full(a.te), "TDP: " + (a.funded ? full(a.tdp) : "no funding row"), "AFP: " + (a.funded ? full(a.afp) : "\u2014"), "% expended: " + C.pct(a.pct, 1), "Remaining: " + (a.bal == null ? "\u2014" : full(a.bal)), "Pace: " + a.pace.t]; }
+    };
+    o.onClick = function (e, els) { if (els.length) pickAcct(list[els[0].index].label); };
+    o.onHover = function (e, els) { e.native.target.style.cursor = els.length ? "pointer" : "default"; };
+    var labels = list.map(function (a) { return a.label + (a.pct != null ? "  \u00b7 " + C.pct(a.pct) : ""); });
+    K.upsert("cAcctTe", { type: "bar", data: { labels: labels, datasets: [
+      { label: "Total Expenditure", data: list.map(function (a) { return a.te; }), backgroundColor: list.map(function (a) { return a.bal != null && a.bal < 0 ? "#dc2626" : C_TE; }), stack: "s" },
+      { label: "Remaining (TDP \u2212 TE)", data: list.map(function (a) { return a.bal != null && a.bal > 0 ? a.bal : 0; }), backgroundColor: C_REM, stack: "s" },
+      { type: "line", label: "AFP", indexAxis: "y", data: list.map(function (a) { return a.funded ? a.afp : null; }), showLine: false, pointStyle: "line", pointRotation: 90, pointRadius: 11, pointHoverRadius: 14, borderWidth: 4, borderColor: C_AFP, backgroundColor: C_AFP }
+    ] }, options: o });
+    $("acctNote").textContent = list.length ? "Bar = TDP: blue is Total Expenditure, grey is what remains (red = over TDP). Orange tick = AFP. Click an account to filter the page to it." : "";
+  }
+  function ciTop(acc) {
+    var m = {}; acc.forEach(function (a) { a.cis.forEach(function (c) { m[c.label] = (m[c.label] || 0) + c.te; }); });
+    var keys = Object.keys(m).sort(function (a, b) { return m[b] - m[a]; });
+    return keys.length > 9 ? keys.slice(0, 8) : keys;
+  }
+  // commitment items within accounts: stacked TE per Account, one segment per commitment item description
+  function ciAcctChart(acc) {
+    var list = sortedAcc(acc).filter(function (a) { return a.te; }), top = ciTop(list), other = list.some(function (a) { return a.cis.some(function (c) { return top.indexOf(c.label) < 0; }); });
+    sizeBox("cCiAcct", list.length);
+    var o = moneyAxis(K.chartBase(), "x"); o.indexAxis = "y"; o.scales.x.stacked = true; o.scales.y.stacked = true;
+    o.onClick = function (e, els) { if (els.length) pickAcct(list[els[0].index].label); };
+    o.onHover = function (e, els) { e.native.target.style.cursor = els.length ? "pointer" : "default"; };
+    var ds = top.map(function (k, i) { return { label: k, data: list.map(function (a) { return a.ci[k] ? r2(a.ci[k].te) : 0; }), backgroundColor: CI_COLORS[i % CI_COLORS.length] }; });
+    if (other) ds.push({ label: "Other items", data: list.map(function (a) { return r2(a.cis.filter(function (c) { return top.indexOf(c.label) < 0; }).reduce(function (s, c) { return s + c.te; }, 0)); }), backgroundColor: "#cbd5e1" });
+    K.upsert("cCiAcct", { type: "bar", data: { labels: list.map(function (a) { return a.label; }), datasets: ds }, options: o });
+  }
+  // breakdown for the selected account (or all accounts): TE by commitment item; click filters to the item
+  function ciSelChart(acc, f) {
+    var one = f.acctL ? acc.filter(function (a) { return a.label === f.acctL; })[0] : null, cis;
+    if (one) cis = one.cis.slice();
+    else { var m = {}; acc.forEach(function (a) { a.cis.forEach(function (c) { var x = m[c.label] || (m[c.label] = { label: c.label, te: 0 }); x.te += c.te; }); }); cis = Object.keys(m).map(function (k) { return m[k]; }).sort(function (a, b) { return b.te - a.te; }); }
+    if (cis.length > TOPN + 1) { var rest = cis.slice(TOPN); cis = cis.slice(0, TOPN).concat([{ label: "Other (" + rest.length + ")", te: rest.reduce(function (s, c) { return s + c.te; }, 0), other: true }]); }
+    $("ciSelTitle").textContent = "Commitment items \u00b7 " + (one ? one.label : "all accounts");
+    var tot = cis.reduce(function (s, c) { return s + c.te; }, 0) || 1;
+    sizeBox("cCi", cis.length);
+    var o = moneyAxis(K.chartBase(), "x"); o.indexAxis = "y";
+    o.plugins.tooltip.callbacks = { label: function (c) { return "Total Expenditure: " + full(c.raw) + " (" + Math.round(c.raw / tot * 100) + "%)"; } };
+    o.onClick = function (e, els) { if (!els.length) return; var x = cis[els[0].index]; if (!x || x.other) return; $("fCi").value = $("fCi").value === x.label ? "" : x.label; S.showAll = false; render(); };
+    o.onHover = function (e, els) { e.native.target.style.cursor = els.length && cis[els[0].index] && !cis[els[0].index].other ? "pointer" : "default"; };
+    K.upsert("cCi", { type: "bar", data: { labels: cis.map(function (c) { return c.label; }), datasets: [{ label: "Total Expenditure", data: cis.map(function (c) { return r2(c.te); }), backgroundColor: C_TE }] }, options: o });
+  }
+  // account table: sortable, each account expands to its commitment items (TE, with Obligation / Disbursement as secondary columns)
+  var ACOLS = [["label", "Account", "text"], ["sag", "Sag", "text"], ["mdep", "MDEP", "text"], ["tdp", "TDP", "money"], ["afp", "AFP", "money"], ["te", "Total Expenditure", "money"],
+    ["bal", "Balance", "money"], ["pct", "% expended", "pct"], ["pace", "Pace", "pace"], ["obl", "Obligation", "money2"], ["disb", "Disbursement", "money2"]];
+  function acctSorted() {
+    var k = S.asort.k, dir = S.asort.dir, acc = (S.view && S.view.acc) || [];
+    return acc.slice().sort(function (a, b) {
+      var x = k === "pace" ? (a.pace.r || 0) - (b.pace.r || 0) : ACOLS.filter(function (c) { return c[0] === k; })[0][2] === "text" ? cmpVal(a[k] || "", b[k] || "") : (a[k] == null ? -Infinity : a[k]) - (b[k] == null ? -Infinity : b[k]);
+      return x * dir || b.te - a.te;
+    });
+  }
+  function acctTable() {
+    var rows = acctSorted(), dash = '<span class="muted">\u2014</span>', t = $("tAcct");
+    t.tHead.innerHTML = "<tr>" + ACOLS.map(function (c) { var on = S.asort.k === c[0]; return '<th data-k="' + c[0] + '" class="' + (c[2] === "text" || c[2] === "pace" ? "" : "num") + (c[2] === "money2" ? " sec" : "") + (on ? " sorted" + (S.asort.dir > 0 ? " asc" : "") : "") + '">' + c[1] + "</th>"; }).join("") + "</tr>";
+    function mcell(v, cls) { return '<td class="num' + (cls || "") + (v != null && v < 0 ? " neg" : "") + '">' + (v == null ? dash : full(v)) + "</td>"; }
+    var h = [];
+    rows.forEach(function (a) {
+      var open = !!S.open[a.label];
+      h.push('<tr class="arow' + (open ? " open" : "") + '" data-a="' + esc(a.label) + '"><td><button class="caret" type="button" aria-label="Show commitment items" data-x="' + esc(a.label) + '">' + (open ? "\u25be" : "\u25b8") + '</button><button class="alink" type="button" data-f="' + esc(a.label) + '">' + (a.unmapped ? '<span class="flag">Unmapped</span>' : esc(a.label)) + "</button></td>" +
+        "<td>" + (a.sag ? esc(a.sag) : dash) + "</td><td>" + (a.mdep ? esc(a.mdep) : dash) + "</td>" +
+        (a.funded ? mcell(a.tdp) + mcell(a.afp) : '<td class="num"><span class="muted">no funding row</span></td><td class="num">' + dash + "</td>") +
+        mcell(a.te) + (a.funded ? mcell(a.bal, a.bal < 0 ? " cf-bad" : "") : '<td class="num">' + dash + "</td>") +
+        '<td class="num">' + (a.pct == null ? dash : '<span class="xbar"><i style="width:' + Math.min(100, a.pct * 100).toFixed(1) + '%"></i></span>' + C.pct(a.pct, 1)) + "</td>" +
+        "<td>" + (a.pace.k === "na" ? dash : '<span class="pill ' + a.pace.k + '">' + a.pace.t + "</span>") + "</td>" + mcell(a.obl, " sec") + mcell(a.disb, " sec") + "</tr>");
+      if (open) a.cis.forEach(function (c) {
+        h.push('<tr class="cirow"><td class="ci" colspan="5">' + esc(c.label) + ' <span class="muted">\u00b7 ' + plural(c.lines, "line") + "</span></td>" + mcell(r2(c.te)) + '<td></td><td class="num muted">' + (a.te ? Math.round(c.te / a.te * 100) + "% of account" : "") + "</td><td></td>" + mcell(r2(c.obl), " sec") + mcell(r2(c.disb), " sec") + "</tr>");
+      });
+    });
+    t.tBodies[0].innerHTML = h.length ? h.join("") : '<tr><td colspan="' + ACOLS.length + '" class="muted">Nothing matches the current filters.</td></tr>';
+    var tot = { tdp: 0, afp: 0, te: 0, obl: 0, disb: 0 }, anyF = false;
+    rows.forEach(function (a) { tot.te += a.te; tot.obl += a.obl; tot.disb += a.disb; if (a.funded) { anyF = true; tot.tdp += a.tdp; tot.afp += a.afp; } });
+    t.tFoot.innerHTML = rows.length ? "<tr><td colspan=\"3\">Total (" + plural(rows.length, "account") + ")</td>" + (anyF ? mcell(r2(tot.tdp)) + mcell(r2(tot.afp)) : "<td></td><td></td>") + mcell(r2(tot.te)) +
+      (anyF ? mcell(r2(tot.tdp - tot.te)) : "<td></td>") + '<td class="num">' + (anyF && tot.tdp ? C.pct(tot.te / tot.tdp, 1) : "") + "</td><td></td>" + mcell(r2(tot.obl), " sec") + mcell(r2(tot.disb), " sec") + "</tr>" : "";
+    $("acctTableNote").textContent = "One row per Account" + (S.view && S.view.fy ? " for FY" + S.view.fy : " across the years in scope") + ". Balance = TDP \u2212 Total Expenditure. Pace compares % expended with " + (S.view && S.view.el != null ? C.pct(S.view.el) + " of the fiscal year elapsed (\u00b110% = on pace)" : "the year elapsed once one fiscal year is selected") + ". \u25b8 shows the commitment items; click an account name to filter the page.";
+  }
+  function acctCsv() {
+    var head = ["Row", "Account", "Commitment Item", "Sag", "MDEP", "TDP", "AFP", "Total Expenditure", "Balance", "% expended", "Pace", "Obligation", "Disbursement"], out = [];
+    function m(v) { return v == null ? "" : v.toFixed(2); }
+    acctSorted().forEach(function (a) {
+      out.push(["Account", a.label, "", a.sag, a.mdep, a.funded ? m(a.tdp) : "", a.funded ? m(a.afp) : "", m(a.te), m(a.bal), a.pct == null ? "" : (a.pct * 100).toFixed(1), a.pace.k === "na" ? "" : a.pace.t, m(a.obl), m(a.disb)]);
+      a.cis.forEach(function (c) { out.push(["Commitment item", a.label, c.label, a.sag, a.mdep, "", "", m(r2(c.te)), "", "", "", m(r2(c.obl)), m(r2(c.disb))]); });
+    });
+    K.downloadCsv("status_of_funds_accounts_" + stamp() + ".csv", head, out);
   }
 
   // ---------- line table ----------
@@ -1916,16 +2020,12 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       (S.shown || []).map(function (r) { return TCOLS.map(function (c) { var v = r[c[0]]; return v == null ? "" : c[2] === "money" ? v.toFixed(2) : c[2] === "ciL" && r.ciUnm ? r.ci + " (Unmapped)" : v; }); }));
   }
 
-  // ---------- home overview: the year the trend would pick (current FY once it has 2 months, else the latest earlier year) ----------
+  // ---------- home overview: the year the page opens on, TDP / TE / Balance and the accounts furthest along ----------
   function homeSummary() {
     if (!S.recs.length && !S.fund) return null;
-    var years = K.uniq(S.recs.map(function (r) { return r.fy; }).filter(Boolean)).sort(), now = L.fiscalNow(new Date()), mby = {};
-    S.recs.forEach(function (r) { if (r.fy && r.fmn) { mby[r.fy] = mby[r.fy] || {}; mby[r.fy][r.fmn] = 1; } });
-    var fy = years.indexOf(now.fy) >= 0 && Object.keys(mby[now.fy] || {}).length >= 2 ? now.fy : (years.filter(function (y) { return +y < +now.fy; }).pop() || years[years.length - 1] || "");
-    var rows = S.recs.filter(function (r) { return r.fy === fy; }), j = S.fund ? L.joined(S.fund, rows, { fy: fy }, DIM_KEYS) : null;
-    var o = K.sum(rows, function (r) { return n(r.obl); }), d = K.sum(rows, function (r) { return n(r.disb); });
-    var el = fy === now.fy ? now.fm : +fy < +now.fy ? 12 : 0;
-    return { fy: fy, obl: o, disb: d, lines: rows.length, tdp: j ? j.totals.tdp : null, afp: j ? j.totals.afp : null, bal: j ? j.totals.bal : null, elapsed: el / 12 };
+    var fy = autoFy(), rows = S.recs.filter(function (r) { return r.fy === fy; }), j = S.fund ? L.joined(S.fund, rows, { fy: fy }, DIM_KEYS) : null;
+    var el = elapsedOf(fy), t = r2(K.sum(rows, te)), acc = accounts(rows, j, el).filter(function (a) { return a.pct != null; }).sort(function (a, b) { return b.pct - a.pct; });
+    return { fy: fy, te: t, lines: rows.length, tdp: j ? j.totals.tdp : null, afp: j ? j.totals.afp : null, bal: j ? r2(j.totals.tdp - t) : null, elapsed: el, pct: j && j.totals.tdp ? t / j.totals.tdp : null, top: acc.slice(0, 5) };
   }
 
   // ---------- page registration ----------
@@ -1939,9 +2039,13 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
       DIMS.forEach(function (d) { $(d[1]).addEventListener("change", function () { S.showAll = false; render(); }); });
       $("btnReset").addEventListener("click", function () { DIMS.forEach(function (d) { $(d[1]).value = ""; }); $("fSearch").value = ""; S.showAll = false; render(); });
       $("btnCsv").addEventListener("click", exportCsv);
-      $("btnFundCsv").addEventListener("click", fundCsv);
-      $("btnFundAll").addEventListener("click", function () { L.table.toggleAll(); render(); });
-      $("tFund").tHead.addEventListener("click", function (e) { var th = e.target.closest("th[data-k]"); if (th) { L.table.sortBy(th.getAttribute("data-k")); render(); } });
+      $("btnAcctCsv").addEventListener("click", acctCsv);
+      $("acctSort").addEventListener("change", render);
+      $("tAcct").tHead.addEventListener("click", function (e) { var th = e.target.closest("th[data-k]"); if (!th) return; var k = th.getAttribute("data-k"); S.asort = S.asort.k === k ? { k: k, dir: -S.asort.dir } : { k: k, dir: k === "label" || k === "sag" || k === "mdep" ? 1 : -1 }; acctTable(); });
+      $("tAcct").tBodies[0].addEventListener("click", function (e) {
+        var x = e.target.closest("[data-x]"); if (x) { var k = x.getAttribute("data-x"); S.open[k] = !S.open[k]; acctTable(); return; }
+        var fl = e.target.closest("[data-f]"); if (fl) pickAcct(fl.getAttribute("data-f"));
+      });
       var st; $("fSearch").addEventListener("input", function () { clearTimeout(st); st = setTimeout(table, 120); });
       $("btnAll").addEventListener("click", function () { S.showAll = !S.showAll; table(); });
       $("tDocs").tHead.addEventListener("click", function (e) {
@@ -2597,7 +2701,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     $("hLead").textContent = last ? C.asOfText(last) : any ? "Funds, purchase requests and fuel in one place." : "Upload your Excel files to see funds, purchase requests and fuel in one place.";
     $("fyRing").innerHTML = ring(p) + '<div><div class="rv">' + C.pct(p.pct) + '</div><div class="rl">of FY' + fy + " elapsed</div></div>";
     $("homeEmpty").hidden = any; $("homeOverview").hidden = !any;
-    $("tsSof").textContent = sof ? (sof.bal != null ? "Balance " + K.money(sof.bal) + " \u00b7 FY" + sof.fy : "Obligated " + K.money(sof.obl)) : "No data loaded";
+    $("tsSof").textContent = sof ? (sof.pct != null ? C.pct(sof.pct) + " of TDP expended \u00b7 FY" + sof.fy : "Total Expenditure " + K.money(sof.te)) : "No data loaded";
     $("tsPr").textContent = pr ? (pr.types ? pr.types.map(function (t) { return t.type + " " + K.money(t.value); }).join(" \u00b7 ") : plural(pr.count, "PR") + " \u00b7 " + K.money(pr.value)) : "No data loaded";
     $("tsFuel").textContent = fu ? (fu.used != null ? C.pct(fu.used) + " of budget used \u00b7 FY" + fu.fy : K.money(fu.spent) + " spent") : "No data loaded";
     if (!any) return;
@@ -2605,14 +2709,18 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
     var h = head("t-sof", "i-sof", "Status of Funds" + (sof && sof.fy ? " \u00b7 FY" + sof.fy : ""), C.mods.sof);
     if (!sof) h += '<div class="empty">No Status of Funds files loaded.</div>';
     else {
-      var spent = sof.obl + sof.disb;
       h += '<div class="big3">' + stat("TDP", sof.tdp == null ? "\u2014" : K.money(sof.tdp), sof.tdp == null ? "Funding file not loaded" : "AFP " + K.money(sof.afp)) +
-        stat("Obligated", K.money(sof.obl), "Disbursed " + K.money(sof.disb)) +
-        stat("Balance", sof.bal == null ? "\u2014" : K.money(sof.bal), "TDP \u2212 Oblig. \u2212 Disb.", sof.bal == null ? "" : sof.bal < 0 ? "bad" : "good") + "</div>";
+        stat("Total Expenditure", K.money(sof.te), sof.pct == null ? plural(sof.lines, "line") : C.pct(sof.pct) + " of TDP") +
+        stat("Balance", sof.bal == null ? "\u2014" : K.money(sof.bal), "TDP \u2212 Total Expenditure", sof.bal == null ? "" : sof.bal < 0 ? "bad" : "good") + "</div>";
       if (sof.tdp) {
-        var sp = spent / sof.tdp, st = C.pace(sp, sof.elapsed);
-        h += '<div class="gauge" style="margin-top:22px"><div class="g" style="background:linear-gradient(90deg,#60a5fa,#2563eb);width:' + Math.min(100, sp * 100).toFixed(1) + '%"></div><div class="mk" data-l="Pace ' + C.pct(sof.elapsed) + '" style="left:' + (sof.elapsed * 100).toFixed(1) + '%"></div></div>' +
-          '<div class="gnote"><span>' + C.pct(sp) + " of TDP spent (obligation + disbursement)</span><span>" + (sof.elapsed ? '<span class="pill ' + st.k + '">' + st.t + "</span>" : "") + "</span></div>";
+        var sp = sof.te / sof.tdp, st = C.pace(sp, sof.elapsed);
+        h += '<div class="gauge" style="margin-top:22px"><div class="g" style="background:linear-gradient(90deg,#60a5fa,#2563eb);width:' + Math.min(100, sp * 100).toFixed(1) + '%"></div><div class="mk" data-l="FY elapsed ' + C.pct(sof.elapsed) + '" style="left:' + (sof.elapsed * 100).toFixed(1) + '%"></div></div>' +
+          '<div class="gnote"><span>' + C.pct(sp) + " of TDP expended</span><span>" + (sof.elapsed ? '<span class="pill ' + st.k + '">' + st.t + "</span>" : "") + "</span></div>";
+      }
+      if (sof.top && sof.top.length) {
+        h += '<div class="hacc"><h4>Accounts by % expended</h4>' + sof.top.map(function (a) {
+          return '<div class="ha"><span class="nm" title="' + esc(a.label) + '">' + esc(a.label) + '</span><div class="tr"><div class="fi' + (a.pct > 1 ? " over" : "") + '" style="width:' + Math.min(100, a.pct * 100).toFixed(1) + '%"></div>' + (sof.elapsed ? '<div class="mk2" style="left:' + (sof.elapsed * 100).toFixed(1) + '%"></div>' : "") + '</div><span class="nv">' + C.pct(a.pct) + " \u00b7 " + K.money(a.te) + "</span></div>";
+        }).join("") + "</div>";
       }
     }
     $("oSof").innerHTML = h;

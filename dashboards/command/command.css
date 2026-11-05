@@ -245,3 +245,21 @@ table.grid td.wrapc{white-space:normal;min-width:220px;max-width:420px}
 .htypes .hv{font-size:1.25rem;font-weight:750;margin:4px 0 2px;font-variant-numeric:tabular-nums}
 .htypes .hl{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
 @media (max-width:760px){.types,.htypes{grid-template-columns:1fr}}
+/* SOF accounts table */
+table.acct th.sec,table.acct td.sec{color:var(--muted);font-size:.84em}
+table.acct .caret{border:0;background:none;cursor:pointer;color:var(--muted);width:20px;padding:0;font-size:.9rem}
+table.acct .alink{border:0;background:none;cursor:pointer;color:var(--ink,inherit);font:inherit;font-weight:650;padding:0;text-align:left}
+table.acct .alink:hover{color:var(--accent);text-decoration:underline}
+table.acct tr.cirow td{background:color-mix(in srgb,var(--line2) 45%,transparent);font-size:.88em}
+table.acct tr.cirow td.ci{padding-left:34px}
+.xbar{display:inline-block;width:46px;height:6px;border-radius:999px;background:var(--line2);margin-right:6px;vertical-align:middle;overflow:hidden}
+.xbar i{display:block;height:100%;background:#2563eb;border-radius:999px}
+.hacc{display:flex;flex-direction:column;gap:7px;margin-top:14px}
+.hacc .ha{display:grid;grid-template-columns:minmax(0,1.4fr) 1fr 110px;gap:10px;align-items:center;font-size:.85rem}
+.hacc .ha .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.hacc .tr{height:9px;background:var(--line2);border-radius:999px;position:relative;overflow:visible}
+.hacc .fi{height:100%;border-radius:999px;background:#2563eb}
+.hacc .fi.over{background:#dc2626}
+.hacc .mk2{position:absolute;top:-3px;width:2px;height:15px;background:#334155}
+.hacc .nv{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.hacc h4{margin:4px 0 0;font-size:.74rem;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
