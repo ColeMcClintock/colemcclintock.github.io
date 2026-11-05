@@ -12,7 +12,7 @@
   var PAGE = 100;
   var S = { files: [], recs: [], aasfs: [], sort: { k: "d", dir: -1 }, showAll: false, shown: [], order: 0 };
 
-  function aasfName(fname) { return String(fname || "").replace(/\.[a-z0-9]+$/i, "").replace(/\s*\(\d+\)$/, "").replace(/[_]+/g, " ").replace(/\s+/g, " ").trim() || "AASF"; }
+  function aasfName(fname) { return String(fname || "").replace(/\.[a-z0-9]+$/i, "").replace(/\s*\(\d+\)$/, "").replace(/[_]+/g, " ").replace(/\s+/g, " ").trim().replace(/[\s-]*\bfuel(\s*tracker)?$/i, "").replace(/^fuel(\s*tracker)?\b[\s-]*/i, "").trim() || "AASF"; }
   function mk(y, m, d) { if (y < 100) y += 2000; var x = new Date(y, m, d); return x.getFullYear() === y && x.getMonth() === m && x.getDate() === d && y > 1990 && y < 2100 ? x : null; }
   // Excel serial dates and typed dates: 10/03/2026, 2026-10-03, 03OCT26, 3-Oct-2026, Oct 3, 2026
   function toDate(v) {
