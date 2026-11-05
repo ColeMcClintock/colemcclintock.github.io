@@ -32,12 +32,15 @@ def xlsx(path, rows, sheet="Sheet1"):
 # ---- Status of Funds (same schema as the finance dashboard) ----
 H = ["fund", "contract_doc_no", "commitment_item_fipex", "functional_area_farea", "appropriation_type", "fiscal_year", "fiscal_month", "ssn",
      "obligation_amt_cum", "commitment_amt_cum", "disbursement_amt_cum", "sag", "mdep"]
-ex_rows, OBL, DISB = [], 0.0, 0.0
+ex_rows, OBL, DISB, TE = [], 0.0, 0.0, 0.0
 for i in range(60):
     allobj = i % 10 == 0
     o, d = round(1000 + i * 37.5, 2), round(400 + i * 11.25, 2)
-    ex_rows.append(["2065", f"W91ZZZ26P{i:04d}", "ALLOBJ" if allobj else ["21T0", "26FF", "252G"][i % 3], ["121G11ABCD", "131G21TRNG"][i % 2], "OMNG", 2026, (i % 12) + 1, SSN, -o, -o, -d, "ZZ", "ZZZZ"])
-    if not allobj: OBL += o; DISB += d
+    te = round(o + d, 2) if i != 1 else round(d - 50.0, 2)      # Total Expenditure (commitment_amt_cum); line 1: disbursement > commitment -> obligation -50
+    # obligation_amt_cum carries a junk value: Aviation calculates Obligation = Total Expenditure - Disbursement and never reads it
+    ex_rows.append(["2065", f"W91ZZZ26P{i:04d}", "ALLOBJ" if allobj else ["21T0", "26FF", "252G"][i % 3], ["121G11ABCD", "131G21TRNG"][i % 2], "OMNG", 2026, (i % 12) + 1, SSN, -999999.0, -te, -d, "ZZ", "ZZZZ"])
+    if not allobj: OBL += round(te - d, 2); DISB += d; TE += te
+bad_x = xlsx(os.path.join(tmp, "funds no commitment.xlsx"), [[h for h in H if h != "commitment_amt_cum"]] + [[v for k, v in zip(H, r) if k != "commitment_amt_cum"] for r in ex_rows[:5]])
 sof_x = xlsx(os.path.join(tmp, "funds export.xlsx"), [["Funds report (fictional)"], [], H] + ex_rows)
 TDP, RES = 500000.0, 2500.0
 fund_x = xlsx(os.path.join(tmp, "Funding.xlsx"), [["Fiscal Year", "Account", "TDP", "AFP", "Reservations"], ["FY26", "Course Supplies", TDP, 400000.0, RES]])
@@ -48,11 +51,11 @@ BAL = round(TDP - OBL - DISB, 2)                            # Aviation dashboard
 # ---- PR files ----
 PRH = ["Purchase requisition", "Item", "Cardholder Name", "Plant", "Merchant / Description", "Short Text", "Qty", "Total Value", "SSN", "Created By"]
 def prrow(pr, card, merch, desc, val): return [pr, 10, card, "IA01", merch, desc, 1, val, SSN, "XXXX"]
-L1 = [prrow(11111111, "john.q.public.mil@army.mil", "Hawk Supply", "Paper", 100.0), prrow(11111111, "john.q.public.mil@army.mil", "Hawk Supply", "Toner", 50.5),  # summed: 150.50
+L1 = [prrow(11111111, "john.q.public.mil@army.mil", "Hawk Supply", "Paper", 50.5), prrow(11111111, "john.q.public.mil@army.mil", "Hawk Supply", "Toner", 100.0),  # summed: 150.50; description = Toner (highest line)
       prrow(22222222, "MARY.ANN.SMITH-JONES", "Tool Co", "Wrench", 80.0),
       prrow(33333333, "pat.oneil@army.mil", "Parts Inc", "Seal", 300.0),                     # also in L3 -> shown at L3
       [None, None, None, None, None, None, None, 530.5, None, None]]                        # total row
-L2 = [prrow("44444444", "jane.doe", "Cater Co", "Meals", 999.99), prrow("44444444", "jane.doe", "Cater Co", "Meals day 2", 999.99), prrow(44444444.0, "jane.doe", "Cater Co", "Water", 999.99),  # repeated total -> 999.99 once
+L2 = [prrow("44444444", "jane.doe", "Cater Co", "Meals", 999.99), prrow("44444444", "jane.doe", "Cater Co", "Meals day 2", 999.99), prrow(44444444.0, "jane.doe", "Cater Co", "Water", 999.99),  # each line is an item: 2,999.97; tie -> first line "Meals" # repeated total -> 999.99 once
       prrow(55555555, "Smith, Robert A", "Sign Shop", "Signs", 45.0)]
 L3 = [prrow(33333333, "pat.oneil@army.mil", "Parts Inc", "Seal", 300.0), prrow(66666666, "o'brien.k.mcdonald", "Lumber", "Plywood", 1200.0)]
 L4 = [prrow(77777777, "amy.b.lee", "IT Shop", "Monitor", 400.0)]
@@ -64,7 +67,7 @@ pnolvl = xlsx(os.path.join(tmp, "PR export.xlsx"), [PRH] + L4)
 # Cardholder Key: email style (no domain, with middle) and First Last both match; Display Name used; Type any case; blank Type = Unassigned
 ckey = xlsx(os.path.join(tmp, "My Cardholders.xlsx"), [["Cardholder", "Display Name", "Type"], ["john.q.public", "", "WHST"], ["Mary Smith-Jones", "M. Smith-Jones", "Safety"],
                                                        ["jane.doe@army.mil", "", "whst"], ["Amy Lee", "", "SAFETY"], ["Robert Smith", "", ""], ["Zed Zulu", "", "WHST"]], "CardholderKey")
-PR_EXP = {1: (2, 150.5 + 80.0), 2: (2, 999.99 + 45.0), 3: (2, 1500.0), 4: (1, 400.0)}
+PR_EXP = {1: (2, 150.5 + 80.0), 2: (2, 2999.97 + 45.0), 3: (2, 1500.0), 4: (1, 400.0)}
 
 # ---- fuel trackers ----
 def tracker(name, budget, rows):
@@ -103,7 +106,8 @@ def run():
         st = pg.evaluate("CMD.mods.pr._state.items.reduce(function(m,i){m[i.level]=m[i.level]||[0,0];m[i.level][0]++;m[i.level][1]+=i.val;return m;},{})")
         check(all(st[str(k)][0] == v["count"] and abs(st[str(k)][1] - v["value"]) < 0.02 for k, v in E["prKey"]["levels"].items()), "hosted: PR count + value per level match the generator (demo cardholder key applied)")
         check(pg.evaluate("CMD.mods.pr._state.cross.length") == len(E["prKey"]["moved"]), "hosted: PRs in two levels flagged")
-        check(pg.evaluate("CMD.mods.pr._state.items.filter(function(i){return i.repeated}).length") == E["prKey"]["repeat"], "hosted: repeated-total PRs counted once")
+        D = pg.evaluate("CMD.mods.pr._state.items.map(function(i){return [i.pr,i.desc]})")
+        check(all(E["pr"]["desc"][p_] == d_ for p_, d_ in D) and not any("more)" in d_ for p_, d_ in D), "hosted: description = Short Text of the highest-value line (no '+N more')")
         ty = pg.evaluate("CMD.mods.pr.summary().types.map(function(t){return [t.type,t.count,t.value]})")
         check(all(abs(c - E["prKey"]["types"][t]["count"]) == 0 and abs(v - E["prKey"]["types"][t]["value"]) < 0.02 for t, c, v in ty) and len(ty) == 2, "hosted: WHST / Safety split matches the generator " + str(ty))
         check(pg.evaluate("CMD.mods.pr._state.ks.notInKey") == E["prKey"]["excludedRows"], "hosted: demo key leaves out the other cardholders' rows")
@@ -117,7 +121,9 @@ def run():
         check(pg.evaluate("CMD.mods.fuel._state.aasfs.map(function(a){return a.budget})") == [x["budget"] for x in E["fuel"].values()], "hosted: budgets from B1")
         if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "command-home.png"), full_page=True)
         go(pg, "sof")
-        check(money(FD["obligation"]) in pg.inner_text("#kpis") or money(FD["obligation"]) in (pg.get_attribute("#kpis .kpi.obl", "title") or ""), "hosted SOF: obligation matches the finance demo (sign-flipped)")
+        check(money(FD["obligation"]) in (pg.get_attribute("#kpis .kpi.obl", "title") or "") and money(FD["disbursement"]) in (pg.get_attribute("#kpis .kpi.disb", "title") or ""), "hosted SOF: calculated obligation (Total Expenditure - Disbursement) matches the Aviation demo")
+        check(abs(FD["obligation"] + FD["disbursement"] - FD["totalExpenditure"]) < 0.05 and FD["obligation"] != FD["obligationAmtCumIgnored"], "hosted SOF: Spent = Obligation + Disbursement = Total Expenditure")
+        check("Total Expenditure" in pg.inner_text("#kpis") and not re.search(r"Commitments", pg.inner_text("#page-sof")), "hosted SOF: Total Expenditure label, no Commitments")
         check("Travel (example)" in pg.inner_text("#fCi"), "hosted SOF: commitment item descriptions")
         if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "command-sof.png"), full_page=True)
         go(pg, "pr")
@@ -143,7 +149,10 @@ def run():
         check(("Data as of " + today) in pg.inner_text("#hLead"), "data as of on home")
         go(pg, "sof")
         kt = lambda c: pg.get_attribute(f"#kpis .kpi.{c}", "title") or ""
-        check(money(round(OBL, 2)) in kt("obl") and money(round(DISB, 2)) in kt("disb"), f"SOF: sign-flipped obligation {OBL:,.2f} / disbursement, ALLOBJ removed")
+        check(money(round(OBL, 2)) in kt("obl") and money(round(DISB, 2)) in kt("disb"), f"SOF: Obligation = Total Expenditure - Disbursement {OBL:,.2f} (obligation_amt_cum ignored), ALLOBJ removed")
+        check("Total Expenditure" in pg.inner_text("#kpis .kpi.disb") and abs(OBL + DISB - TE) < 0.01, "SOF: Total Expenditure = Obligation + Disbursement shown with Disbursement")
+        check("TOTAL EXPENDITURE" in pg.inner_text("#tDocs thead").upper() and "COMMITMENTS" not in pg.inner_text("#page-sof").upper(), "SOF: line table column renamed to Total Expenditure")
+        check("1 line where Disbursement is larger than Total Expenditure" in pg.text_content("#loadReport") and "line where Disbursement" not in pg.inner_text("body"), "SOF: negative calculated obligation counted in the drawer only")
         check(money(abs(BAL)) in kt("bal") and money(TDP) in kt("tdp"), "SOF: Balance = TDP - Obl - Disb (Reservations column ignored)")
         check(not re.search(r"reserv", pg.inner_text("#page-sof") + pg.text_content("#drawer"), re.I) and pg.locator("#kpis .kpi").count() == 5 and pg.locator('#tFund th[data-k="res"]').count() == 0, "SOF: no Reservations anywhere (KPIs, chart, table, drawer)")
         check("Reservations" not in json.dumps(pg.evaluate("Chart.getChart('cPos').data.datasets.map(function(d){return d.label})")), "SOF: position chart without Reservations")
@@ -158,7 +167,9 @@ def run():
         for x in S: g = got.setdefault(x[1], [0, 0.0]); g[0] += 1; g[1] += x[3]
         check(all(got.get(k, [0, 0])[0] == v[0] and abs(got.get(k, [0, 0])[1] - v[1]) < 0.01 for k, v in PR_EXP.items()), "PR: count + value per level " + str(got))
         check(by["11111111"][3] == 150.5 and by["11111111"][4] == 2, "PR: lines of one PR summed")
-        check(abs(by["44444444"][3] - 999.99) < 0.001 and by["44444444"][4] == 3, "PR: same total repeated on every line counted once (number and text PRs grouped)")
+        check(abs(by["44444444"][3] - 2999.97) < 0.001 and by["44444444"][4] == 3, "PR: every line summed even when lines repeat the same value (number and text PRs grouped)")
+        DS = dict(pg.evaluate("CMD.mods.pr._state.items.map(function(i){return [i.pr,i.desc]})"))
+        check(DS["11111111"] == "Toner" and DS["44444444"] == "Meals" and "more)" not in pg.inner_text("#tPr"), "PR: description from the highest-value line, first line on a tie " + str([DS["11111111"], DS["44444444"]]))
         check(by["33333333"][1] == 3 and by["33333333"][5] == [1], "PR: PR in L1 and L3 shown at Level 3")
         check(by["11111111"][2] == "John Public" and by["22222222"][2] == "Mary Smith-Jones" and by["33333333"][2] == "Pat Oneil", "PR: cardholder first + last (drops middle, .mil, domain)")
         check(by["55555555"][2] == "Robert Smith" and by["66666666"][2] == "O'Brien McDonald" and by["44444444"][2] == "Jane Doe", "PR: other name layouts")
@@ -183,7 +194,7 @@ def run():
         pg.click("#btnInfo"); pg.wait_for_timeout(300)
         dr = pg.text_content("#drawer")
         check(pg.is_visible("#drawer") and "ALLOBJ" not in pg.inner_text("body") and "Same content as" in dr and "Could not tell the level" in dr, "drawer: file breakdown (no ALLOBJ note), duplicate copy, file without level")
-        check("appear in more than one level" in pg.text_content("#prReport") and "repeated the same Total Value" in pg.text_content("#prReport"), "drawer: PR notes")
+        check("appear in more than one level" in pg.text_content("#prReport") and "sum of its lines" in pg.text_content("#prReport") and "counted once" not in pg.text_content("#prReport"), "drawer: PR notes")
         check(SSN not in pg.content(), "ssn never read")
         pg.click("#btnClose"); pg.wait_for_timeout(300)
         # ---------- Cardholder Key ----------
@@ -200,9 +211,9 @@ def run():
         body = pg.inner_text("body")
         check(not re.search(r"Oneil|McDonald|Robert Smith|left out|not in the key|Unassigned|Cardholder Key", body), "key: nothing about the key or excluded names on the main view")
         sm = pg.evaluate("CMD.mods.pr.summary().types.map(function(t){return [t.type,t.count,Math.round(t.value*100)/100,t.levels.map(function(g){return [g.level,g.count]})]})")
-        check(sm == [["WHST", 2, 1150.49, [[1, 1], [2, 1]]], ["Safety", 2, 480.0, [[1, 1], [4, 1]]]], "type split: count, value and levels per type " + str(sm))
+        check(sm == [["WHST", 2, 3150.47, [[1, 1], [2, 1]]], ["Safety", 2, 480.0, [[1, 1], [4, 1]]]], "type split: count, value and levels per type " + str(sm))
         tp = pg.inner_text("#prTypes")
-        check("WHST" in tp and "Safety" in tp and "$1,150.49" in tp and "$480.00" in tp, "type split: WHST and Safety cards on the PR page")
+        check("WHST" in tp and "Safety" in tp and "$3,150.47" in tp and "$480.00" in tp, "type split: WHST and Safety cards on the PR page")
         pg.select_option("#prType", "Safety"); pg.wait_for_timeout(300)
         check(pg.locator("#tPr tbody tr").count() == 2 and "Safety" in pg.inner_text("#tPr tbody") and "WHST" not in pg.inner_text("#tPr tbody"), "type filter: Safety only")
         check("$480.00" in pg.inner_text("#prKpis"), "type filter: KPIs follow the type")
@@ -230,6 +241,14 @@ def run():
         blk["pr"]["asOf"] = "2026-10-01T17:00:00.000Z"
         t = t.split('<script id="commandSaved" type="application/json">')[0] + '<script id="commandSaved" type="application/json">' + json.dumps(blk).replace("<", "\\u003c") + "</script>" + t.split('<script id="commandSaved" type="application/json">')[1].split("</script>", 1)[1]
         open(saved, "w", encoding="utf-8").write(t)
+        # saved Obligation is used as stored, never recalculated: bump one stored Obligation and it shows up as is
+        blk2 = json.loads(json.dumps(blk)); oi = blk2["sof"]["headers"].index("Obligation"); blk2["sof"]["rows"][0][oi] = blk2["sof"]["rows"][0][oi] + 1000
+        check(blk2["sof"].get("oblCalculated") is True and blk2["sof"]["headers"][-2:] == ["Total Expenditure", "Disbursement"], "save: marks Obligation as already calculated")
+        st = t.split('<script id="commandSaved" type="application/json">'); savedT = os.path.join(tmp, "tamper.html")
+        open(savedT, "w", encoding="utf-8").write(st[0] + '<script id="commandSaved" type="application/json">' + json.dumps(blk2).replace("<", "\\u003c") + "</script>" + st[1].split("</script>", 1)[1])
+        pg = page_new(); pg.goto("file://" + savedT); pg.wait_for_timeout(1500); go(pg, "sof")
+        check(money(round(OBL + 1000, 2)) in kt("obl"), "saved: stored Obligation used as is (not recalculated)")
+        pg.close()
         pg = page_new(); pg.goto("file://" + saved); pg.wait_for_timeout(1500)
         body = pg.inner_text("body")
         check(pg.is_visible("#homeOverview") and not re.search(r"REAL DATA|contains real|restricted|fictional", body, re.I), "saved: opens with data, no banner")
@@ -252,6 +271,12 @@ def run():
         pg.close()
         pg = page_new(); pg.goto("file://" + saved2); pg.wait_for_timeout(1500); go(pg, "sof")
         check(money(round(OBL, 2)) in kt("obl") and pg.evaluate("document.querySelectorAll('#commandSaved').length") == 1, "saved twice: still not flipped twice, one data block")
+        pg.close()
+        # a funds export without commitment_amt_cum is rejected with a clear message
+        pg = page_new(); pg.goto("file://" + SINGLE); pg.wait_for_timeout(1000)
+        pg.set_input_files("#fileInput", [bad_x]); pg.wait_for_timeout(1500)
+        pg.click("#btnInfo"); pg.wait_for_timeout(300)
+        check("Missing commitment_amt_cum (Total Expenditure)" in pg.text_content("#drawer") and pg.evaluate("CMD.mods.sof.hasData()") is False, "SOF: export without commitment_amt_cum rejected with a clear message")
         pg.close()
         check(not net, "no network requests " + str(net[:3]))
         check(not errors, "no console errors " + str(errors[:3]))

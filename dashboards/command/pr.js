@@ -12,7 +12,7 @@
   ];
   var ALIAS = {}; COLS.forEach(function (c) { c[3].forEach(function (a) { ALIAS[a] = c[0]; }); });
   var PAGE = 100, TOPN = 10;
-  var S = { files: [], keys: [], key: null, typed: false, items: [], levels: [], cross: [], repeat: 0, sort: { k: "level", dir: -1 }, showAll: false, shown: [], order: 0, ks: null };
+  var S = { files: [], keys: [], key: null, typed: false, items: [], levels: [], cross: [],  sort: { k: "level", dir: -1 }, showAll: false, shown: [], order: 0, ks: null };
   // Cardholder Key: Cardholder (email style or First Last), optional Display Name, optional Type (WHST or Safety)
   var TYPES = ["WHST", "Safety"], TYPE_COLORS = { WHST: "#0d9488", Safety: "#ea580c" };
   var KEYCOLS = { card: ["cardholder", "cardholdername", "cardholders"], disp: ["displayname", "display", "showas", "nametoshow"], type: ["type", "cardtype", "cardholdertype", "pot", "fundtype"] };
@@ -136,15 +136,18 @@
         g.rows.push(r);
       });
     });
-    var repeat = 0, multi = 0;
+    var multi = 0;
+    // Each line of a PR is its own item: the PR value is ALWAYS the sum of its lines' Total Value.
+    // Description = Short Text of the line with the highest Total Value (first such line on a tie; if it has no Short Text, the next highest line that has one).
     var items = list.map(function (g) {
       var vals = g.rows.map(function (r) { return r.val; }).filter(function (v) { return v != null; });
-      var rep = g.rows.length > 1 && vals.length === g.rows.length && vals[0] !== 0 && vals.every(function (v) { return Math.abs(v - vals[0]) < 0.005; });
-      if (rep) repeat++; if (g.rows.length > 1) multi++;
+      if (g.rows.length > 1) multi++;
       var descs = K.uniq(g.rows.map(function (r) { return r.desc; }).filter(Boolean));
+      var top = g.rows.map(function (r, i) { return { r: r, i: i }; }).filter(function (x) { return x.r.desc; })
+        .sort(function (a, b) { var av = a.r.val == null ? -Infinity : a.r.val, bv = b.r.val == null ? -Infinity : b.r.val; return bv - av || a.i - b.i; })[0];
       return { level: g.level, pr: g.pr, type: S.typed ? g.rows[0].type : "", card: mode(g.rows.map(function (r) { return r.card; })), merch: mode(g.rows.map(function (r) { return r.merch; })),
-        desc: descs[0] ? descs[0] + (descs.length > 1 ? " (+" + (descs.length - 1) + " more)" : "") : "", descs: descs.join(" | "),
-        val: rep ? vals[0] : vals.reduce(function (a, b) { return a + b; }, 0), lines: g.rows.length, repeated: rep, file: g.file, alsoIn: [] };
+        desc: top ? top.r.desc : "", descs: descs.join(" | "),
+        val: Math.round(vals.reduce(function (a, b) { return a + b; }, 0) * 100) / 100, lines: g.rows.length, file: g.file, alsoIn: [] };
     });
     // a PR listed in several level files is shown once, at its highest level
     var byPr = {}, cross = [];
@@ -155,7 +158,7 @@
     });
     S.items = Object.keys(byPr).map(function (k) { return byPr[k]; });
     S.items.forEach(function (it) { if (it.alsoIn.length) cross.push(it); });
-    S.cross = cross; S.repeat = repeat; S.multi = multi; S.ks = ks;
+    S.cross = cross; S.multi = multi; S.ks = ks;
     S.levels = K.uniq(S.files.filter(usable).map(function (e) { return e.level; }).concat(S.items.map(function (i) { return i.level; }))).sort(function (a, b) { return a - b; });
     S.showAll = false;
     S.files.forEach(function (e) { e.warns = e.fatal || e.dupOf ? 1 : e.rep.noPr || e.rep.badNumber || e.rep.missing.length ? 1 : 0; e.status = e.fatal ? e.fatal : "Level " + e.level + " \u00b7 " + plural(e.rows.length, "line"); });
@@ -232,7 +235,7 @@
       h.push("</div>");
     }
     h.push('<div class="combined"><p class="ok"><strong>' + plural(S.items.length, "PR") + "</strong> across " + plural(S.levels.length, "level") + ".</p>");
-    if (S.multi) h.push('<p class="muted">' + plural(S.multi, "PR") + " had several lines in one level file and are shown as one PR. " + (S.repeat ? plural(S.repeat, "of them") + " repeated the same Total Value on every line, so that amount was counted once; the rest were added up." : "Their line values were added up.") + "</p>");
+    if (S.multi) h.push('<p class="muted">' + plural(S.multi, "PR") + " had several lines in one level file and are shown as one PR: Total Value is the sum of its lines and the Description is the Short Text of its highest-value line.</p>");
     if (S.cross.length) {
       warns++;
       h.push('<p class="warn">' + plural(S.cross.length, "PR") + " appear in more than one level file and are shown only at the highest level: " +
@@ -325,7 +328,7 @@
   function exportCsv() {
     var d = new Date();
     K.downloadCsv("pr_tracker_" + d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2) + ".csv", ["Level", "Type", "PR Number", "Cardholder", "Merchant", "Description", "Lines", "Total Value"],
-      S.shown.map(function (it) { return [it.level, it.type || "", it.pr, it.card, it.merch, it.descs, it.lines, it.val.toFixed(2)]; }));
+      S.shown.map(function (it) { return [it.level, it.type || "", it.pr, it.card, it.merch, it.desc, it.lines, it.val.toFixed(2)]; }));
   }
   function summary() {
     if (!S.items.length) return null;

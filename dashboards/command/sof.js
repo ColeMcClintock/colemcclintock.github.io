@@ -4,8 +4,12 @@
   "use strict";
   var K = w.DashKit, L = w.FundsLib, TR = w.FundsTrend, C = w.CMD, $ = K.$, esc = K.esc;
   // ===== CONFIG =====
-  // The GFEBS export carries obligations, commitments and disbursements as negative numbers.
-  // true = multiply obligation_amt_cum, commitment_amt_cum and disbursement_amt_cum by -1 when the export is read.
+  // The GFEBS export carries commitments (Total Expenditure) and disbursements as negative numbers.
+  // true = multiply commitment_amt_cum and disbursement_amt_cum by -1 when the export is read.
+  // Aviation dashboard: Obligation is CALCULATED, obligation_amt_cum is not read.
+  //   raw export:  obligation = disbursement_amt_cum - commitment_amt_cum
+  //   flipped:     Obligation = Total Expenditure - Disbursement   (same number)
+  //   Spent = Obligation + Disbursement = Total Expenditure;  Balance = TDP - Obligation - Disbursement
   // Funding, spend plan and key files are never flipped. Saved copies store the flipped amounts and are never flipped again.
   var FLIP_EXPORT_SIGN = true;
   // ==================
@@ -17,16 +21,16 @@
     ["appn", "Appropriation", ["appropriationtype", "appropriation"], "text", "Chart, filter"],
     ["fy", "Fiscal Year", ["fiscalyear"], "fy", "Chart, filter, funding match, trend year"],
     ["fm", "Fiscal Month", ["fiscalmonth", "fiscalmonthno", "fiscalmonthnumber", "fiscalmo", "fiscalperiod", "fiscalper"], "fm", "Trend charts, filter (1 = Oct ... 12 = Sep)"],
-    ["obl", "Obligation", ["obligationamtcum", "obligation", "obligations"], "money", "KPI, charts, Balance"],
-    ["com", "Commitments", ["commitmentamtcum", "commitments"], "money", "Line table and CSV only"],
+    ["obl", "Obligation", [], "money", "Calculated: Total Expenditure \u2212 Disbursement"],
+    ["com", "Total Expenditure", ["commitmentamtcum", "totalexpenditure", "commitments"], "money", "Obligation + Disbursement"],
     ["disb", "Disbursement", ["disbursementamtcum", "disbursement", "disbursements"], "money", "KPI, charts, Balance"]
   ];
-  var EXPORT_NAME = { doc: "contract_doc_no", ci: "commitment_item_fipex", fa: "functional_area_farea", appn: "appropriation_type", fy: "fiscal_year", fm: "fiscal_month", obl: "obligation_amt_cum", com: "commitment_amt_cum", disb: "disbursement_amt_cum" };
+  var EXPORT_NAME = { doc: "contract_doc_no", ci: "commitment_item_fipex", fa: "functional_area_farea", appn: "appropriation_type", fy: "fiscal_year", fm: "fiscal_month", obl: "calculated", com: "commitment_amt_cum", disb: "disbursement_amt_cum" };
   var LABEL = {}; COLS.forEach(function (c) { LABEL[c[0]] = c[1]; });
   LABEL.acctL = "Account"; LABEL.ciL = "Commitment Item"; LABEL.sag = "Sag"; LABEL.mdep = "MDEP";
   var TCOLS = [["doc", "Document Number", "id"], ["ciL", "Commitment Item", "ciL"], ["ci", "CI Code", "text"], ["fa", "Functional Area", "text"], ["acctL", "Account", "acct"],
     ["sag", "Sag", "keyed"], ["mdep", "MDEP", "keyed"], ["appn", "Appropriation", "text"], ["fy", "Fiscal Year", "fy"], ["fm", "Fiscal Month", "fm"],
-    ["obl", "Obligation", "money"], ["com", "Commitments", "money"], ["disb", "Disbursement", "money"]];
+    ["obl", "Obligation", "money"], ["com", "Total Expenditure", "money"], ["disb", "Disbursement", "money"]];
   var ALIAS = L.aliasMap(COLS);
   var DIMS = [["fy", "fFy", "cFy", "All years"], ["appn", "fAppn", "cAppn", "All"], ["sag", "fSag", "cSag", "All"], ["mdep", "fMdep", "cMdep", "All"], ["acctL", "fAcct", "cAcct", "All"], ["fa", "fFa", null, "All"], ["ciL", "fCi", "cCi", "All"], ["fm", "fFm", null, "All months"]];
   var DIM_KEYS = DIMS.map(function (d) { return d[0]; });
@@ -36,14 +40,20 @@
   var S = { files: [], recs: [], fund: null, plan: null, allobj: 0, showAll: false, sort: { k: "obl", dir: -1 }, shown: [], order: 0 };
 
   // ---------- export parsing (only header cells and the mapped columns are ever read) ----------
-  function parseExport(src, noFlip) {
+  // saved = a saved copy's own data: amounts are already flipped and Obligation already calculated (read as stored, never recalculated)
+  function parseExport(src, noFlip, saved) {
     var flip = FLIP_EXPORT_SIGN && !noFlip;
     var hm = L.mapHeaders(src, ALIAS), map = hm.map;
-    var rep = { kind: "export", headerRow: hm.hi + 1, matched: COLS.filter(function (c) { return map[c[0]] != null; }).map(function (c) { return c[1]; }),
-      missing: COLS.filter(function (c) { return map[c[0]] == null; }).map(function (c) { return EXPORT_NAME[c[0]] + " (" + c[1] + ")"; }),
+    if (!saved) delete map.obl;                                   // never read from a raw export
+    var rep = { kind: "export", headerRow: hm.hi + 1, matched: COLS.filter(function (c) { return c[0] !== "obl" && map[c[0]] != null; }).map(function (c) { return c[1]; }),
+      missing: COLS.filter(function (c) { return c[0] !== "obl" && map[c[0]] == null; }).map(function (c) { return EXPORT_NAME[c[0]] + " (" + c[1] + ")"; }), negObl: 0, negOblExamples: [],
       extra: hm.extra, dupes: hm.dupes, pii: hm.pii, rowsRead: 0, rowsLoaded: 0, blankRows: 0, allobj: 0, badNumber: 0, badNumberExamples: [], badMonth: 0, badMonthExamples: [], fatal: null };
     if (map.ci == null) { rep.fatal = "No Commitment Item column (commitment_item_fipex) was found. The file was not loaded."; return { records: [], report: rep }; }
-    if (map.obl == null && map.disb == null && map.com == null) { rep.fatal = "No obligation_amt_cum or disbursement_amt_cum column was found. The file was not loaded."; return { records: [], report: rep }; }
+    if (map.com == null || map.disb == null) {
+      var miss = [map.com == null ? "commitment_amt_cum (Total Expenditure)" : "", map.disb == null ? "disbursement_amt_cum (Disbursement)" : ""].filter(Boolean);
+      rep.fatal = "Missing " + miss.join(" and ") + ". Both are needed to calculate Obligation (Total Expenditure \u2212 Disbursement). The file was not loaded.";
+      rep.missing = miss; return { records: [], report: rep };
+    }
     var keys = Object.keys(map), out = [];
     for (var rr = hm.hi + 1; rr < src.rows; rr++) {
       var raw = {}, empty = true;
@@ -55,12 +65,16 @@
       var fmn = "fm" in raw ? L.fmNum(raw.fm) : null;
       if (fmn !== null && isNaN(fmn)) { rep.badMonth++; if (rep.badMonthExamples.length < 5) rep.badMonthExamples.push({ row: rr + 1, value: L.txt(raw.fm) }); fmn = null; }
       rec.fmn = fmn; rec.fm = L.fmLabel(fmn);
-      ["obl", "com", "disb"].forEach(function (k) {
+      (saved && "obl" in raw ? ["obl", "com", "disb"] : ["com", "disb"]).forEach(function (k) {
         var x = k in raw ? L.parseAmt(raw[k]) : null;
         if (x !== null && isNaN(x)) { L.badNum(rep, rr + 1, EXPORT_NAME[k], raw[k]); x = null; }
         if (flip && x) x = -x;
         rec[k] = x;
       });
+      if (!(saved && "obl" in raw)) {                             // Obligation = Total Expenditure - Disbursement
+        rec.obl = rec.com == null && rec.disb == null ? null : Math.round((n(rec.com) - n(rec.disb)) * 100) / 100;
+        if (rec.obl < 0) { rep.negObl++; if (rep.negOblExamples.length < 5) rep.negOblExamples.push({ row: rr + 1, value: rec.obl }); }
+      }
       out.push(rec);
     }
     rep.rowsLoaded = out.length; rep.flipped = flip;
@@ -147,7 +161,7 @@
   // ---------- save with data / restore (amounts saved already sign-flipped; never flipped again) ----------
   function srcNames(kind) { var out = []; S.files.filter(function (e) { return usable(e) && e.kind === kind; }).forEach(function (e) { (e.srcNames || [e.name]).forEach(function (nm) { if (out.indexOf(nm) < 0) out.push(nm); }); }); return out; }
   function snapshot() {
-    var o = { files: srcNames("export"), allobjRemoved: S.allobj, signFlipped: true, headers: COLS.map(function (c) { return c[1]; }),
+    var o = { files: srcNames("export"), allobjRemoved: S.allobj, signFlipped: true, oblCalculated: true, headers: COLS.map(function (c) { return c[1]; }),
       rows: S.recs.map(function (r) { return COLS.map(function (c) { var v = r[c[0]]; return v == null ? "" : c[3] === "money" ? v : c[3] === "fm" ? (r.fmn || "") : String(v); }); }) };
     if (S.fund) {
       var am = S.fund.amts;
@@ -163,7 +177,7 @@
   function restore(D) {
     S.files = [];
     if (D.rows && D.rows.length) {
-      var p = parseExport(aoa(D), D.signFlipped !== false);       // saved amounts are already flipped
+      var p = parseExport(aoa(D), D.signFlipped !== false, D.oblCalculated === true);   // saved amounts are already flipped; Obligation already calculated
       p.report.allobj = D.allobjRemoved || 0;
       S.files.push(mkEntry(nameOf(D.files, "Saved funds export"), "export", p, { srcNames: D.files }));
     }
@@ -184,9 +198,10 @@
     if (e.kind !== "export") { var fl = (e.kind === "plan" ? TR : L).fileLines(e, codes); h.push(fl.html); warns += fl.warns; }
     else {
       h.push('<p class="' + (rep.rowsLoaded ? "ok" : "err") + '">Funds export: loaded ' + plural(rep.rowsLoaded, "line") + " of " + K.fmt(rep.rowsRead) + " read (header row " + rep.headerRow + ")." + (rep.blankRows ? ' <span class="muted">' + K.fmt(rep.blankRows) + " blank row(s) ignored.</span>" : "") + "</p>");
-      h.push('<p class="' + (rep.flipped ? "ok" : "muted") + '">' + (rep.flipped ? "Amounts sign-flipped (&times; &minus;1): obligation, commitment and disbursement come through negative and are shown as positive." : "Amounts used as saved (already sign-flipped; not flipped again).") + "</p>");
-      var ok = rep.matched.length === COLS.length;
-      h.push('<p class="' + (ok ? "ok" : "warn") + '">' + rep.matched.length + " of " + COLS.length + " columns matched.</p>");
+      h.push('<p class="' + (rep.flipped ? "ok" : "muted") + '">' + (rep.flipped ? "Amounts sign-flipped (&times; &minus;1): Total Expenditure (commitment_amt_cum) and Disbursement come through negative and are shown as positive. Obligation = Total Expenditure &minus; Disbursement; obligation_amt_cum is not read." : "Amounts used as saved (already sign-flipped and calculated; not flipped or recalculated again).") + "</p>");
+      var ok = rep.matched.length === COLS.length - 1;
+      h.push('<p class="' + (ok ? "ok" : "warn") + '">' + rep.matched.length + " of " + (COLS.length - 1) + " columns matched.</p>");
+      if (rep.negObl) { warns++; h.push('<p class="warn">' + plural(rep.negObl, "line") + " where Disbursement is larger than Total Expenditure, so the calculated Obligation is negative (kept as is). Rows: " + rep.negOblExamples.map(function (x) { return x.row + " (" + full(x.value) + ")"; }).join(", ") + (rep.negObl > rep.negOblExamples.length ? " &hellip;" : "") + "</p>"); }
       if (!ok) { warns++; h.push('<p class="warn">Missing: ' + codes(rep.missing) + "</p>"); }
       if (rep.badMonth) { warns++; h.push('<p class="warn">' + rep.badMonth + " fiscal month value(s) are not 1&ndash;12 or a month name and were treated as blank.</p>"); }
     }
@@ -260,7 +275,7 @@
       h.push(kpi("AFP", money(t.afp), "Funded to date" + (t.tdp ? " \u00b7 " + Math.round(t.afp / t.tdp * 100) + "% of TDP" : ""), "afp", full(t.afp)));
     } else { h.push(needKpi("TDP", "tdp")); h.push(needKpi("AFP", "afp")); }
     h.push(kpi("Obligation", money(o), plural(rows.length, "line") + " \u00b7 " + plural(docCount(rows), "doc"), "obl", full(o)));
-    h.push(kpi("Disbursement", money(d), full(d), "disb", full(d)));
+    h.push(kpi("Disbursement", money(d), "Total Expenditure " + money(o + d), "disb", full(d)));
     if (j) { var b = j.totals.bal; h.push(kpi("Balance", money(b), "TDP \u2212 Oblig. \u2212 Disb.", "bal " + (b < 0 ? "bad" : "good"), full(b))); }
     else h.push(needKpi("Balance", "bal"));
     $("kpis").innerHTML = h.join("");
