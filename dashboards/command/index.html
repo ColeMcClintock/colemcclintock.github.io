@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Command Dashboard</title>
+<title>Aviation Dashboard</title>
 <link rel="icon" href="../../assets/img/dash-icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="command.css">
 </head>
@@ -24,7 +24,7 @@
 <header class="top">
   <div class="wrap bar">
     <button class="brand" type="button" data-go="home" aria-label="Home">
-      <span class="mark"><svg class="ic"><use href="#i-sof"/></svg></span><span class="bname">Command Dashboard</span>
+      <span class="mark"><svg class="ic"><use href="#i-sof"/></svg></span><span class="bname">Aviation Dashboard</span>
     </button>
     <nav class="tabs" id="tabs" aria-label="Pages">
       <button type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg><span>Home</span></button>
@@ -49,7 +49,7 @@
     <div class="hero">
       <div>
         <div class="eyebrow" id="hEyebrow">&nbsp;</div>
-        <h1>Command Dashboard</h1>
+        <h1>Aviation Dashboard</h1>
         <p class="lead" id="hLead">Funds, purchase requests and fuel in one place.</p>
       </div>
       <div class="fyring" id="fyRing" aria-label="Fiscal year elapsed"></div>
@@ -149,6 +149,7 @@
     </div>
     <div class="nodata" data-nodata="pr" hidden>No PR files loaded yet (L1.xlsx to L4.xlsx). <button class="btn sm primary" type="button" data-upload="1">Upload data</button></div>
     <div class="filters" role="group" aria-label="PR filters">
+      <label id="prTypeWrap" hidden>Type<select id="prType"></select></label>
       <label>Level<select id="prLevel"></select></label>
       <label>Cardholder<select id="prCard"></select></label>
       <label>Merchant<select id="prMerch"></select></label>
@@ -156,12 +157,13 @@
       <button class="btn ghost" id="prReset" type="button">Reset</button>
     </div>
     <section class="kpis" id="prKpis" aria-label="PR totals"></section>
+    <section class="types" id="prTypes" hidden aria-label="WHST and Safety"></section>
     <section class="panel"><h2>Where the PRs are</h2><div class="pipeline" id="prPipe"></div></section>
     <div class="row r2">
       <section class="panel"><h2>Value by cardholder</h2><div class="chartbox tall"><canvas id="cPrCard"></canvas></div></section>
       <section class="panel"><h2>Value by merchant</h2><div class="chartbox tall"><canvas id="cPrMerch"></canvas></div></section>
     </div>
-    <p class="muted small chartnote">Largest 10; bars are split by level. Click a bar to filter by it.</p>
+    <p class="muted small chartnote" id="prChartNote">Largest 10; bars are split by level. Click a bar to filter by it.</p>
     <section class="panel">
       <div class="tablehead"><h2>PR list</h2><div class="tabletools"><button class="btn ghost sm" id="prCsv" type="button">Export CSV</button><button class="btn ghost sm" id="prAll" type="button">Show all</button></div></div>
       <p class="muted small">One row per PR, at the highest level it appears in. Click a column header to sort. <span class="searchnote" id="prNote"></span></p>
@@ -230,6 +232,7 @@
   <details class="dsec"><summary>Blank templates</summary>
     <div class="tmpl">
       <a class="btn ghost sm" href="pr_template.xlsx" download>PR file (L1&ndash;L4)</a>
+      <a class="btn ghost sm" href="cardholder_key_template.xlsx" download>Cardholder Key</a>
       <a class="btn ghost sm" href="fuel_tracker_template.xlsx" download>Fuel tracker (AASF)</a>
       <a class="btn ghost sm" href="funds_template.xlsx" download>Funds export</a>
       <a class="btn ghost sm" href="funding_template.xlsx" download>Funding file</a>
@@ -257,6 +260,7 @@
         <li>The level comes from the file name: L3.xlsx = Level 3. Columns read: Cardholder Name (shown as First Last), Purchase requisition (PR Number), Merchant / Description (Merchant), Short Text (Description), Total Value.</li>
         <li>Rows with the same PR number in one level are one PR. Its value is the sum of its rows, except when every row repeats the same amount (the PR total copied onto each line); then that amount is counted once.</li>
         <li>A PR found in more than one level file is shown once, at the highest level.</li>
+        <li>Cardholder Key (optional): an Excel file with a Cardholder column (first.middle.last, first.last@domain or First Last), an optional Display Name and an optional Type (WHST or Safety). When it is loaded, only PRs of those cardholders are shown anywhere in the dashboard; the rest are left out. Names match on first and last name, ignoring case and middle names. With Type filled in, the PR page and Home split WHST and Safety; key rows with a blank or other Type are Unassigned and left out (counted here). Without a key, every cardholder is shown.</li>
       </ul>
       <h4>Fuel</h4>
       <ul>

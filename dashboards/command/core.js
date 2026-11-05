@@ -1,4 +1,4 @@
-/* Command Dashboard core: page routing, one upload for every page, the data details drawer, and Save with data.
+/* Aviation Dashboard core: page routing, one upload for every page, the data details drawer, and Save with data.
    Everything runs in this browser tab; the page makes no network requests and nothing is uploaded. */
 (function (w) {
   "use strict";
@@ -57,7 +57,7 @@
     var p = page();
     C.PAGES.forEach(function (x) { $("page-" + x).hidden = x !== p; });
     Array.prototype.forEach.call(document.querySelectorAll("#tabs button"), function (b) { b.classList.toggle("on", b.getAttribute("data-go") === p); });
-    document.title = (p === "home" ? "" : TITLE[p] + " \u00b7 ") + "Command Dashboard";
+    document.title = (p === "home" ? "" : TITLE[p] + " \u00b7 ") + "Aviation Dashboard";
     if (C.cur !== p) w.scrollTo(0, 0);
     C.cur = p; renderPage(p); headerState();
   }
@@ -229,7 +229,7 @@
       var mm, i = -1, re = /<\/body\s*>/gi; while ((mm = re.exec(html))) i = mm.index;
       if (i < 0) { alert("Could not build the saved file."); return; }
       html = html.slice(0, i) + tag + html.slice(i);
-      var d = new Date(snap.savedAt), name = "Command-Dashboard-" + ("0" + d.getDate()).slice(-2) + MONS[d.getMonth()] + String(d.getFullYear()).slice(2) + ".html";
+      var d = new Date(snap.savedAt), name = "Aviation-Dashboard-" + ("0" + d.getDate()).slice(-2) + MONS[d.getMonth()] + String(d.getFullYear()).slice(2) + ".html";
       var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" })); a.download = name;
       document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
     });

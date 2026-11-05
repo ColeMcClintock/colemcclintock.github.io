@@ -1,4 +1,4 @@
-/* Command Dashboard: Fuel. One tracker per AASF (file name = AASF name). Budget in cell B1; table header near row 13 with
+/* Aviation Dashboard: Fuel. One tracker per AASF (file name = AASF name). Budget in cell B1; table header near row 13 with
    Date, Milstrip Number, Gallons, Total Cost. Other columns, blank rows and total rows are ignored. Nothing is uploaded. */
 (function (w) {
   "use strict";

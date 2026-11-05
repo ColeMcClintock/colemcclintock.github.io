@@ -31,9 +31,9 @@ PAGES = {
                               templates=["funds_template.xlsx", "funds_template.csv", "funding_template.xlsx", "spendplan_template.xlsx", "accountkey_template.xlsx", "cikey_template.xlsx"], save_prefix="FUNDS", pa_template=True),
     "prevention-dashboard": dict(dir="dashboards/prevention", title="Alcohol Incident Trends & Prevention Dashboard",
                                  templates=["prevention_template.xlsx", "roster_template.xlsx"], save_prefix="PREVENTION"),
-    # multipage Command Dashboard (Home, Status of Funds, PR Tracker, Fuel). The single file opens empty (demo scripts stripped).
-    "command-dashboard": dict(dir="dashboards/command", title="Command Dashboard", strip_demo=True, save_prefix="COMMAND",
-                              templates=["pr_template.xlsx", "fuel_tracker_template.xlsx", "funds_template.xlsx", "funding_template.xlsx", "accountkey_template.xlsx", "cikey_template.xlsx", "spendplan_template.xlsx"]),
+    # multipage Aviation Dashboard (Home, Status of Funds, PR Tracker, Fuel). The single file opens empty (demo scripts stripped).
+    "command-dashboard": dict(dir="dashboards/command", title="Aviation Dashboard", strip_demo=True, save_prefix="COMMAND",
+                              templates=["pr_template.xlsx", "cardholder_key_template.xlsx", "fuel_tracker_template.xlsx", "funds_template.xlsx", "funding_template.xlsx", "accountkey_template.xlsx", "cikey_template.xlsx", "spendplan_template.xlsx"]),
 }
 
 def read(p, mode="r"):

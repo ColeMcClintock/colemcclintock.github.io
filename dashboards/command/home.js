@@ -1,4 +1,4 @@
-/* Command Dashboard: Home page (tiles + overview from whatever data is loaded). */
+/* Aviation Dashboard: Home page (tiles + overview from whatever data is loaded). */
 (function (w) {
   "use strict";
   var K = w.DashKit, L = w.FundsLib, C = w.CMD, $ = K.$, esc = K.esc, full = L.full, plural = L.plural;
@@ -17,7 +17,7 @@
     $("fyRing").innerHTML = ring(p) + '<div><div class="rv">' + C.pct(p.pct) + '</div><div class="rl">of FY' + fy + " elapsed</div></div>";
     $("homeEmpty").hidden = any; $("homeOverview").hidden = !any;
     $("tsSof").textContent = sof ? (sof.bal != null ? "Balance " + K.money(sof.bal) + " \u00b7 FY" + sof.fy : "Obligated " + K.money(sof.obl)) : "No data loaded";
-    $("tsPr").textContent = pr ? plural(pr.count, "PR") + " \u00b7 " + K.money(pr.value) : "No data loaded";
+    $("tsPr").textContent = pr ? (pr.types ? pr.types.map(function (t) { return t.type + " " + K.money(t.value); }).join(" \u00b7 ") : plural(pr.count, "PR") + " \u00b7 " + K.money(pr.value)) : "No data loaded";
     $("tsFuel").textContent = fu ? (fu.used != null ? C.pct(fu.used) + " of budget used \u00b7 FY" + fu.fy : K.money(fu.spent) + " spent") : "No data loaded";
     if (!any) return;
     // Status of Funds
@@ -42,6 +42,9 @@
       var mx = Math.max.apply(null, pr.levels.map(function (g) { return g.count; }).concat([1]));
       h += '<div class="big3">' + stat("PRs being tracked", K.fmt(pr.count), "across " + plural(pr.levels.length, "level")) + stat("Total value", K.money(pr.value), full(pr.value)) +
         stat("Highest level", pr.levels.length ? "L" + pr.levels[pr.levels.length - 1].level : "\u2014", pr.levels.length ? plural(pr.levels[pr.levels.length - 1].count, "PR") : "") + "</div>";
+      if (pr.types) h += '<div class="htypes">' + pr.types.map(function (t) {
+        return '<div class="ht" style="--tc:' + t.color + '"><div class="hn"><span class="tdot"></span>' + esc(t.type) + '</div><div class="hv">' + K.money(t.value) + '</div><div class="hl">' + plural(t.count, "PR") + (t.levels.length ? " \u00b7 " + t.levels.map(function (g) { return "L" + g.level + " " + K.fmt(g.count); }).join(" \u00b7 ") : "") + "</div></div>";
+      }).join("") + "</div>";
       h += '<div class="lvlbars">' + pr.levels.map(function (g) {
         return '<div class="lvlbar"><span><span class="lvl" style="--lc:' + C.levelColor(g.level) + '">L' + g.level + '</span></span><div class="tr"><div class="fi" style="background:' + C.levelColor(g.level) + ";width:" + (g.count / mx * 100).toFixed(1) + '%"></div></div><span class="nv">' + K.fmt(g.count) + " \u00b7 " + K.money(g.value) + "</span></div>";
       }).join("") + "</div>";

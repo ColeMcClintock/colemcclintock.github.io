@@ -1,4 +1,4 @@
-/* Command Dashboard: Status of Funds page. Port of dashboards/finance/finance.js (same schema and math) using the shared
+/* Aviation Dashboard: Status of Funds page. Port of dashboards/finance/finance.js (same schema and math) using the shared
    FundsLib (funding.js) and FundsTrend (plan.js). Everything runs in this browser tab; nothing is uploaded. */
 (function (w) {
   "use strict";

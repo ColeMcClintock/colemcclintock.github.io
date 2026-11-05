@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Headless-Chrome checks for the Command Dashboard with FICTIONAL data (writes only to a temp folder).
+"""Headless-Chrome checks for the Aviation Dashboard with FICTIONAL data (writes only to a temp folder).
 Hosted page: demo data loads, PR levels / fuel / funds totals match the generator, screenshots (SHOTS=dir).
 Single file (downloads/command-dashboard.html): opens empty; one upload routes a funds export (negative amounts, ALLOBJ,
 a filled-in test ssn column), funding file, Account Key, CI Key, PR files L1..L4 (+ a duplicate copy and a file without a level),
@@ -61,6 +61,9 @@ p1 = xlsx(os.path.join(tmp, "L1.xlsx"), [PRH] + L1); p2 = xlsx(os.path.join(tmp,
 p2dup = xlsx(os.path.join(tmp, "L2 (1).xlsx"), [PRH] + L2); p3 = xlsx(os.path.join(tmp, "PR L3 Nov.xlsx"), [["PR export (fictional)"], PRH] + L3)
 p4 = xlsx(os.path.join(tmp, "L4.xlsx"), [PRH] + L4); p4b = os.path.join(tmp, "upd"); os.makedirs(p4b); p4b = xlsx(os.path.join(p4b, "L4.xlsx"), [PRH] + L4b)
 pnolvl = xlsx(os.path.join(tmp, "PR export.xlsx"), [PRH] + L4)
+# Cardholder Key: email style (no domain, with middle) and First Last both match; Display Name used; Type any case; blank Type = Unassigned
+ckey = xlsx(os.path.join(tmp, "My Cardholders.xlsx"), [["Cardholder", "Display Name", "Type"], ["john.q.public", "", "WHST"], ["Mary Smith-Jones", "M. Smith-Jones", "Safety"],
+                                                       ["jane.doe@army.mil", "", "whst"], ["Amy Lee", "", "SAFETY"], ["Robert Smith", "", ""], ["Zed Zulu", "", "WHST"]], "CardholderKey")
 PR_EXP = {1: (2, 150.5 + 80.0), 2: (2, 999.99 + 45.0), 3: (2, 1500.0), 4: (1, 400.0)}
 
 # ---- fuel trackers ----
@@ -96,9 +99,15 @@ def run():
         check(pg.locator("#tiles svg").count() == 5, "hosted: tile icons")
         check(pg.is_hidden("#drawer"), "hosted: details drawer closed by default")
         st = pg.evaluate("CMD.mods.pr._state.items.reduce(function(m,i){m[i.level]=m[i.level]||[0,0];m[i.level][0]++;m[i.level][1]+=i.val;return m;},{})")
-        check(all(st[str(k)][0] == v["count"] and abs(st[str(k)][1] - v["value"]) < 0.02 for k, v in E["pr"]["levels"].items()), "hosted: PR count + value per level match the generator")
-        check(pg.evaluate("CMD.mods.pr._state.cross.length") == len(E["pr"]["moved"]), "hosted: PRs in two levels flagged")
-        check(pg.evaluate("CMD.mods.pr._state.items.filter(function(i){return i.repeated}).length") == E["pr"]["repeat"], "hosted: repeated-total PRs counted once")
+        check(all(st[str(k)][0] == v["count"] and abs(st[str(k)][1] - v["value"]) < 0.02 for k, v in E["prKey"]["levels"].items()), "hosted: PR count + value per level match the generator (demo cardholder key applied)")
+        check(pg.evaluate("CMD.mods.pr._state.cross.length") == len(E["prKey"]["moved"]), "hosted: PRs in two levels flagged")
+        check(pg.evaluate("CMD.mods.pr._state.items.filter(function(i){return i.repeated}).length") == E["prKey"]["repeat"], "hosted: repeated-total PRs counted once")
+        ty = pg.evaluate("CMD.mods.pr.summary().types.map(function(t){return [t.type,t.count,t.value]})")
+        check(all(abs(c - E["prKey"]["types"][t]["count"]) == 0 and abs(v - E["prKey"]["types"][t]["value"]) < 0.02 for t, c, v in ty) and len(ty) == 2, "hosted: WHST / Safety split matches the generator " + str(ty))
+        check(pg.evaluate("CMD.mods.pr._state.ks.notInKey") == E["prKey"]["excludedRows"], "hosted: demo key leaves out the other cardholders' rows")
+        check(pg.evaluate("CMD.mods.pr._state.items.some(function(i){return i.card==='Michael Erickson (Ops)'})"), "hosted: demo key display name used")
+        oprt = pg.inner_text("#oPr")
+        check("WHST" in oprt and "Safety" in oprt and "WHST" in pg.inner_text("#tsPr"), "hosted home: PR overview shows WHST and Safety separately")
         cur = str(fy)
         for name, x in E["fuel"].items():
             got = pg.evaluate(f"CMD.mods.fuel._state.recs.filter(function(r){{return r.aasf==={json.dumps(name)} && r.fy==={json.dumps(cur)}}}).reduce(function(t,r){{return t+r.cost}},0)")
@@ -110,6 +119,7 @@ def run():
         check("Travel (example)" in pg.inner_text("#fCi"), "hosted SOF: commitment item descriptions")
         if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "command-sof.png"), full_page=True)
         go(pg, "pr")
+        check(pg.is_visible("#prType") and pg.is_visible("#prTypes") and "TYPE" in pg.inner_text("#tPr thead").upper(), "hosted PR: type filter, WHST/Safety panel, Type column")
         if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "command-pr.png"), full_page=True)
         go(pg, "fuel")
         if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "command-fuel.png"), full_page=True)
@@ -153,6 +163,7 @@ def run():
         pg.fill("#prSearch", "plywood"); pg.wait_for_timeout(500)
         check(pg.locator("#tPr tbody tr").count() == 1, "PR: search by description")
         pg.click("#prReset"); pg.wait_for_timeout(200)
+        check(pg.evaluate("CMD.mods.pr._state.items.length") == 7 and pg.is_hidden("#prTypeWrap") and pg.is_hidden("#prTypes") and "TYPE" not in pg.inner_text("#tPr thead").upper(), "no key: every cardholder shown, no type split")
         go(pg, "fuel")
         F = pg.evaluate("CMD.mods.fuel._state.aasfs.map(function(a){return [a.name,a.budget]})")
         check(F == [["North Field", 12000.0], ["South Field", 3000.0]], "fuel: AASF from file name, budget from B1")
@@ -168,13 +179,47 @@ def run():
         check(pg.is_visible("#drawer") and "ALLOBJ" not in pg.inner_text("body") and "Same content as" in dr and "Could not tell the level" in dr, "drawer: file breakdown (no ALLOBJ note), duplicate copy, file without level")
         check("appear in more than one level" in pg.text_content("#prReport") and "repeated the same Total Value" in pg.text_content("#prReport"), "drawer: PR notes")
         check(SSN not in pg.content(), "ssn never read")
+        pg.click("#btnClose"); pg.wait_for_timeout(300)
+        # ---------- Cardholder Key ----------
+        go(pg, "pr")
+        pg.set_input_files("#fileInput", [ckey]); pg.wait_for_timeout(1500)
+        K2 = pg.evaluate("CMD.mods.pr._state.items.map(function(i){return [i.pr,i.level,i.card,i.val,i.type]})")
+        kb = {x[0]: x for x in K2}
+        check(sorted(kb) == ["11111111", "22222222", "44444444", "77777777"], "key: only key cardholders kept " + str(sorted(kb)))
+        check(kb.get("11111111", [0, 0, ""])[2] == "John Public" and kb.get("44444444", [0, 0, ""])[2] == "Jane Doe", "key: email-style entries match (middle name, domain, .mil ignored)")
+        check(kb.get("77777777", [0, 0, ""])[2] == "Amy Lee" and kb.get("22222222", [0, 0, ""])[2] == "M. Smith-Jones", "key: First Last entries match; Display Name used")
+        check([kb[k][4] for k in ["11111111", "22222222", "44444444", "77777777"]] == ["WHST", "Safety", "WHST", "Safety"], "key: Type read case-insensitively")
+        ks = pg.evaluate("CMD.mods.pr._state.ks")
+        check(ks["notInKey"] == 3 and ks["untyped"] == 1 and ks["names"] == 6, "key: 3 rows not in key + 1 Unassigned row left out " + json.dumps({k: ks[k] for k in ("notInKey", "untyped", "names")}))
+        body = pg.inner_text("body")
+        check(not re.search(r"Oneil|McDonald|Robert Smith|left out|not in the key|Unassigned|Cardholder Key", body), "key: nothing about the key or excluded names on the main view")
+        sm = pg.evaluate("CMD.mods.pr.summary().types.map(function(t){return [t.type,t.count,Math.round(t.value*100)/100,t.levels.map(function(g){return [g.level,g.count]})]})")
+        check(sm == [["WHST", 2, 1150.49, [[1, 1], [2, 1]]], ["Safety", 2, 480.0, [[1, 1], [4, 1]]]], "type split: count, value and levels per type " + str(sm))
+        tp = pg.inner_text("#prTypes")
+        check("WHST" in tp and "Safety" in tp and "$1,150.49" in tp and "$480.00" in tp, "type split: WHST and Safety cards on the PR page")
+        pg.select_option("#prType", "Safety"); pg.wait_for_timeout(300)
+        check(pg.locator("#tPr tbody tr").count() == 2 and "Safety" in pg.inner_text("#tPr tbody") and "WHST" not in pg.inner_text("#tPr tbody"), "type filter: Safety only")
+        check("$480.00" in pg.inner_text("#prKpis"), "type filter: KPIs follow the type")
+        ds = pg.evaluate("Chart.getChart('cPrCard').data.datasets.map(function(d){return d.label})")
+        check(ds == ["WHST", "Safety"], "charts: bars split by type " + str(ds))
+        pg.click("#prReset"); pg.wait_for_timeout(200)
+        go(pg, "home")
+        check("WHST" in pg.inner_text("#oPr") and "Safety" in pg.inner_text("#oPr") and "2 PRs \u00b7 L1 1 \u00b7 L2 1" in pg.inner_text("#oPr"), "home: PR overview split WHST / Safety")
+        pg.click("#btnInfo"); pg.wait_for_timeout(300)
+        pt = pg.text_content("#prReport")
+        check("6 rows read" in pt and "3 PR rows left out because the cardholder is not in the key" in pt and "1 key row Unassigned" in pt and "1 PR row from them left out" in pt, "drawer: key row count and left-out counts")
+        check(not re.search(r"Oneil|McDonald|Robert Smith|o'brien|pat\.", pt, re.I), "drawer: no names of left-out cardholders")
+        check("Cardholder Key" in pg.text_content("#tFiles"), "drawer: key file routed to the PR Tracker")
         with pg.expect_download() as dl: pg.click("#btnSave")
         saved = os.path.join(tmp, dl.value.suggested_filename); dl.value.save_as(saved)
-        check(re.match(r"Command-Dashboard-\d\d[A-Z][a-z]{2}\d\d\.html$", dl.value.suggested_filename) is not None, "save: dated file name " + dl.value.suggested_filename)
+        check(re.match(r"Aviation-Dashboard-\d\d[A-Z][a-z]{2}\d\d\.html$", dl.value.suggested_filename) is not None, "save: dated file name " + dl.value.suggested_filename)
         pg.close()
         # tamper the PR "as of" date to prove saved dates are kept
         t = open(saved, encoding="utf-8").read()
         check(SSN not in t and '<script id="commandSaved"' in t, "save: data block, no ssn")
+        blk0 = t.split('<script id="commandSaved" type="application/json">')[1].split("</script>")[0]
+        prblk = json.dumps(json.loads(blk0)["pr"]["files"])
+        check(not re.search(r"oneil|mcdonald|smith, robert|Robert Smith", prblk, re.I) and json.loads(blk0)["pr"]["key"]["name"] == "My Cardholders.xlsx", "save: left-out cardholders are not written into the saved copy; key kept")
         blk = json.loads(t.split('<script id="commandSaved" type="application/json">')[1].split("</script>")[0])
         blk["pr"]["asOf"] = "2026-10-01T17:00:00.000Z"
         t = t.split('<script id="commandSaved" type="application/json">')[0] + '<script id="commandSaved" type="application/json">' + json.dumps(blk).replace("<", "\\u003c") + "</script>" + t.split('<script id="commandSaved" type="application/json">')[1].split("</script>", 1)[1]
@@ -187,9 +232,13 @@ def run():
         check(money(round(OBL, 2)) in kt("obl") and money(abs(BAL)) in kt("bal") and "-$" not in kt("obl"), "saved: amounts not flipped twice")
         go(pg, "pr")
         check("01 Oct 2026" in pg.inner_text("#asof-pr"), "saved: PR page keeps its date")
+        ks = pg.evaluate("CMD.mods.pr._state.ks")
+        check(pg.evaluate("CMD.mods.pr._state.items.length") == 4 and pg.evaluate("CMD.mods.pr._state.typed") and ks["notInKey"] == 3 and ks["untyped"] == 1, "saved: key, type split and left-out counts survive Save with data")
+        check(pg.is_visible("#prTypes") and "M. Smith-Jones" in pg.inner_text("#tPr"), "saved: display names and WHST/Safety shown")
         # a viewer updates L4 in the saved copy, then saves again
         pg.set_input_files("#fileInput", [p4b]); pg.wait_for_timeout(1500)
         L4n = pg.evaluate("CMD.mods.pr._state.items.filter(function(i){return i.level===4}).length")
+        check(pg.evaluate("CMD.mods.pr._state.ks.notInKey") == 3, "saved + new L4: left-out count kept")
         check(L4n == 2 and today in pg.inner_text("#asof-pr"), "saved: new L4 replaces the old one; PR date updated")
         check(pg.evaluate("CMD.mods.fuel._state.aasfs.length") == 2, "saved: other pages kept after an upload")
         with pg.expect_download() as dl: pg.click("#btnInfo"); pg.click("#btnSave")
