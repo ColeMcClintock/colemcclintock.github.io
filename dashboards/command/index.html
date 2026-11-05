@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Command Dashboard</title>
+<link rel="icon" href="../../assets/img/dash-icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="command.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.8V20h13V9.8"/><path d="M10 20v-5.5h4V20"/></symbol>
+    <symbol id="i-sof" viewBox="0 0 24 24"><path d="M3 20h18"/><rect x="4.5" y="12" width="3" height="8" rx=".6"/><rect x="10.5" y="8" width="3" height="12" rx=".6"/><rect x="16.5" y="4" width="3" height="16" rx=".6"/><path d="M4 8.5 9 5l3 2 5-4"/><path d="M14.5 3H17v2.5"/></symbol>
+    <symbol id="i-card" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.2"/><path d="M2.5 9.5h19"/><path d="M6 15h4.5"/><path d="M14.5 15H18"/></symbol>
+    <symbol id="i-fuel" viewBox="0 0 24 24"><path d="M4 21V5.2A2.2 2.2 0 0 1 6.2 3h5.6A2.2 2.2 0 0 1 14 5.2V21"/><path d="M2.5 21h13"/><rect x="6.5" y="6" width="5" height="4" rx=".6"/><path d="M14 10h1.8a1.7 1.7 0 0 1 1.7 1.7V16a1.5 1.5 0 0 0 3 0V8.6a1.5 1.5 0 0 0-.44-1.06L17.5 5"/><path d="M20.5 9h-1.2"/></symbol>
+    <symbol id="i-plan" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16.5" rx="2"/><path d="M3 9.5h18"/><path d="M8 2.5v4M16 2.5v4"/><path d="m7.5 15 2.5 2.5 6.5-5.5"/></symbol>
+    <symbol id="i-heli" viewBox="0 0 24 24"><path d="M2.5 4.5h17"/><path d="M11 4.5v3"/><path d="M5 12.6A5 5 0 0 1 10 7.5h3.2a4.3 4.3 0 0 1 4.3 4.3v.9a2.8 2.8 0 0 1-2.8 2.8H7.9A2.9 2.9 0 0 1 5 12.6z"/><path d="M13.5 7.7v4.1h4"/><path d="M17.5 10.5h4.3"/><path d="M21.8 8.4v4.2"/><path d="M8.5 15.5v3.3M14.5 15.5v3.3"/><path d="M5.5 18.8h12.5"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4"/><path d="m7.5 8.5 4.5-4.5 4.5 4.5"/><path d="M4 15v3.5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V15"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  </defs>
+</svg>
+
+<header class="top">
+  <div class="wrap bar">
+    <button class="brand" type="button" data-go="home" aria-label="Home">
+      <span class="mark"><svg class="ic"><use href="#i-sof"/></svg></span><span class="bname">Command Dashboard</span>
+    </button>
+    <nav class="tabs" id="tabs" aria-label="Pages">
+      <button type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg><span>Home</span></button>
+      <button type="button" data-go="sof"><svg class="ic"><use href="#i-sof"/></svg><span>Status of Funds</span></button>
+      <button type="button" data-go="pr"><svg class="ic"><use href="#i-card"/></svg><span>PR Tracker</span></button>
+      <button type="button" data-go="fuel"><svg class="ic"><use href="#i-fuel"/></svg><span>Fuel</span></button>
+      <button type="button" data-go="spend"><svg class="ic"><use href="#i-plan"/></svg><span>Spend Plans</span></button>
+      <button type="button" data-go="aftp"><svg class="ic"><use href="#i-heli"/></svg><span>AFTPs</span></button>
+    </nav>
+    <div class="tools">
+      <span class="asof" id="asOf"></span>
+      <button class="btn primary" id="btnUpload" type="button" title="Choose one or more Excel or CSV files; each goes to its page automatically"><svg class="ic"><use href="#i-upload"/></svg><span>Upload data</span></button>
+      <input type="file" id="fileInput" accept=".xlsx,.xlsm,.xls,.csv" multiple hidden>
+      <button class="iconbtn" id="btnInfo" type="button" title="Data details" aria-label="Data details" aria-controls="drawer" aria-expanded="false"><svg class="ic"><use href="#i-info"/></svg><span class="dot" id="infoDot" hidden></span></button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap" id="main">
+  <!-- ================= HOME ================= -->
+  <section class="page" id="page-home" aria-label="Home">
+    <div class="hero">
+      <div>
+        <div class="eyebrow" id="hEyebrow">&nbsp;</div>
+        <h1>Command Dashboard</h1>
+        <p class="lead" id="hLead">Funds, purchase requests and fuel in one place.</p>
+      </div>
+      <div class="fyring" id="fyRing" aria-label="Fiscal year elapsed"></div>
+    </div>
+    <div class="tiles" id="tiles">
+      <button class="tile t-sof" type="button" data-go="sof"><span class="tic"><svg class="ic"><use href="#i-sof"/></svg></span><span class="tt">Status of Funds</span><span class="ts" id="tsSof">&nbsp;</span></button>
+      <button class="tile t-pr" type="button" data-go="pr"><span class="tic"><svg class="ic"><use href="#i-card"/></svg></span><span class="tt">PR Tracker</span><span class="ts" id="tsPr">&nbsp;</span></button>
+      <button class="tile t-fuel" type="button" data-go="fuel"><span class="tic"><svg class="ic"><use href="#i-fuel"/></svg></span><span class="tt">Fuel</span><span class="ts" id="tsFuel">&nbsp;</span></button>
+      <button class="tile t-plan" type="button" data-go="spend"><span class="tic"><svg class="ic"><use href="#i-plan"/></svg></span><span class="tt">Spend Plans</span><span class="ts">Coming soon</span></button>
+      <button class="tile t-aftp" type="button" data-go="aftp"><span class="tic"><svg class="ic"><use href="#i-heli"/></svg></span><span class="tt">AFTPs</span><span class="ts">Coming soon</span></button>
+    </div>
+    <div class="dropzone" id="homeEmpty" hidden>
+      <svg class="ic big"><use href="#i-upload"/></svg>
+      <h2>Upload your Excel files to get started</h2>
+      <p>Choose them all at once or drag them onto this page. Each file goes to its page automatically.</p>
+      <button class="btn primary lg" type="button" data-upload="1"><svg class="ic"><use href="#i-upload"/></svg><span>Upload data</span></button>
+      <ul class="kinds">
+        <li><strong>Status of Funds</strong> funds export, funding file, Account Key, Commitment Item Key, spend plan</li>
+        <li><strong>PR Tracker</strong> L1.xlsx, L2.xlsx, L3.xlsx, L4.xlsx</li>
+        <li><strong>Fuel</strong> one tracker per AASF, named for the AASF</li>
+      </ul>
+    </div>
+    <div class="overview" id="homeOverview">
+      <article class="ocard" id="oSof" data-go="sof" tabindex="0"></article>
+      <article class="ocard" id="oPr" data-go="pr" tabindex="0"></article>
+      <article class="ocard wide" id="oFuel" data-go="fuel" tabindex="0"></article>
+    </div>
+  </section>
+
+  <!-- ================= STATUS OF FUNDS ================= -->
+  <section class="page" id="page-sof" hidden aria-label="Status of Funds">
+    <div class="pagehead">
+      <div><h1><span class="pic t-sof"><svg class="ic"><use href="#i-sof"/></svg></span>Status of Funds</h1>
+      <div class="asofp" id="asof-sof"></div><div class="scope"><strong id="asofLabel">&mdash;</strong> &middot; <span id="scopeLabel">All funds</span></div></div>
+      <button class="btn ghost" type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg>Home</button>
+    </div>
+    <div class="nodata" data-nodata="sof" hidden>No Status of Funds files loaded yet. <button class="btn sm primary" type="button" data-upload="1">Upload data</button></div>
+    <div class="filters" role="group" aria-label="Status of Funds filters">
+      <label>Fiscal Year<select id="fFy"></select></label>
+      <label>Appropriation<select id="fAppn"></select></label>
+      <label>Sag<select id="fSag"></select></label>
+      <label>MDEP<select id="fMdep"></select></label>
+      <label>Account<select id="fAcct"></select></label>
+      <label>Functional Area<select id="fFa"></select></label>
+      <label>Commitment Item<select id="fCi"></select></label>
+      <label>Fiscal Month<select id="fFm"></select></label>
+      <button class="btn ghost" id="btnReset" type="button">Reset</button>
+    </div>
+    <section class="kpis k6" id="kpis" aria-label="Key indicators"></section>
+    <section class="panel summary"><h2>Resource Manager summary</h2><p id="summary">&nbsp;</p></section>
+    <section class="panel"><h2>Where the money stands</h2><div class="chartbox short"><canvas id="cPos"></canvas></div><p class="muted small" id="posNote"></p></section>
+    <section class="panel" id="trendPanel">
+      <div class="tablehead"><h2>Spending trend</h2><div class="tabletools">
+        <label>Year <select id="tFy" aria-label="Trend fiscal year"></select></label>
+        <label>Spent = <select id="tMetric" aria-label="What counts as spent"><option value="od">Obligation + Disbursement</option><option value="o">Obligation</option><option value="d">Disbursement</option></select></label>
+      </div></div>
+      <h3 class="sub">Where we should be</h3>
+      <div id="pace" class="pace"></div>
+      <div class="row r2">
+        <div><h3 class="sub">Cumulative spent vs straight-line pace and spend plan</h3><div class="chartbox"><canvas id="cCum"></canvas></div><p class="hint" id="paceHint" hidden>The straight-line pace appears once the funding file is loaded.</p></div>
+        <div><h3 class="sub">Monthly spend</h3><div class="chartbox"><canvas id="cMon"></canvas></div><p class="hint" id="planHint" hidden>No spend plan loaded.</p></div>
+      </div>
+      <p class="muted small" id="trendNote"></p>
+    </section>
+    <div class="row r2">
+      <section class="panel"><h2>By Fiscal Year</h2><div class="chartbox"><canvas id="cFy"></canvas></div></section>
+      <section class="panel"><h2>By Appropriation</h2><div class="chartbox"><canvas id="cAppn"></canvas></div></section>
+    </div>
+    <div class="row r2">
+      <section class="panel"><h2>By Sag</h2><div class="chartbox tall"><canvas id="cSag"></canvas></div></section>
+      <section class="panel"><h2>By MDEP</h2><div class="chartbox tall"><canvas id="cMdep"></canvas></div></section>
+    </div>
+    <div class="row r2">
+      <section class="panel"><h2>By Account</h2><div class="chartbox tall"><canvas id="cAcct"></canvas></div></section>
+      <section class="panel"><h2>By Commitment Item</h2><div class="chartbox tall"><canvas id="cCi"></canvas></div></section>
+    </div>
+    <p class="muted small chartnote">Largest 10 values; the rest are grouped as Other. Click a bar to filter by it.</p>
+    <section class="panel" id="fundPanel">
+      <div class="tablehead"><h2>Funding vs execution</h2><div class="tabletools"><button class="btn ghost sm" id="btnFundCsv" type="button">Export CSV</button><button class="btn ghost sm" id="btnFundAll" type="button">Show all</button></div></div>
+      <p class="muted small" id="fundNote"></p>
+      <div class="tablewrap scrolly"><table class="grid" id="tFund"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+    </section>
+    <section class="panel fundneed" id="fundNeed" hidden><h2>Funding vs execution</h2><p class="muted">TDP, AFP, Reservations and Balance appear once the funding file is loaded.</p></section>
+    <section class="panel">
+      <div class="tablehead"><h2>Document detail</h2><div class="tabletools"><input type="search" id="fSearch" placeholder="Search document number, MDEP, account&hellip;" aria-label="Search lines" autocomplete="off"><button class="btn ghost sm" id="btnCsv" type="button">Export CSV</button><button class="btn ghost sm" id="btnAll" type="button">Show all</button></div></div>
+      <p class="muted small">One row per line. Click a column header to sort. <span id="searchNote" class="searchnote"></span></p>
+      <div class="tablewrap scrolly"><table class="grid" id="tDocs"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+    </section>
+  </section>
+
+  <!-- ================= PR TRACKER ================= -->
+  <section class="page" id="page-pr" hidden aria-label="PR Tracker">
+    <div class="pagehead">
+      <div><h1><span class="pic t-pr"><svg class="ic"><use href="#i-card"/></svg></span>PR Tracker</h1>
+      <div class="asofp" id="asof-pr"></div><div class="scope" id="prScope">&nbsp;</div></div>
+      <button class="btn ghost" type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg>Home</button>
+    </div>
+    <div class="nodata" data-nodata="pr" hidden>No PR files loaded yet (L1.xlsx to L4.xlsx). <button class="btn sm primary" type="button" data-upload="1">Upload data</button></div>
+    <div class="filters" role="group" aria-label="PR filters">
+      <label>Level<select id="prLevel"></select></label>
+      <label>Cardholder<select id="prCard"></select></label>
+      <label>Merchant<select id="prMerch"></select></label>
+      <label class="grow">Search<input type="search" id="prSearch" placeholder="PR number, cardholder, merchant, description&hellip;" autocomplete="off"></label>
+      <button class="btn ghost" id="prReset" type="button">Reset</button>
+    </div>
+    <section class="kpis" id="prKpis" aria-label="PR totals"></section>
+    <section class="panel"><h2>Where the PRs are</h2><div class="pipeline" id="prPipe"></div></section>
+    <div class="row r2">
+      <section class="panel"><h2>Value by cardholder</h2><div class="chartbox tall"><canvas id="cPrCard"></canvas></div></section>
+      <section class="panel"><h2>Value by merchant</h2><div class="chartbox tall"><canvas id="cPrMerch"></canvas></div></section>
+    </div>
+    <p class="muted small chartnote">Largest 10; bars are split by level. Click a bar to filter by it.</p>
+    <section class="panel">
+      <div class="tablehead"><h2>PR list</h2><div class="tabletools"><button class="btn ghost sm" id="prCsv" type="button">Export CSV</button><button class="btn ghost sm" id="prAll" type="button">Show all</button></div></div>
+      <p class="muted small">One row per PR, at the highest level it appears in. Click a column header to sort. <span class="searchnote" id="prNote"></span></p>
+      <div class="tablewrap scrolly"><table class="grid" id="tPr"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+    </section>
+  </section>
+
+  <!-- ================= FUEL ================= -->
+  <section class="page" id="page-fuel" hidden aria-label="Fuel">
+    <div class="pagehead">
+      <div><h1><span class="pic t-fuel"><svg class="ic"><use href="#i-fuel"/></svg></span>Fuel</h1>
+      <div class="asofp" id="asof-fuel"></div><div class="scope" id="fuScope">&nbsp;</div></div>
+      <button class="btn ghost" type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg>Home</button>
+    </div>
+    <div class="nodata" data-nodata="fuel" hidden>No fuel trackers loaded yet (one per AASF). <button class="btn sm primary" type="button" data-upload="1">Upload data</button></div>
+    <div class="filters" role="group" aria-label="Fuel filters">
+      <label>Fiscal Year<select id="fuFy"></select></label>
+      <label>AASF<select id="fuAasf"></select></label>
+      <button class="btn ghost" id="fuReset" type="button">Reset</button>
+    </div>
+    <section class="kpis k6" id="fuKpis" aria-label="Fuel totals"></section>
+    <section class="panel"><h2>Budget vs where we are in the fiscal year</h2><div id="fuPace"></div></section>
+    <div class="aasfs" id="fuCards"></div>
+    <div class="row r2">
+      <section class="panel"><h2>Cumulative spend vs straight-line budget pace</h2><div class="chartbox"><canvas id="cFuCum"></canvas></div><p class="muted small" id="fuCumNote"></p></section>
+      <section class="panel"><h2>% of budget used by AASF</h2><div class="chartbox"><canvas id="cFuPct"></canvas></div><p class="muted small">Straight-line pace = 1/12 of the budget per fiscal month.</p></section>
+    </div>
+    <div class="row r2">
+      <section class="panel"><h2>Monthly cost and gallons</h2><div class="chartbox"><canvas id="cFuMon"></canvas></div></section>
+      <section class="panel"><h2>Average cost per gallon</h2><div class="chartbox"><canvas id="cFuPpg"></canvas></div></section>
+    </div>
+    <section class="panel">
+      <div class="tablehead"><h2>Transactions</h2><div class="tabletools"><input type="search" id="fuSearch" placeholder="Search Milstrip, AASF, date&hellip;" aria-label="Search transactions" autocomplete="off"><button class="btn ghost sm" id="fuCsv" type="button">Export CSV</button><button class="btn ghost sm" id="fuAll" type="button">Show all</button></div></div>
+      <p class="muted small">Click a column header to sort. <span class="searchnote" id="fuNote"></span></p>
+      <div class="tablewrap scrolly"><table class="grid" id="tFu"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+    </section>
+  </section>
+
+  <!-- ================= PLACEHOLDERS ================= -->
+  <section class="page" id="page-spend" hidden aria-label="Spend Plans">
+    <div class="pagehead"><div><h1><span class="pic t-plan"><svg class="ic"><use href="#i-plan"/></svg></span>Spend Plans</h1></div><button class="btn ghost" type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg>Home</button></div>
+    <div class="soon"><svg class="ic huge"><use href="#i-plan"/></svg><h2>Coming soon</h2><p>Spend plans will be added in the next update.</p></div>
+  </section>
+  <section class="page" id="page-aftp" hidden aria-label="AFTPs">
+    <div class="pagehead"><div><h1><span class="pic t-aftp"><svg class="ic"><use href="#i-heli"/></svg></span>AFTPs</h1></div><button class="btn ghost" type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg>Home</button></div>
+    <div class="soon"><svg class="ic huge"><use href="#i-heli"/></svg><h2>Coming soon</h2><p>AFTP tracking will be added in the next update.</p></div>
+  </section>
+</main>
+
+<!-- ================= DATA DETAILS (opened from the small icon in the corner) ================= -->
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="Data details">
+  <div class="dhead"><h2>Data details</h2><button class="iconbtn" id="btnClose" type="button" aria-label="Close">&times;</button></div>
+  <p class="dstate" id="dState"></p>
+  <div class="dactions">
+    <button class="btn primary sm" type="button" data-upload="1"><svg class="ic"><use href="#i-upload"/></svg>Upload files</button>
+    <button class="btn sm" id="btnSave" type="button" disabled title="Load your files first">Save with data</button>
+    <button class="btn ghost sm" id="btnDemo" type="button" hidden>Load demo data</button>
+    <button class="btn ghost sm" id="btnClear" type="button">Clear data</button>
+  </div>
+  <h3>Files</h3>
+  <div class="tablewrap"><table class="grid files" id="tFiles"><thead><tr><th>File</th><th>Read as</th><th>Page</th><th class="num">Rows</th><th>Status</th></tr></thead><tbody></tbody></table></div>
+  <details class="dsec" id="dSof"><summary>Status of Funds</summary><div class="loadreport" id="loadReport"></div></details>
+  <details class="dsec" id="dPr"><summary>PR Tracker</summary><div class="loadreport" id="prReport"></div></details>
+  <details class="dsec" id="dFuel"><summary>Fuel</summary><div class="loadreport" id="fuReport"></div></details>
+  <details class="dsec"><summary>Blank templates</summary>
+    <div class="tmpl">
+      <a class="btn ghost sm" href="pr_template.xlsx" download>PR file (L1&ndash;L4)</a>
+      <a class="btn ghost sm" href="fuel_tracker_template.xlsx" download>Fuel tracker (AASF)</a>
+      <a class="btn ghost sm" href="funds_template.xlsx" download>Funds export</a>
+      <a class="btn ghost sm" href="funding_template.xlsx" download>Funding file</a>
+      <a class="btn ghost sm" href="accountkey_template.xlsx" download>Account Key</a>
+      <a class="btn ghost sm" href="cikey_template.xlsx" download>Commitment Item Key</a>
+      <a class="btn ghost sm" href="spendplan_template.xlsx" download>Spend plan</a>
+    </div>
+  </details>
+  <details class="dsec"><summary>How the numbers are calculated</summary>
+    <div class="method">
+      <h4>Loading</h4>
+      <ul>
+        <li>Files are read by this browser tab only. Each file is matched to its page by its column headers (PR files also need L1&ndash;L4 in the name; fuel trackers are named for the AASF).</li>
+        <li>Loading a file again replaces the earlier copy of the same kind: the same funds file type, the same PR level, or the same AASF. Loading your first file clears the demo data.</li>
+        <li>Headers match regardless of case, spaces or underscores. Personal identifier columns (such as SSN) are skipped without being read. #REF! and other error cells count as blank.</li>
+      </ul>
+      <h4>Status of Funds</h4>
+      <ul>
+        <li>Obligation and Disbursement are the export's cumulative amounts, sign-flipped (&times; &minus;1) because the export carries them negative. Lines with Commitment Item ALLOBJ are removed when the file is read.</li>
+        <li>TDP, AFP and Reservations come only from the funding file, per Account. Functional Areas roll up to Accounts (with their Sag and MDEP) through the Account Key. Commitment items sharing a description in the Commitment Item Key are added together.</li>
+        <li>Balance = TDP &minus; Reservations &minus; Obligation &minus; Disbursement. Straight-line pace = TDP &times; fiscal month &divide; 12 (October = 1).</li>
+      </ul>
+      <h4>PR Tracker</h4>
+      <ul>
+        <li>The level comes from the file name: L3.xlsx = Level 3. Columns read: Cardholder Name (shown as First Last), Purchase requisition (PR Number), Merchant / Description (Merchant), Short Text (Description), Total Value.</li>
+        <li>Rows with the same PR number in one level are one PR. Its value is the sum of its rows, except when every row repeats the same amount (the PR total copied onto each line); then that amount is counted once.</li>
+        <li>A PR found in more than one level file is shown once, at the highest level.</li>
+      </ul>
+      <h4>Fuel</h4>
+      <ul>
+        <li>Each tracker's budget is cell B1; the table header (Date, Milstrip Number, Gallons, Total Cost) is found near row 13. Blank rows and total rows are ignored.</li>
+        <li>Fiscal year elapsed is counted in days from 1 October. On pace = spending within 10% of the straight-line budget pace; the projection is spend to date &divide; share of the year elapsed.</li>
+      </ul>
+    </div>
+  </details>
+</aside>
+<div class="dropover" id="dropOver" hidden><div><svg class="ic big"><use href="#i-upload"/></svg><p>Drop files to load</p></div></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>window.__dashSrc = document.documentElement.outerHTML; /* page markup before any script runs; used by "Save with data" */</script>
+<script src="../../assets/vendor/chart.umd.min.js"></script>
+<script src="../../assets/vendor/xlsx.full.min.js"></script>
+<script src="../../assets/js/dashkit.js"></script>
+<script data-demo src="../../dashboards/finance/data/funds_demo.js"></script>
+<script data-demo src="data/command_demo.js"></script>
+<script src="../../dashboards/finance/funding.js"></script>
+<script src="../../dashboards/finance/plan.js"></script>
+<script src="core.js"></script>
+<script src="sof.js"></script>
+<script src="pr.js"></script>
+<script src="fuel.js"></script>
+<script src="home.js"></script>
+</body>
+</html>
