@@ -98,7 +98,7 @@
       <label>Fiscal Month<select id="fFm"></select></label>
       <button class="btn ghost" id="btnReset" type="button">Reset</button>
     </div>
-    <section class="kpis k6" id="kpis" aria-label="Key indicators"></section>
+    <section class="kpis" id="kpis" aria-label="Key indicators"></section>
     <section class="panel summary"><h2>Resource Manager summary</h2><p id="summary">&nbsp;</p></section>
     <section class="panel"><h2>Where the money stands</h2><div class="chartbox short"><canvas id="cPos"></canvas></div><p class="muted small" id="posNote"></p></section>
     <section class="panel" id="trendPanel">
@@ -132,7 +132,7 @@
       <p class="muted small" id="fundNote"></p>
       <div class="tablewrap scrolly"><table class="grid" id="tFund"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
     </section>
-    <section class="panel fundneed" id="fundNeed" hidden><h2>Funding vs execution</h2><p class="muted">TDP, AFP, Reservations and Balance appear once the funding file is loaded.</p></section>
+    <section class="panel fundneed" id="fundNeed" hidden><h2>Funding vs execution</h2><p class="muted">TDP, AFP and Balance appear once the funding file is loaded.</p></section>
     <section class="panel">
       <div class="tablehead"><h2>Document detail</h2><div class="tabletools"><input type="search" id="fSearch" placeholder="Search document number, MDEP, account&hellip;" aria-label="Search lines" autocomplete="off"><button class="btn ghost sm" id="btnCsv" type="button">Export CSV</button><button class="btn ghost sm" id="btnAll" type="button">Show all</button></div></div>
       <p class="muted small">One row per line. Click a column header to sort. <span id="searchNote" class="searchnote"></span></p>
@@ -252,8 +252,8 @@
       <h4>Status of Funds</h4>
       <ul>
         <li>Obligation and Disbursement are the export's cumulative amounts, sign-flipped (&times; &minus;1) because the export carries them negative.</li>
-        <li>TDP, AFP and Reservations come only from the funding file, per Account. Functional Areas roll up to Accounts (with their Sag and MDEP) through the Account Key. Commitment items sharing a description in the Commitment Item Key are added together.</li>
-        <li>Balance = TDP &minus; Reservations &minus; Obligation &minus; Disbursement. Straight-line pace = TDP &times; fiscal month &divide; 12 (October = 1).</li>
+        <li>TDP and AFP come only from the funding file (Fiscal Year, Account, TDP, AFP), per Account. Functional Areas roll up to Accounts (with their Sag and MDEP) through the Account Key. Commitment items sharing a description in the Commitment Item Key are added together.</li>
+        <li>Balance = TDP &minus; Obligation &minus; Disbursement. Straight-line pace = TDP &times; fiscal month &divide; 12 (October = 1).</li>
       </ul>
       <h4>PR Tracker</h4>
       <ul>

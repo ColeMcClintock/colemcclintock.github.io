@@ -27,7 +27,7 @@
       var spent = sof.obl + sof.disb;
       h += '<div class="big3">' + stat("TDP", sof.tdp == null ? "\u2014" : K.money(sof.tdp), sof.tdp == null ? "Funding file not loaded" : "AFP " + K.money(sof.afp)) +
         stat("Obligated", K.money(sof.obl), "Disbursed " + K.money(sof.disb)) +
-        stat("Balance", sof.bal == null ? "\u2014" : K.money(sof.bal), sof.res ? "After " + K.money(sof.res) + " reservations" : "TDP \u2212 Res. \u2212 Oblig. \u2212 Disb.", sof.bal == null ? "" : sof.bal < 0 ? "bad" : "good") + "</div>";
+        stat("Balance", sof.bal == null ? "\u2014" : K.money(sof.bal), "TDP \u2212 Oblig. \u2212 Disb.", sof.bal == null ? "" : sof.bal < 0 ? "bad" : "good") + "</div>";
       if (sof.tdp) {
         var sp = spent / sof.tdp, st = C.pace(sp, sof.elapsed);
         h += '<div class="gauge" style="margin-top:22px"><div class="g" style="background:linear-gradient(90deg,#60a5fa,#2563eb);width:' + Math.min(100, sp * 100).toFixed(1) + '%"></div><div class="mk" data-l="Pace ' + C.pct(sof.elapsed) + '" style="left:' + (sof.elapsed * 100).toFixed(1) + '%"></div></div>' +

@@ -31,7 +31,7 @@
   var DIMS = [["fy", "fFy", "cFy", "All years"], ["appn", "fAppn", "cAppn", "All"], ["sag", "fSag", "cSag", "All"], ["mdep", "fMdep", "cMdep", "All"], ["acctL", "fAcct", "cAcct", "All"], ["fa", "fFa", null, "All"], ["ciL", "fCi", "cCi", "All"], ["fm", "fFm", null, "All months"]];
   var DIM_KEYS = DIMS.map(function (d) { return d[0]; });
   var TEXT_KEYS = ["doc", "ci", "ciL", "fa", "acctL", "appn", "fy", "fm", "sag", "mdep"];
-  var TOPN = 10, C_TDP = "#b08968", C_OBL = "#3b82f6", C_DISB = "#84cc16", C_RES = "#f59e0b", C_BAL = "#16a34a";
+  var TOPN = 10, C_TDP = "#b08968", C_OBL = "#3b82f6", C_DISB = "#84cc16", C_BAL = "#16a34a";
   var KIND_LABEL = { "export": "Funds export", funding: "Funding file", plan: "Spend plan", key: "Account Key", cikey: "Commitment Item Key" };
   var S = { files: [], recs: [], fund: null, plan: null, allobj: 0, showAll: false, sort: { k: "obl", dir: -1 }, shown: [], order: 0 };
 
@@ -66,7 +66,29 @@
     rep.rowsLoaded = out.length; rep.flipped = flip;
     return { records: out, report: rep };
   }
-  function parseAs(kind, src, noFlip) { return kind === "funding" ? L.parseFunding(src) : kind === "plan" ? TR.parsePlan(src) : kind === "key" ? L.parseKey(src) : kind === "cikey" ? L.parseCiKey(src) : parseExport(src, noFlip); }
+  // Aviation dashboard: no Reservations. The funding file is Fiscal Year, Account, TDP, AFP; a Reservations column is ignored.
+  function parseFunding(src) {
+    var p = L.parseFunding(src), r = p.report;
+    p.rows.forEach(function (row) { delete row.res; });
+    r.amts = (r.amts || []).filter(function (k) { return k !== "res"; });
+    r.missing = (r.missing || []).filter(function (m) { return m !== "Reservations"; });
+    if (r.fatal) r.fatal = r.fatal.replace("TDP, AFP or Reservations", "TDP or AFP");
+    else if (!r.amts.length) { r.fatal = "No TDP or AFP column was found."; p.rows = []; r.rowsLoaded = 0; }
+    return p;
+  }
+  function fundTable(j) {   // shared funding table without its Reservations column
+    L.table.render(S.fund, j);
+    var fn = $("fundNote"); if (fn) fn.textContent = fn.textContent.replace("TDP \u2212 Reservations \u2212 Obligation", "TDP \u2212 Obligation");
+    var t = $("tFund"), th = t.tHead.querySelector('th[data-k="res"]'); if (!th) return;
+    var i = Array.prototype.indexOf.call(th.parentNode.children, th);
+    [t.tHead, t.tBodies[0], t.tFoot].forEach(function (sec) { Array.prototype.forEach.call(sec.rows, function (tr) { if (tr.cells.length > i && !(tr.cells.length === 1 && tr.cells[0].colSpan > 1)) tr.deleteCell(i); }); });
+  }
+  function fundCsv() {   // same CSV as the shared table, minus Reservations
+    var dl = K.downloadCsv;
+    K.downloadCsv = function (name, head, rows) { var i = head.indexOf("Reservations"); if (i >= 0) { head = head.filter(function (x, k) { return k !== i; }); rows = rows.map(function (r) { return r.filter(function (x, k) { return k !== i; }); }); } return dl.call(K, name, head, rows); };
+    try { L.table.exportCsv(); } finally { K.downloadCsv = dl; }
+  }
+  function parseAs(kind, src, noFlip) { return kind === "funding" ? parseFunding(src) : kind === "plan" ? TR.parsePlan(src) : kind === "key" ? L.parseKey(src) : kind === "cikey" ? L.parseCiKey(src) : parseExport(src, noFlip); }
   function derive(recs) {
     var ciLoaded = L.ciInfo().size > 0;
     recs.forEach(function (r) {
@@ -116,7 +138,7 @@
   function aoa(t) { return L.aoaSource([t.headers].concat(t.rows)); }
   function demo() {
     var D = w.FUNDS_DEMO; if (!D) return;
-    S.files = [mkEntry("Demo funds export", "export", parseExport(aoa(D))), mkEntry("Demo funding file", "funding", L.parseFunding(aoa(D.funding))),
+    S.files = [mkEntry("Demo funds export", "export", parseExport(aoa(D))), mkEntry("Demo funding file", "funding", parseFunding(aoa(D.funding))),
       mkEntry("Demo spend plan", "plan", TR.parsePlan(aoa(D.plan))), mkEntry("Demo Account Key", "key", L.parseKey(aoa(D.key))), mkEntry("Demo Commitment Item Key", "cikey", L.parseCiKey(aoa(D.cikey)))];
     combine();
   }
@@ -145,7 +167,7 @@
       p.report.allobj = D.allobjRemoved || 0;
       S.files.push(mkEntry(nameOf(D.files, "Saved funds export"), "export", p, { srcNames: D.files }));
     }
-    [["funding", L.parseFunding, "Saved funding file"], ["plan", TR.parsePlan, "Saved spend plan"], ["key", L.parseKey, "Saved Account Key"], ["cikey", L.parseCiKey, "Saved Commitment Item Key"]].forEach(function (x) {
+    [["funding", parseFunding, "Saved funding file"], ["plan", TR.parsePlan, "Saved spend plan"], ["key", L.parseKey, "Saved Account Key"], ["cikey", L.parseCiKey, "Saved Commitment Item Key"]].forEach(function (x) {
       var B = D[x[0]]; if (!B) return;
       S.files.push(mkEntry(nameOf(B.files, x[2]), x[0], x[1](aoa(B)), { srcNames: B.files }));
     });
@@ -180,7 +202,7 @@
       var fl = fileLines(e); warns += fl.warns;
       h.push('<details class="filerep"' + (fl.warns ? " open" : "") + "><summary>" + esc(e.name) + " \u00b7 " + esc(KIND_LABEL[e.kind]) + (fl.warns ? ' \u00b7 <span class="warn">' + fl.warns + " note" + (fl.warns === 1 ? "" : "s") + "</span>" : "") + "</summary>" + fl.html + "</details>");
     });
-    var ex = S.files.filter(function (e) { return usable(e) && e.kind === "export"; }), fu = L.reportLines(S.fund, S.recs, DIM_KEYS); warns += fu.warns;
+    var ex = S.files.filter(function (e) { return usable(e) && e.kind === "export"; }), fu = L.reportLines(S.fund, S.recs, DIM_KEYS); warns += fu.warns; fu.html = fu.html.replace(/TDP, AFP, Reservations and Balance/g, "TDP, AFP and Balance");
     var ciu = Object.create(null), ciList = [];
     S.recs.forEach(function (r) { if (r.ciUnm && !ciu[r.ci]) { ciu[r.ci] = 1; ciList.push(r.ci); } });
     var sh = L.ciShared();
@@ -219,7 +241,7 @@
     $("scopeLabel").textContent = scope.length ? scope.join(" \u00b7 ") : "All funds";
     kpis(rows, j); position(rows, j); trend(f); summary(rows, f, j);
     DIMS.forEach(function (d) { chart(d, rows, j); });
-    L.table.render(S.fund, j);
+    fundTable(j);
     S.base = rows; table();
   }
   function trend(f) {
@@ -236,11 +258,10 @@
       var t = j.totals, nk = j.nonKey.length ? "Set per " + L.keyLabel(S.fund.keys) + "; not split by " + j.nonKey.map(function (k) { return LABEL[k]; }).join(", ") : "";
       h.push(kpi("TDP", money(t.tdp), nk || "Full-year funding", "tdp", full(t.tdp)));
       h.push(kpi("AFP", money(t.afp), "Funded to date" + (t.tdp ? " \u00b7 " + Math.round(t.afp / t.tdp * 100) + "% of TDP" : ""), "afp", full(t.afp)));
-      h.push(kpi("Reservations", money(t.res), "Known costs not yet obligated", "res", full(t.res)));
-    } else { h.push(needKpi("TDP", "tdp")); h.push(needKpi("AFP", "afp")); h.push(needKpi("Reservations", "res")); }
+    } else { h.push(needKpi("TDP", "tdp")); h.push(needKpi("AFP", "afp")); }
     h.push(kpi("Obligation", money(o), plural(rows.length, "line") + " \u00b7 " + plural(docCount(rows), "doc"), "obl", full(o)));
     h.push(kpi("Disbursement", money(d), full(d), "disb", full(d)));
-    if (j) { var b = j.totals.bal; h.push(kpi("Balance", money(b), "TDP \u2212 Res. \u2212 Oblig. \u2212 Disb.", "bal " + (b < 0 ? "bad" : "good"), full(b))); }
+    if (j) { var b = j.totals.bal; h.push(kpi("Balance", money(b), "TDP \u2212 Oblig. \u2212 Disb.", "bal " + (b < 0 ? "bad" : "good"), full(b))); }
     else h.push(needKpi("Balance", "bal"));
     $("kpis").innerHTML = h.join("");
   }
@@ -251,7 +272,7 @@
   }
   function groupJoined(j, k) {
     var m = Object.create(null), out = [];
-    j.groups.forEach(function (x) { var key = L.kn(k, x[k]), g = m[key]; if (!g) { g = m[key] = { label: x[k] || BLANK, obl: 0, disb: 0, tdp: 0, res: 0, lines: 0 }; out.push(g); } g.obl += x.obl; g.disb += x.disb; g.tdp += n(x.tdp); g.res += n(x.res); g.lines += x.lines; });
+    j.groups.forEach(function (x) { var key = L.kn(k, x[k]), g = m[key]; if (!g) { g = m[key] = { label: x[k] || BLANK, obl: 0, disb: 0, tdp: 0, lines: 0 }; out.push(g); } g.obl += x.obl; g.disb += x.disb; g.tdp += n(x.tdp); g.lines += x.lines; });
     return out;
   }
   function mag(g) { return Math.max(Math.abs(g.obl), Math.abs(g.disb), Math.abs(n(g.tdp))); }
@@ -261,7 +282,7 @@
     s.push(plural(rows.length, "line") + " across " + plural(docCount(rows), "document") + ": Obligation " + full(o) + " and Disbursement " + full(d) + ".");
     if (j) {
       var t = j.totals;
-      s.push("TDP " + full(t.tdp) + ", AFP " + full(t.afp) + ", Reservations " + full(t.res) + "; Balance " + full(t.bal) + ".");
+      s.push("TDP " + full(t.tdp) + ", AFP " + full(t.afp) + "; Balance (TDP \u2212 Obligation \u2212 Disbursement) " + full(t.bal) + ".");
       var neg = j.groups.filter(function (g) { return g.funded && g.bal < 0; }).sort(function (a, b) { return a.bal - b.bal; });
       if (neg.length) s.push(plural(neg.length, "account") + " " + (neg.length === 1 ? "has" : "have") + " a negative balance; the largest is " + (neg[0].label || neg[0].acct) + (neg[0].fy ? " (FY" + neg[0].fy + ")" : "") + " at " + full(neg[0].bal) + ".");
       if (t.unfundedLines) s.push(plural(t.unfundedLines, "line") + " (" + money(t.unfundedObl) + " obligated) have no matching funding row.");
@@ -275,7 +296,7 @@
     var o = moneyAxis(K.chartBase(), "x"); o.indexAxis = "y"; o.scales.x.stacked = true; o.scales.y.stacked = true;
     var ob = K.sum(rows, function (r) { return n(r.obl); }), di = K.sum(rows, function (r) { return n(r.disb); }), t = j ? j.totals : null;
     var ds = [{ label: "Obligation", data: [ob], backgroundColor: C_OBL }, { label: "Disbursement", data: [di], backgroundColor: C_DISB }];
-    if (t) { ds.push({ label: "Reservations", data: [t.res], backgroundColor: C_RES }); ds.push({ label: "Balance", data: [Math.max(0, t.bal)], backgroundColor: C_BAL }); }
+    if (t) { ds.push({ label: "Balance", data: [Math.max(0, t.bal)], backgroundColor: C_BAL }); }
     K.upsert("cPos", { type: "bar", data: { labels: [t ? "TDP " + money(t.tdp) : "Spent"], datasets: ds }, options: o });
     $("posNote").textContent = t ? (t.bal < 0 ? "Over TDP by " + full(-t.bal) + "." : full(t.bal) + " left (" + (t.tdp ? Math.round(t.bal / t.tdp * 100) : 0) + "% of TDP).") : "";
   }
@@ -287,8 +308,8 @@
     else {
       g.sort(function (a, b) { return mag(b) - mag(a) || cmpVal(a.label, b.label); });
       if (g.length > TOPN + 1) {
-        var rest = g.slice(TOPN), oth = { label: "Other (" + rest.length + ")", obl: 0, disb: 0, tdp: 0, res: 0, other: true };
-        rest.forEach(function (x) { oth.obl += x.obl; oth.disb += x.disb; oth.tdp += n(x.tdp); oth.res += n(x.res); });
+        var rest = g.slice(TOPN), oth = { label: "Other (" + rest.length + ")", obl: 0, disb: 0, tdp: 0, other: true };
+        rest.forEach(function (x) { oth.obl += x.obl; oth.disb += x.disb; oth.tdp += n(x.tdp); });
         g = g.slice(0, TOPN).concat([oth]);
       }
     }
@@ -300,7 +321,7 @@
     if (withTdp) ds.push({ label: "TDP", data: g.map(function (x) { return x.tdp; }), backgroundColor: C_TDP });
     ds.push({ label: "Obligation", data: g.map(function (x) { return x.obl; }), backgroundColor: C_OBL });
     ds.push({ label: "Disbursement", data: g.map(function (x) { return x.disb; }), backgroundColor: C_DISB });
-    if (withTdp) ds.push({ label: "Balance", data: g.map(function (x) { return x.other ? null : n(x.tdp) - n(x.res) - x.obl - x.disb; }), backgroundColor: C_BAL });
+    if (withTdp) ds.push({ label: "Balance", data: g.map(function (x) { return x.other ? null : n(x.tdp) - x.obl - x.disb; }), backgroundColor: C_BAL });
     K.upsert(d[2], { type: "bar", data: { labels: g.map(function (x) { return x.label; }), datasets: ds }, options: o });
   }
 
@@ -345,7 +366,7 @@
     var rows = S.recs.filter(function (r) { return r.fy === fy; }), j = S.fund ? L.joined(S.fund, rows, { fy: fy }, DIM_KEYS) : null;
     var o = K.sum(rows, function (r) { return n(r.obl); }), d = K.sum(rows, function (r) { return n(r.disb); });
     var el = fy === now.fy ? now.fm : +fy < +now.fy ? 12 : 0;
-    return { fy: fy, obl: o, disb: d, lines: rows.length, tdp: j ? j.totals.tdp : null, afp: j ? j.totals.afp : null, res: j ? j.totals.res : null, bal: j ? j.totals.bal : null, elapsed: el / 12 };
+    return { fy: fy, obl: o, disb: d, lines: rows.length, tdp: j ? j.totals.tdp : null, afp: j ? j.totals.afp : null, bal: j ? j.totals.bal : null, elapsed: el / 12 };
   }
 
   // ---------- page registration ----------
@@ -359,7 +380,7 @@
       DIMS.forEach(function (d) { $(d[1]).addEventListener("change", function () { S.showAll = false; render(); }); });
       $("btnReset").addEventListener("click", function () { DIMS.forEach(function (d) { $(d[1]).value = ""; }); $("fSearch").value = ""; S.showAll = false; render(); });
       $("btnCsv").addEventListener("click", exportCsv);
-      $("btnFundCsv").addEventListener("click", L.table.exportCsv);
+      $("btnFundCsv").addEventListener("click", fundCsv);
       $("btnFundAll").addEventListener("click", function () { L.table.toggleAll(); render(); });
       $("tFund").tHead.addEventListener("click", function (e) { var th = e.target.closest("th[data-k]"); if (th) { L.table.sortBy(th.getAttribute("data-k")); render(); } });
       var st; $("fSearch").addEventListener("input", function () { clearTimeout(st); st = setTimeout(table, 120); });

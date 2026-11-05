@@ -43,7 +43,7 @@ TDP, RES = 500000.0, 2500.0
 fund_x = xlsx(os.path.join(tmp, "Funding.xlsx"), [["Fiscal Year", "Account", "TDP", "AFP", "Reservations"], ["FY26", "Course Supplies", TDP, 400000.0, RES]])
 key_x = xlsx(os.path.join(tmp, "Account Key.xlsx"), [["Functional Area", "Account", "Sag", "MDEP"], ["121G11ABCD", "Course Supplies", "1N", "TATM"], ["131G21TRNG", "Course Supplies", "1N", "TATM"]])
 ci_x = xlsx(os.path.join(tmp, "CI Key.xlsx"), [["Commitment Item", "Description"], ["21T0", "Travel"], ["26FF", "Fuel"], ["252G", "Contract Services"]])
-BAL = round(TDP - RES - OBL - DISB, 2)
+BAL = round(TDP - OBL - DISB, 2)                            # Aviation dashboard: no Reservations (the column in the test file is ignored)
 
 # ---- PR files ----
 PRH = ["Purchase requisition", "Item", "Cardholder Name", "Plant", "Merchant / Description", "Short Text", "Qty", "Total Value", "SSN", "Created By"]
@@ -78,6 +78,8 @@ fb_rows = [[d0, "W81B0001", 1000.0, 3600.0]]
 fa = tracker("North Field", 12000.0, fa_rows); fb = tracker("South Field", 3000.0, fb_rows)
 FA_SPENT, FB_SPENT = 362.0 + 730.0 + 180.0, 3600.0
 
+check([c.value for c in openpyxl.load_workbook(os.path.join(ROOT, "dashboards", "command", "funding_template.xlsx")).active[1]] == ["Fiscal Year", "Account", "TDP", "AFP"], "aviation funding template: Fiscal Year, Account, TDP, AFP")
+check("Reservations" in [c.value for c in openpyxl.load_workbook(os.path.join(ROOT, "dashboards", "finance", "funding_template.xlsx")).active[1]], "finance funding template keeps Reservations")
 def run():
     with sync_playwright() as p:
         b = p.chromium.launch(executable_path=CHROME, args=["--no-sandbox"])
@@ -142,7 +144,11 @@ def run():
         go(pg, "sof")
         kt = lambda c: pg.get_attribute(f"#kpis .kpi.{c}", "title") or ""
         check(money(round(OBL, 2)) in kt("obl") and money(round(DISB, 2)) in kt("disb"), f"SOF: sign-flipped obligation {OBL:,.2f} / disbursement, ALLOBJ removed")
-        check(money(abs(BAL)) in kt("bal") and money(TDP) in kt("tdp"), "SOF: Balance = TDP - Res - Obl - Disb")
+        check(money(abs(BAL)) in kt("bal") and money(TDP) in kt("tdp"), "SOF: Balance = TDP - Obl - Disb (Reservations column ignored)")
+        check(not re.search(r"reserv", pg.inner_text("#page-sof") + pg.text_content("#drawer"), re.I) and pg.locator("#kpis .kpi").count() == 5 and pg.locator('#tFund th[data-k="res"]').count() == 0, "SOF: no Reservations anywhere (KPIs, chart, table, drawer)")
+        check("Reservations" not in json.dumps(pg.evaluate("Chart.getChart('cPos').data.datasets.map(function(d){return d.label})")), "SOF: position chart without Reservations")
+        with pg.expect_download() as dlc: pg.click("#btnFundCsv")
+        check("Reservations" not in open(dlc.value.path(), encoding="utf-8-sig").readline() and "TDP" in open(dlc.value.path(), encoding="utf-8-sig").readline(), "SOF: funding CSV without Reservations")
         check("Travel" in pg.inner_text("#fCi") and "1N" in pg.inner_text("#fSag") and "ZZ" not in pg.inner_text("#fSag"), "SOF: keys applied, export sag ignored")
         check(("Data as of " + today) in pg.inner_text("#asof-sof"), "SOF: data as of in the page header")
         go(pg, "pr")

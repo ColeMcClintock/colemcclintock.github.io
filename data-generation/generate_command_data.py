@@ -239,6 +239,16 @@ shutil.copy(os.path.join(DIR, "cardholder_key_template.xlsx"), os.path.join(DL, 
 pr_template(os.path.join(DIR, "pr_template.xlsx")); fuel_template(os.path.join(DIR, "fuel_tracker_template.xlsx"))
 shutil.copy(os.path.join(DIR, "pr_template.xlsx"), os.path.join(DL, "command-pr-template.xlsx"))
 shutil.copy(os.path.join(DIR, "fuel_tracker_template.xlsx"), os.path.join(DL, "command-fuel-tracker-template.xlsx"))
-for t in ("funds_template.xlsx", "funding_template.xlsx", "accountkey_template.xlsx", "cikey_template.xlsx", "spendplan_template.xlsx"):
+def funding_template(path):                                 # Aviation funding file: no Reservations (Balance = TDP - Obligation - Disbursement)
+    from openpyxl.worksheet.table import Table, TableStyleInfo
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Funding"
+    ws.append(["Fiscal Year", "Account", "TDP", "AFP"]); ws.append([None] * 4)
+    for c in ws[1]: c.font = Font(bold=True)
+    t = Table(displayName="FundingData", ref="A1:D2"); t.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True); ws.add_table(t)
+    for i, w in enumerate([14, 34, 18, 18], 1): ws.column_dimensions[get_column_letter(i)].width = w
+    for r in range(2, 200): ws.cell(r, 1).number_format = "@"; ws.cell(r, 2).number_format = "@"; ws.cell(r, 3).number_format = "#,##0.00"; ws.cell(r, 4).number_format = "#,##0.00"
+    wb.save(path)
+funding_template(os.path.join(DIR, "funding_template.xlsx"))
+for t in ("funds_template.xlsx", "accountkey_template.xlsx", "cikey_template.xlsx", "spendplan_template.xlsx"):
     shutil.copy(os.path.join(FIN, t), os.path.join(DIR, t))
 print(json.dumps(demo["expect"], default=str)[:600])
