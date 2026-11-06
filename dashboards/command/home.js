@@ -10,15 +10,17 @@
     return '<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="' + r + '" fill="none" stroke="#e2e8f0" stroke-width="7"/><circle cx="32" cy="32" r="' + r + '" fill="none" stroke="#2563eb" stroke-width="7" stroke-linecap="round" stroke-dasharray="' + c.toFixed(2) + '" stroke-dashoffset="' + off.toFixed(2) + '" transform="rotate(-90 32 32)"/></svg>';
   }
   C.renderHome = function () {
-    var fy = C.currentFy(), p = C.fyProgress(fy), sof = C.mods.sof.summary(), pr = C.mods.pr.summary(), fu = C.mods.fuel.summary();
-    var any = !!(sof || pr || fu), last = C.latestAsOf();
+    var fy = C.currentFy(), p = C.fyProgress(fy), sof = C.mods.sof.summary(), pr = C.mods.pr.summary(), fu = C.mods.fuel.summary(), spl = C.mods.spend.summary(), af = C.mods.aftp.summary();
+    var any = !!(sof || pr || fu || spl || af), last = C.latestAsOf();
     $("hEyebrow").textContent = "FY" + fy + " \u00b7 Day " + p.day + " of " + p.days;
-    $("hLead").textContent = last ? C.asOfText(last) : any ? "Funds, purchase requests and fuel in one place." : "Upload your Excel files to see funds, purchase requests and fuel in one place.";
+    $("hLead").textContent = last ? C.asOfText(last) : any ? "Funds, purchase requests, fuel, spend plans and AFTPs in one place." : "Upload your Excel files to see funds, purchase requests and fuel in one place.";
     $("fyRing").innerHTML = ring(p) + '<div><div class="rv">' + C.pct(p.pct) + '</div><div class="rl">of FY' + fy + " elapsed</div></div>";
     $("homeEmpty").hidden = any; $("homeOverview").hidden = !any;
     $("tsSof").textContent = sof ? (sof.pct != null ? C.pct(sof.pct) + " of TDP expended \u00b7 FY" + sof.fy : "Total Expenditure " + K.money(sof.te)) : "No data loaded";
     $("tsPr").textContent = pr ? (pr.types ? pr.types.map(function (t) { return t.type + " " + K.money(t.value); }).join(" \u00b7 ") : plural(pr.count, "PR") + " \u00b7 " + K.money(pr.value)) : "No data loaded";
     $("tsFuel").textContent = fu ? (fu.used != null ? C.pct(fu.used) + " of budget used \u00b7 FY" + fu.fy : K.money(fu.spent) + " spent") : "No data loaded";
+    $("tsSpend").textContent = spl ? (spl.last ? "Variance " + C.varText(spl.v) + " to date \u00b7 " + plural(spl.off, "account") + " off plan" : "Plan FY" + spl.fy + " \u00b7 no actuals yet") : "No data loaded";
+    $("tsAftp").textContent = af ? K.fmt(af.unpaid) + " unpaid \u00b7 " + "$" + K.fmt(af.out) + " outstanding" : "No data loaded";
     if (!any) return;
     // Status of Funds
     var h = head("t-sof", "i-sof", "Status of Funds" + (sof && sof.fy ? " \u00b7 FY" + sof.fy : ""), C.mods.sof);
@@ -68,5 +70,24 @@
       }).join("") + "</div>";
     }
     $("oFuel").innerHTML = h;
+    // Spend Plans
+    h = head("t-plan", "i-plan", "Spend Plans" + (spl ? " \u00b7 FY" + spl.fy : ""), C.mods.spend);
+    if (!spl) h += '<div class="empty">No spend plan or Status of Funds lines loaded.</div>';
+    else {
+      h += '<div class="big3">' + stat("Planned to date", K.money(spl.p), spl.last ? "Oct\u2013" + spl.month : "No actuals yet") + stat("Actual to date", K.money(spl.a), "Total Expenditure") +
+        stat("Variance", '<span class="vtxt ' + spl.k + '">' + C.varText(spl.v) + "</span>", plural(spl.off, "account") + " off plan (\u00b15%)") + "</div>";
+      if (spl.accts.length) h += '<div class="hvar">' + spl.accts.slice(0, 8).map(function (a) { return '<div class="hv1"><div class="nm" title="' + esc(a.label) + '">' + esc(a.label) + '</div><span class="vchip ' + a.k + '">' + C.varText(a.v) + "</span></div>"; }).join("") + "</div>";
+    }
+    $("oSpend").innerHTML = h;
+    // AFTPs
+    h = head("t-aftp", "i-heli", "AFTPs" + (af ? " \u00b7 FY" + af.fy : ""), C.mods.aftp);
+    if (!af) h += '<div class="empty">No AFTP data loaded.</div>';
+    else {
+      var ac = af.red ? "bad" : af.unpaid ? "warnv" : "good";
+      h += '<div class="big3">' + stat("AFTPs used", K.fmt(af.used), K.fmt(af.paid) + " paid") + stat("Unpaid", K.fmt(af.unpaid), plural(af.who, "soldier"), af.unpaid ? ac : "good") +
+        stat("Outstanding", "$" + K.fmt(af.out), af.red ? plural(af.red, "soldier") + " over 60 days" : "", af.out ? ac : "good") + "</div>";
+      if (af.top.length) h += '<div class="hafl"><h4>Most outstanding</h4>' + af.top.map(function (x) { return '<div class="r"><span>' + esc(x.name) + '</span><span><span class="upill ' + x.sev + '">' + x.unpaid + " unpaid</span> " + L.full(x.out) + "</span></div>"; }).join("") + "</div>";
+    }
+    $("oAftp").innerHTML = h;
   };
 })(window);

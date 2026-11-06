@@ -51,14 +51,17 @@
   }
 
   // ---------- routing (hash, so the browser Back button works) ----------
-  function page() { var h = location.hash.replace(/^#\/?/, ""); return C.PAGES.indexOf(h) >= 0 ? h : "home"; }
+  // "#/aftp/S07" = page aftp, sub-view "S07" (a page's own detail view; Back returns to the page)
+  function page() { var h = location.hash.replace(/^#\/?/, ""), p = h.split("/")[0]; C.sub = C.PAGES.indexOf(p) >= 0 ? decodeURIComponent(h.slice(p.length + 1)) : ""; return C.PAGES.indexOf(p) >= 0 ? p : "home"; }
   C.go = function (p) { if ("#/" + p === location.hash) show(); else location.hash = "#/" + p; };
   function show() {
     var p = page();
+    if (C.cur === p && C.lastSub !== C.sub && BY[p]) BY[p].dirty = true;
+    C.lastSub = C.sub;
     C.PAGES.forEach(function (x) { $("page-" + x).hidden = x !== p; });
     Array.prototype.forEach.call(document.querySelectorAll("#tabs button"), function (b) { b.classList.toggle("on", b.getAttribute("data-go") === p); });
     document.title = (p === "home" ? "" : TITLE[p] + " \u00b7 ") + "Aviation Dashboard";
-    if (C.cur !== p) w.scrollTo(0, 0);
+    if (C.cur !== p || C.sub) w.scrollTo(0, 0);
     C.cur = p; renderPage(p); headerState();
   }
   function renderPage(p) {
@@ -114,7 +117,7 @@
       var f = files[i++];
       readFile(f, function (err, entries) {
         if (err) out.push({ file: f.name, name: f.name, error: "Could not read this file: " + (err.message || String(err)) });
-        else if (!entries.length) out.push({ file: f.name, name: f.name, error: "Not recognized: its headers match none of the dashboard's files (funds export, funding file, keys, spend plan, PR file, fuel tracker)." });
+        else if (!entries.length) out.push({ file: f.name, name: f.name, error: "Not recognized: its headers match none of the dashboard's files (funds export, funding file, keys, spend plan, PR file, fuel tracker). AFTP report upload is coming soon." });
         else entries.forEach(function (e) { out.push(e); });
         setTimeout(next, 0);
       });
@@ -166,7 +169,7 @@
     });
     (C.failed || []).forEach(function (e) { warns++; rows.push("<tr><td>" + esc(e.name) + '</td><td>\u2014</td><td>\u2014</td><td></td><td class="st-err">' + esc(e.error || e.fatal || "Not loaded") + "</td></tr>"); });
     $("tFiles").tBodies[0].innerHTML = rows.length ? rows.join("") : '<tr><td colspan="5" class="muted">' + (C.source === "demo" ? "Showing the built-in demo data (fictional)." : "No files loaded yet.") + "</td></tr>";
-    [["sof", "dSof", "loadReport"], ["pr", "dPr", "prReport"], ["fuel", "dFuel", "fuReport"]].forEach(function (x) {
+    [["sof", "dSof", "loadReport"], ["pr", "dPr", "prReport"], ["fuel", "dFuel", "fuReport"], ["spend", "dSpend", "spReport"], ["aftp", "dAftp", "afReport"]].forEach(function (x) {
       var m = BY[x[0]]; if (!m) return;
       var r = m.report(); $(x[2]).innerHTML = r.html || '<p class="muted">Nothing loaded.</p>';
       var s = $(x[1]).querySelector("summary"); s.innerHTML = esc(TITLE[x[0]]) + (r.warns ? '<span class="warnc">' + r.warns + " note" + (r.warns === 1 ? "" : "s") + "</span>" : "");

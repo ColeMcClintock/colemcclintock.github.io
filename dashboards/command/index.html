@@ -50,7 +50,7 @@
       <div>
         <div class="eyebrow" id="hEyebrow">&nbsp;</div>
         <h1>Aviation Dashboard</h1>
-        <p class="lead" id="hLead">Funds, purchase requests and fuel in one place.</p>
+        <p class="lead" id="hLead">Funds, purchase requests, fuel, spend plans and AFTPs in one place.</p>
       </div>
       <div class="fyring" id="fyRing" aria-label="Fiscal year elapsed"></div>
     </div>
@@ -58,8 +58,8 @@
       <button class="tile t-sof" type="button" data-go="sof"><span class="tic"><svg class="ic"><use href="#i-sof"/></svg></span><span class="tt">Status of Funds</span><span class="ts" id="tsSof">&nbsp;</span></button>
       <button class="tile t-pr" type="button" data-go="pr"><span class="tic"><svg class="ic"><use href="#i-card"/></svg></span><span class="tt">PR Tracker</span><span class="ts" id="tsPr">&nbsp;</span></button>
       <button class="tile t-fuel" type="button" data-go="fuel"><span class="tic"><svg class="ic"><use href="#i-fuel"/></svg></span><span class="tt">Fuel</span><span class="ts" id="tsFuel">&nbsp;</span></button>
-      <button class="tile t-plan" type="button" data-go="spend"><span class="tic"><svg class="ic"><use href="#i-plan"/></svg></span><span class="tt">Spend Plans</span><span class="ts">Coming soon</span></button>
-      <button class="tile t-aftp" type="button" data-go="aftp"><span class="tic"><svg class="ic"><use href="#i-heli"/></svg></span><span class="tt">AFTPs</span><span class="ts">Coming soon</span></button>
+      <button class="tile t-plan" type="button" data-go="spend"><span class="tic"><svg class="ic"><use href="#i-plan"/></svg></span><span class="tt">Spend Plans</span><span class="ts" id="tsSpend">&nbsp;</span></button>
+      <button class="tile t-aftp" type="button" data-go="aftp"><span class="tic"><svg class="ic"><use href="#i-heli"/></svg></span><span class="tt">AFTPs</span><span class="ts" id="tsAftp">&nbsp;</span></button>
     </div>
     <div class="dropzone" id="homeEmpty" hidden>
       <svg class="ic big"><use href="#i-upload"/></svg>
@@ -70,12 +70,15 @@
         <li><strong>Status of Funds</strong> funds export, funding file, Account Key, Commitment Item Key, spend plan</li>
         <li><strong>PR Tracker</strong> L1.xlsx, L2.xlsx, L3.xlsx, L4.xlsx</li>
         <li><strong>Fuel</strong> one tracker per AASF, named for the AASF</li>
+        <li><strong>Spend Plans</strong> actuals come from Status of Funds; optional monthly plan (Account, Fiscal Year, Month 1&ndash;12)</li>
       </ul>
     </div>
     <div class="overview" id="homeOverview">
       <article class="ocard" id="oSof" data-go="sof" tabindex="0"></article>
       <article class="ocard" id="oPr" data-go="pr" tabindex="0"></article>
       <article class="ocard wide" id="oFuel" data-go="fuel" tabindex="0"></article>
+      <article class="ocard" id="oSpend" data-go="spend" tabindex="0"></article>
+      <article class="ocard" id="oAftp" data-go="aftp" tabindex="0"></article>
     </div>
   </section>
 
@@ -196,14 +199,68 @@
     </section>
   </section>
 
-  <!-- ================= PLACEHOLDERS ================= -->
+  <!-- ================= SPEND PLANS ================= -->
   <section class="page" id="page-spend" hidden aria-label="Spend Plans">
-    <div class="pagehead"><div><h1><span class="pic t-plan"><svg class="ic"><use href="#i-plan"/></svg></span>Spend Plans</h1></div><button class="btn ghost" type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg>Home</button></div>
-    <div class="soon"><svg class="ic huge"><use href="#i-plan"/></svg><h2>Coming soon</h2><p>Spend plans will be added in the next update.</p></div>
+    <div class="pagehead">
+      <div><h1><span class="pic t-plan"><svg class="ic"><use href="#i-plan"/></svg></span>Spend Plans</h1>
+      <div class="asofp" id="asof-spend"></div><div class="scope" id="spScope">&nbsp;</div></div>
+      <button class="btn ghost" type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg>Home</button>
+    </div>
+    <div class="nodata" data-nodata="spend" hidden>No spend plan or Status of Funds lines loaded yet. Actuals come from the Status of Funds export. <button class="btn sm primary" type="button" data-upload="1">Upload data</button></div>
+    <div class="filters" role="group" aria-label="Spend plan filters">
+      <label>Fiscal Year<select id="spFy"></select></label>
+      <label>Account<select id="spAcct"></select></label>
+      <div class="segwrap"><span class="seglbl">View</span><div class="seg" id="spMode" role="group" aria-label="Monthly or cumulative"><button type="button" data-m="month" class="on">Monthly</button><button type="button" data-m="cum">Cumulative</button></div></div>
+      <button class="btn ghost" id="spReset" type="button">Reset</button>
+    </div>
+    <section class="kpis k4" id="spKpis" aria-label="Spend plan totals"></section>
+    <section class="panel">
+      <div class="tablehead"><h2 id="spChartTitle">Planned vs actual by month</h2><div class="vlegend"><span class="vchip g">&le;5%</span><span class="vchip y">5&ndash;10%</span><span class="vchip r">&gt;10%</span></div></div>
+      <div class="chartbox tall"><canvas id="cSpend"></canvas></div>
+      <p class="muted small"><span id="spNote"></span> Actual = Total Expenditure from Status of Funds, colored by its variance from plan.</p>
+    </section>
+    <section class="panel">
+      <div class="tablehead"><h2>Accounts by month</h2></div>
+      <p class="muted small" id="spGridNote"></p>
+      <div class="tablewrap"><table class="grid spgrid" id="tSpend"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+    </section>
   </section>
+
+  <!-- ================= AFTPs ================= -->
   <section class="page" id="page-aftp" hidden aria-label="AFTPs">
-    <div class="pagehead"><div><h1><span class="pic t-aftp"><svg class="ic"><use href="#i-heli"/></svg></span>AFTPs</h1></div><button class="btn ghost" type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg>Home</button></div>
-    <div class="soon"><svg class="ic huge"><use href="#i-heli"/></svg><h2>Coming soon</h2><p>AFTP tracking will be added in the next update.</p></div>
+    <div class="pagehead">
+      <div><h1><span class="pic t-aftp"><svg class="ic"><use href="#i-heli"/></svg></span>AFTPs</h1>
+      <div class="asofp" id="asof-aftp"></div><div class="scope" id="afScope">&nbsp;</div></div>
+      <button class="btn ghost" type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg>Home</button>
+    </div>
+    <div class="nodata" data-nodata="aftp" hidden>No AFTP data loaded.</div>
+    <div id="afList">
+      <div class="filters" role="group" aria-label="AFTP filters">
+        <label>Fiscal Year<select id="afFy"></select></label>
+        <label>Rank<select id="afRank"></select></label>
+        <label>Soldiers<select id="afStatus"><option value="">All soldiers</option><option value="unpaid">With unpaid AFTPs</option><option value="paid">Fully paid</option></select></label>
+        <button class="btn ghost" id="afReset" type="button">Reset</button>
+      </div>
+      <section class="kpis" id="afKpis" aria-label="AFTP totals"></section>
+      <div class="row r2">
+        <section class="panel"><h2>Outstanding by soldier (top 10)</h2><div class="chartbox" id="afTopBox"><canvas id="cAfTop"></canvas></div><p class="muted small" id="afTopNote"></p></section>
+        <section class="panel"><h2>Paid vs unpaid by month</h2><div class="chartbox"><canvas id="cAfMon"></canvas></div><p class="muted small">AFTPs by the month they were performed (fiscal year starts in October).</p></section>
+      </div>
+      <section class="panel">
+        <div class="tablehead"><h2>Soldiers</h2><div class="tabletools"><input type="search" id="afSearch" placeholder="Search name or rank&hellip;" aria-label="Search soldiers" autocomplete="off"><button class="btn ghost sm" id="afCsv" type="button">Export CSV</button></div></div>
+        <p class="muted small">Click a column header to sort; click a soldier for every AFTP date. <span class="searchnote" id="afNote"></span></p>
+        <div class="tablewrap scrolly"><table class="grid aftp" id="tAftp"><thead></thead><tbody></tbody></table></div>
+      </section>
+    </div>
+    <div id="afDetail" hidden>
+      <div class="dhead2"><button class="btn ghost" id="afBack" type="button">&lsaquo; All soldiers</button><div><h2 id="afDName"></h2><div class="muted small" id="afDSub"></div></div></div>
+      <section class="kpis k4" id="afDKpis" aria-label="Soldier totals"></section>
+      <section class="panel">
+        <h2>AFTP dates</h2>
+        <div class="tablewrap"><table class="grid aftp" id="tAfDetail"><thead><tr><th class="num">#</th><th>AFTP date</th><th>Fiscal month</th><th>Status</th><th class="num">Amount</th><th>Paid date</th><th class="num">Days</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>
+        <p class="muted small">Unpaid: days since the AFTP (amber up to 60, red after). Paid: days from the AFTP to payment.</p>
+      </section>
+    </div>
   </section>
 </main>
 
@@ -223,6 +280,8 @@
   <details class="dsec" id="dSof"><summary>Status of Funds</summary><div class="loadreport" id="loadReport"></div></details>
   <details class="dsec" id="dPr"><summary>PR Tracker</summary><div class="loadreport" id="prReport"></div></details>
   <details class="dsec" id="dFuel"><summary>Fuel</summary><div class="loadreport" id="fuReport"></div></details>
+  <details class="dsec" id="dSpend"><summary>Spend Plans</summary><div class="loadreport" id="spReport"></div></details>
+  <details class="dsec" id="dAftp"><summary>AFTPs</summary><div class="loadreport" id="afReport"></div></details>
   <details class="dsec"><summary>Blank templates</summary>
     <div class="tmpl">
       <a class="btn ghost sm" href="pr_template.xlsx" download>PR file (L1&ndash;L4)</a>
@@ -233,6 +292,7 @@
       <a class="btn ghost sm" href="accountkey_template.xlsx" download>Account Key</a>
       <a class="btn ghost sm" href="cikey_template.xlsx" download>Commitment Item Key</a>
       <a class="btn ghost sm" href="spendplan_template.xlsx" download>Spend plan</a>
+      <a class="btn ghost sm" href="spendplan_monthly_template.xlsx" download>Spend plan (monthly, Spend Plans page)</a>
     </div>
   </details>
   <details class="dsec"><summary>How the numbers are calculated</summary>
@@ -258,6 +318,17 @@
         <li>A PR found in more than one level file is shown once, at the highest level.</li>
         <li>Cardholder Key (optional): an Excel file with a Cardholder column (first.middle.last, first.last@domain or First Last), an optional Display Name and an optional Type (WHST or Safety). When it is loaded, only PRs of those cardholders are shown anywhere in the dashboard; the rest are left out. Names match on first and last name, ignoring case and middle names. With Type filled in, the PR page and Home split WHST and Safety; key rows with a blank or other Type are Unassigned and left out (counted here). Without a key, every cardholder is shown.</li>
       </ul>
+      <h4>Spend Plans</h4>
+      <ul>
+        <li>Planned = the spend plan by Account and fiscal month (October = 1). An optional monthly plan (Account, Fiscal Year, Month 1&ndash;12) loaded here is used instead of the Status of Funds spend plan.</li>
+        <li>Actual = Total Expenditure per Account and fiscal month, counted exactly as on Status of Funds (sign-flipped, Account Key). Each line's cumulative-to-date amount counts once, in its fiscal month; Cumulative is the running total from October, so September equals the year's Total Expenditure. Actuals show only through the latest month that has lines.</li>
+        <li>Variance % = (Actual &minus; Planned) &divide; Planned. Up to &plusmn;5% is green, over 5% up to 10% yellow, over 10% red. An account is off plan when its to-date variance is outside &plusmn;5%.</li>
+      </ul>
+      <h4>AFTPs (layout preview)</h4>
+      <ul>
+        <li>Shown on fictional demo soldiers; the AFTP report upload is coming soon. Per soldier: AFTPs used, paid, unpaid and the dollars still outstanding (unpaid AFTPs &times; their pay).</li>
+        <li>Unpaid AFTPs are amber while the oldest is up to 60 days old and red after that.</li>
+      </ul>
       <h4>Fuel</h4>
       <ul>
         <li>Each tracker's budget is cell B1; the table header (Date, Milstrip Number, Gallons, Total Cost) is found near row 13. Blank rows and total rows are ignored.</li>
@@ -281,6 +352,8 @@
 <script src="sof.js"></script>
 <script src="pr.js"></script>
 <script src="fuel.js"></script>
+<script src="spend.js"></script>
+<script src="aftp.js"></script>
 <script src="home.js"></script>
 </body>
 </html>

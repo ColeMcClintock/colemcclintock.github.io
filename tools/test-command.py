@@ -22,6 +22,9 @@ def check(ok, label):
     print(("  PASS " if ok else "  FAIL ") + label)
     if not ok: FAILS.append(label)
 def money(v): return f"${v:,.2f}"
+def K_money(v):                                              # DashKit.money
+    a, s = abs(v), "-" if v < 0 else ""
+    return s + (f"${a/1e9:.2f}B" if a >= 1e9 else f"${a/1e6:.2f}M" if a >= 1e6 else f"${a/1e3:.0f}K" if a >= 1e3 else f"${a:.0f}")
 
 tmp = tempfile.mkdtemp(prefix="cmd-test-")
 def xlsx(path, rows, sheet="Sheet1"):
@@ -46,7 +49,17 @@ TDP, RES = 500000.0, 2500.0
 fund_x = xlsx(os.path.join(tmp, "Funding.xlsx"), [["Fiscal Year", "Account", "TDP", "AFP", "Reservations"], ["FY26", "Aviation", TDP, 400000.0, RES]])
 key_x = xlsx(os.path.join(tmp, "Account Key.xlsx"), [["Functional Area", "Account", "Sag", "MDEP"], ["121G11ABCD", "Aviation", "1N", "TATM"], ["131G21TRNG", "Aviation", "1N", "TATM"]])
 ci_x = xlsx(os.path.join(tmp, "CI Key.xlsx"), [["Commitment Item", "Description"], ["21T0", "Travel"], ["26FF", "Fuel"], ["252G", "Contract Services"]])
-BAL = round(TDP - OBL - DISB, 2)                            # Aviation dashboard: no Reservations (the column in the test file is ignored)
+BAL = round(TDP - OBL - DISB, 2)
+# Spend Plans: actual Total Expenditure per fiscal month of the fixture (Aviation only), and a monthly plan that puts each month
+# at a chosen variance: 4.9% green, 7% yellow, 12% red, both signs
+ACT = [0.0] * 12
+for i, r in enumerate(ex_rows):
+    if r[2] != "ALLOBJ": ACT[r[6] - 1] += -r[9]
+ACT = [round(a, 2) for a in ACT]
+VAR = [0.049, -0.049, 0.07, -0.07, 0.12, -0.12, 0.0, 0.03, -0.09, 0.2, 0.0, 0.01]
+VCLS = ["g", "g", "y", "y", "r", "r", "g", "g", "y", "r", "g", "g"]
+PLAN = [round(a / (1 + v), 2) for a, v in zip(ACT, VAR)]
+plan12_x = xlsx(os.path.join(tmp, "Monthly Spend Plan.xlsx"), [["Account", "Fiscal Year"] + [f"Month {m}" for m in range(1, 13)], ["Aviation", "FY26"] + PLAN])                            # Aviation dashboard: no Reservations (the column in the test file is ignored)
 
 # ---- PR files ----
 PRH = ["Purchase requisition", "Item", "Cardholder Name", "Plant", "Merchant / Description", "Short Text", "Qty", "Total Value", "SSN", "Created By"]
@@ -131,6 +144,82 @@ def run():
         check("Travel (example)" in pg.inner_text("#fCi"), "hosted SOF: commitment item descriptions")
         check(sorted(pg.evaluate("Array.prototype.map.call(document.querySelectorAll('#fAcct option'),function(o){return o.value}).filter(Boolean)").__iter__()) == sorted(["Aviation", "Fuel", "Parts", "Safety", pg.evaluate("FundsLib.UNMAPPED")]) and FD["accountNames"] == ["Aviation", "Fuel", "Parts", "Safety"], "hosted SOF: demo accounts are Aviation, Fuel, Parts and Safety")
         if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "command-sof.png"), full_page=True)
+        # ---------- Spend Plans (hosted demo) ----------
+        go(pg, "spend")
+        check(pg.is_visible("#page-spend") and pg.locator("#spKpis .kpi").count() == 4 and all(t in pg.inner_text("#spKpis").upper() for t in ["PLANNED TO DATE", "ACTUAL TO DATE", "VARIANCE TO DATE", "ACCOUNTS OFF PLAN"]), "hosted spend: four KPIs")
+        cls = pg.evaluate("[0.049,-0.049,0.07,-0.07,0.12,-0.12,0.05,-0.05,0.1,-0.1,0.1001,0,null].map(CMD.varClass)")
+        check(cls == ["g", "g", "y", "y", "r", "r", "g", "g", "y", "y", "r", "g", "na"], "spend: variance colors 4.9% green, 7% yellow, 12% red (both signs; 5% and 10% boundaries) " + str(cls))
+        check(pg.evaluate("CMD.varPct(107,100)") == 0.07 and pg.evaluate("CMD.varText(-0.12)") == "\u221212.0%", "spend: variance % = (actual - planned) / planned")
+        sfy = pg.evaluate("CMD.mods.sof.summary().fy")
+        check(pg.input_value("#spFy") == sfy, "hosted spend: opens on the same fiscal year as Status of Funds (FY" + sfy + ")")
+        M = pg.evaluate("(function(){var m=CMD.mods.spend.model();return {last:m.last,list:m.list.map(function(x){return [x.label,x.planned,x.a.reduce(function(s,v){return s+v},0),x.p]}),nm:m.noMonth}})()")
+        check([x[0] for x in M["list"] if x[1]] == ["Aviation", "Fuel", "Parts", "Safety"], "hosted spend: planned accounts Aviation, Fuel, Parts, Safety")
+        act = sum(x[2] for x in M["list"]); nm = (M["nm"] or {"te": 0})["te"]
+        check(abs(act + nm - pg.evaluate("CMD.mods.sof.summary().te")) < 0.05, f"spend: actuals reconcile to SOF Total Expenditure ({act:,.2f} by month + {nm:,.2f} without a month)")
+        sofacc = pg.evaluate(f"(function(){{var S=CMD.mods.sof._state,o={{}};S.recs.forEach(function(r){{if(r.fy==={json.dumps(sfy)}&&r.fmn){{o[r.acctL]=(o[r.acctL]||0)+(+r.com||0)}}}});return o}})()")
+        check(all(abs(sofacc.get(x[0], 0) - x[2]) < 0.05 for x in M["list"]), "spend: each account's actuals = its SOF Total Expenditure")
+        chips = pg.evaluate("Array.prototype.map.call(document.querySelectorAll('#tSpend tbody td.vc .vchip'),function(c){return [c.className.split(' ')[1],c.textContent]})")
+        def cls_of(t):
+            v = abs(float(t.replace("\u2212", "-").replace("+", "").rstrip("%"))) / 100
+            return "g" if v <= 0.05 else "y" if v <= 0.10 else "r"
+        okc = [c for c in chips if c[0] in "gyr"]
+        check(len(okc) > 20 and all(cls_of(t) == c for c, t in okc) and {c for c, t in okc} >= {"g", "y", "r"}, "hosted spend: grid chips colored by |variance| (green, yellow and red all present)")
+        kv = pg.inner_text("#spKpis .kpi:nth-child(3) .val"); kc = pg.get_attribute("#spKpis .kpi:nth-child(3) .vtxt", "class")
+        check(kc.split()[-1] == cls_of(kv), "hosted spend: variance KPI colored " + kv)
+        bars = pg.evaluate("DashKit.charts.cSpend.data.datasets[1].backgroundColor")
+        check(len(bars) == 12 and set(bars) <= {"#16a34a", "#eab308", "#dc2626", "#94a3b8"}, "hosted spend: chart actual bars colored by variance")
+        pg.click("#spMode button[data-m=cum]"); pg.wait_for_timeout(400)
+        cumA = pg.evaluate("DashKit.charts.cSpend.data.datasets[1].data")
+        check(pg.evaluate("DashKit.charts.cSpend.config.type") == "line" and abs(cumA[M["last"] - 1] - act) < 0.05, "hosted spend: Cumulative toggle (last month = year to date)")
+        pg.click("#spMode button[data-m=month]"); pg.wait_for_timeout(300)
+        pg.click('#tSpend [data-acct="Fuel"]'); pg.wait_for_timeout(400)
+        fuelP = [x for x in M["list"] if x[0] == "Fuel"][0][3]
+        check(pg.input_value("#spAcct") == "Fuel" and pg.locator("#tSpend tbody tr").count() == 1 and K_money(sum(fuelP[:M["last"]])) in pg.inner_text("#spKpis .kpi:nth-child(1)"), "hosted spend: clicking an account filters the page")
+        if SHOTS: pg.click("#spReset"); pg.wait_for_timeout(500); pg.screenshot(path=os.path.join(SHOTS, "command-spend.png"), full_page=True)
+        later = [y for y in pg.evaluate("Array.prototype.map.call(document.querySelectorAll('#spFy option'),function(o){return o.value})") if y > sfy]
+        if later:
+            pg.select_option("#spFy", later[-1]); pg.wait_for_timeout(400)
+            lm = pg.evaluate("CMD.mods.spend.model().last"); dA = pg.evaluate("DashKit.charts.cSpend.data.datasets[1].data")
+            check(lm < 12 and all(v is None for v in dA[lm:]) and pg.locator("#tSpend tbody td.vc.fut").count() > 0, f"hosted spend: FY{later[-1]} shows actuals only through month {lm}")
+            pg.click("#spReset"); pg.wait_for_timeout(300)
+
+        # ---------- AFTPs (hosted demo) ----------
+        go(pg, "aftp")
+        A = E["aftp"]; kt_ = pg.inner_text("#afKpis")
+        check(pg.locator("#afKpis .kpi").count() == 5 and f"{A['used']}" in kt_ and money(A["outstanding"]) in kt_, "hosted AFTP: KPIs used / paid / unpaid / outstanding / soldiers with unpaid")
+        tot_ = pg.evaluate("CMD.mods.aftp._state.total"); who = pg.evaluate("CMD.mods.aftp._state.who")
+        check(tot_["used"] == A["used"] and tot_["paid"] == A["paid"] and tot_["unpaid"] == A["unpaid"] and abs(tot_["out"] - A["outstanding"]) < 0.01 and who == A["soldiersUnpaid"], "hosted AFTP: totals match the generator " + json.dumps(A))
+        check(pg.locator("#tAftp tbody tr").count() == A["soldiers"] and A["soldiers"] >= 24, "hosted AFTP: one row per soldier")
+        ranks = set(pg.evaluate("CMD.mods.aftp._state.soldiers.map(function(s){return s.rank})"))
+        check(ranks == {"PV2", "SPC", "SGT", "SSG", "SFC", "WO1", "CW2", "CW3", "1LT", "CPT", "MAJ"}, "hosted AFTP: ranks PV2 .. MAJ")
+        check(pg.locator("#tAftp tbody tr.amber, #tAftp tbody tr.red").count() == A["soldiersUnpaid"] and pg.locator("#tAftp .upill").count() == A["soldiersUnpaid"], "hosted AFTP: soldiers with unpaid AFTPs highlighted")
+        outs = [float(t.replace("$", "").replace(",", "")) if t.startswith("$") else 0 for t in pg.evaluate("Array.prototype.map.call(document.querySelectorAll('#tAftp tbody tr'),function(r){return r.cells[5].textContent})")]
+        check(outs == sorted(outs, reverse=True) and outs[0] > 0, "hosted AFTP: default sort puts the most outstanding first")
+        pg.click("#tAftp th[data-k=used]"); pg.wait_for_timeout(200)
+        used = pg.evaluate("Array.prototype.map.call(document.querySelectorAll('#tAftp tbody tr'),function(r){return +r.cells[2].textContent})")
+        check(used == sorted(used, reverse=True), "hosted AFTP: sortable (AFTPs used)")
+        pg.fill("#afSearch", "tango"); pg.wait_for_timeout(300)
+        check(pg.locator("#tAftp tbody tr").count() == 1 and "Tango" in pg.inner_text("#tAftp tbody"), "hosted AFTP: searchable")
+        pg.fill("#afSearch", ""); pg.wait_for_timeout(300)
+        if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "command-aftp.png"), full_page=True)
+        sid = pg.get_attribute("#tAftp tbody tr.red, #tAftp tbody tr.amber", "data-sid")
+        mine = pg.evaluate(f"CMD.mods.aftp._state.aftps.filter(function(a){{return a.sid==={json.dumps(sid)}}}).map(function(a){{return [a.paid,a.amount]}})")
+        pg.click(f'#tAftp tbody tr[data-sid="{sid}"]'); pg.wait_for_timeout(600)
+        dt_ = pg.inner_text("#tAfDetail tbody"); nun = sum(1 for x in mine if not x[0])
+        check(pg.evaluate("location.hash") == "#/aftp/" + sid and pg.is_visible("#afDetail") and pg.is_hidden("#afList"), "AFTP drill-down: clicking a soldier opens the detail view (#/aftp/" + sid + ")")
+        check(pg.locator("#tAfDetail tbody tr").count() == len(mine) and dt_.count("Unpaid") == nun and dt_.count("Paid") == len(mine) - nun and dt_.count("days outstanding") == nun, f"AFTP drill-down: every AFTP date with Paid/Unpaid ({len(mine)} AFTPs, {nun} unpaid) and days outstanding")
+        check(money(round(sum(a for p_, a in mine if not p_), 2)) in pg.inner_text("#afDKpis") and re.search(r"\d\d [A-Z][a-z]{2} 20\d\d", dt_), "AFTP drill-down: outstanding $, amounts and paid dates")
+        if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "command-aftp-detail.png"), full_page=True)
+        pg.click("#afBack"); pg.wait_for_timeout(500)
+        check(pg.evaluate("location.hash") == "#/aftp" and pg.is_visible("#afList") and pg.is_hidden("#afDetail"), "AFTP drill-down: back button returns to the soldier list")
+        pg.go_back(); pg.wait_for_timeout(500); check(pg.is_visible("#afDetail"), "AFTP drill-down: browser Back reopens the soldier")
+        go(pg, "aftp")
+        snap = pg.evaluate("(function(){var m=CMD.mods.aftp,s=m.snapshot();m.clear();m.restore(JSON.parse(JSON.stringify(s)));m.dirty=true;return [m._state.aftps.length,m.summary().out]})()")
+        check(snap[0] == A["used"] and abs(snap[1] - A["outstanding"]) < 0.01, "AFTP: save/restore keeps the data")
+        go(pg, "home")
+        check("Variance" in pg.inner_text("#tsSpend") and f"{A['unpaid']} unpaid" in pg.inner_text("#tsAftp") and "PLANNED TO DATE" in pg.inner_text("#oSpend").upper() and "MOST OUTSTANDING" in pg.inner_text("#oAftp").upper(), "hosted home: Spend Plans and AFTPs tiles and overview cards")
+        if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "command-home.png"), full_page=True)
+        go(pg, "sof")
         go(pg, "pr")
         check(pg.is_visible("#prType") and pg.is_visible("#prTypes") and "TYPE" in pg.inner_text("#tPr thead").upper(), "hosted PR: type filter, WHST/Safety panel, Type column")
         if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "command-pr.png"), full_page=True)
@@ -255,6 +344,32 @@ def run():
         check("6 rows read" in pt and "3 PR rows left out because the cardholder is not in the key" in pt and "1 key row Unassigned" in pt and "1 PR row from them left out" in pt, "drawer: key row count and left-out counts")
         check(not re.search(r"Oneil|McDonald|Robert Smith|o'brien|pat\.", pt, re.I), "drawer: no names of left-out cardholders")
         check("Cardholder Key" in pg.text_content("#tFiles"), "drawer: key file routed to the PR Tracker")
+        # ---------- Spend Plans (single file): optional monthly plan; variance colors in grid, KPI and chart ----------
+        dopen = pg.is_visible("#drawer")
+        if dopen: pg.click("#btnClose"); pg.wait_for_timeout(200)
+        go(pg, "spend")
+        check(pg.is_visible("#page-spend") and "No spend plan loaded" in pg.text_content("#spReport"), "single spend: actuals from SOF, no plan yet")
+        pg.set_input_files("#fileInput", [plan12_x]); pg.wait_for_timeout(1500)
+        check("Monthly spend plan" in pg.text_content("#tFiles") and pg.evaluate("CMD.mods.spend._state.own.rows.length") == 12, "single spend: monthly plan template (Account, Fiscal Year, Month 1..12) read")
+        m_ = pg.evaluate("(function(){var m=CMD.mods.spend.model();return m.list.map(function(x){return [x.label,x.a,x.p]})})()")
+        check(len(m_) == 1 and m_[0][0] == "Aviation" and all(abs(a - b) < 0.01 for a, b in zip(m_[0][1], ACT)) and abs(sum(ACT) - TE) < 0.05, "single spend: monthly actuals reconcile to SOF Total Expenditure")
+        cells = pg.evaluate("Array.prototype.map.call(document.querySelectorAll('#tSpend tbody tr:first-child td.vc'),function(td){return td.className.replace('vc','').trim()})")
+        check(cells[:12] == VCLS, "single spend: grid cells 4.9% green, 7% yellow, 12% red, also negative " + str(cells[:12]))
+        chipsT = pg.evaluate("Array.prototype.map.call(document.querySelectorAll('#tSpend tbody tr:first-child td.vc .vchip'),function(c){return c.textContent})")[:6]
+        check(chipsT == ["+4.9%", "\u22124.9%", "+7.0%", "\u22127.0%", "+12.0%", "\u221212.0%"], "single spend: chips show the variance " + str(chipsT))
+        bars = pg.evaluate("DashKit.charts.cSpend.data.datasets[1].backgroundColor")
+        col = {"g": "#16a34a", "y": "#eab308", "r": "#dc2626"}
+        check(bars == [col[c] for c in VCLS], "single spend: chart markers colored by variance")
+        tdv = (sum(ACT) - sum(PLAN)) / sum(PLAN); want = "g" if abs(tdv) <= 0.05 else "y" if abs(tdv) <= 0.1 else "r"
+        check(want in pg.get_attribute("#spKpis .kpi:nth-child(3) .vtxt", "class") and pg.inner_text("#spKpis .kpi:nth-child(4) .val").startswith("1" if want != "g" else "0"), "single spend: variance KPI and accounts off plan")
+        pg.click("#spMode button[data-m=cum]"); pg.wait_for_timeout(300)
+        cumc = pg.evaluate("Array.prototype.map.call(document.querySelectorAll('#tSpend tbody tr:first-child td.vc'),function(td){return td.className.replace('vc','').trim()})")[0:2]
+        check(cumc[0] == "g" and pg.evaluate("DashKit.charts.cSpend.data.datasets[1].data[11]") == round(sum(ACT), 2), "single spend: cumulative view")
+        pg.click("#spMode button[data-m=month]"); pg.wait_for_timeout(200)
+        go(pg, "aftp")
+        check(pg.is_visible('[data-nodata="aftp"]') and pg.evaluate("CMD.mods.aftp.hasData()") is False and "coming soon" in pg.text_content("#afReport"), "single AFTP: no data and no upload yet (quiet drawer note)")
+        go(pg, "home")
+        if dopen: pg.click("#btnInfo"); pg.wait_for_timeout(300)
         with pg.expect_download() as dl: pg.click("#btnSave")
         saved = os.path.join(tmp, dl.value.suggested_filename); dl.value.save_as(saved)
         check(re.match(r"Aviation-Dashboard-\d\d[A-Z][a-z]{2}\d\d\.html$", dl.value.suggested_filename) is not None, "save: dated file name " + dl.value.suggested_filename)
@@ -294,6 +409,7 @@ def run():
         check(pg.evaluate("CMD.mods.pr._state.ks.notInKey") == 3, "saved + new L4: left-out count kept")
         check(L4n == 2 and today in pg.inner_text("#asof-pr"), "saved: new L4 replaces the old one; PR date updated")
         check(pg.evaluate("CMD.mods.fuel._state.aasfs.length") == 2, "saved: other pages kept after an upload")
+        check(pg.evaluate("CMD.mods.spend._state.own && CMD.mods.spend._state.own.rows.length") == 12, "saved: monthly spend plan kept")
         with pg.expect_download() as dl: pg.click("#btnInfo"); pg.click("#btnSave")
         saved2 = os.path.join(tmp, "second.html"); dl.value.save_as(saved2)
         pg.close()

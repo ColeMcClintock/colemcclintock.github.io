@@ -471,8 +471,25 @@
     return { fy: fy, te: t, lines: rows.length, tdp: j ? j.totals.tdp : null, afp: j ? j.totals.afp : null, bal: j ? r2(j.totals.tdp - t) : null, elapsed: el, pct: j && j.totals.tdp ? t / j.totals.tdp : null, top: acc.slice(0, 5) };
   }
 
+  // ---------- feed for the Spend Plans page: Total Expenditure per account and fiscal month, exactly as this page counts it
+  // (sign-flipped, ALLOBJ rows removed, Functional Area -> Account through the Account Key). Each line's cumulative-to-date
+  // amount is counted once, in its own fiscal month, so a year's months add up to the year's Total Expenditure.
+  function feed() {
+    var act = [], nm = {};
+    S.recs.forEach(function (r) {
+      if (!r.fy) return;
+      if (!r.fmn) { var x = nm[r.fy] = nm[r.fy] || { lines: 0, te: 0 }; x.lines++; x.te = r2(x.te + te(r)); return; }
+      act.push({ fy: r.fy, acct: r.acctL || L.UNMAPPED, fm: r.fmn, te: te(r) });
+    });
+    var plan = S.plan ? S.plan.rows.filter(function (r) { return r.fm && r.amt != null && !isNaN(r.amt); }).map(function (r) {
+      return { fy: r.fy || "", acct: r.acct || L.acctOf(r.fa) || r.fa || L.UNMAPPED, fm: +r.fm, amt: n(r.amt) };
+    }) : [];
+    return { actual: act, noMonth: nm, plan: plan, planFiles: S.plan ? S.plan.files : [], fy: autoFy() };
+  }
+
   // ---------- page registration ----------
   C.register("sof", {
+    feed: feed,
     classify: function (src) { var c = L.classify(src, ALIAS); return c.kind ? c : null; },
     parse: function (kind, src, fname, ws, name) { return mkEntry(name, kind, parseAs(kind, src)); },
     ingest: ingest, clear: clear, demo: demo, snapshot: snapshot, restore: restore, report: report, render: render,
