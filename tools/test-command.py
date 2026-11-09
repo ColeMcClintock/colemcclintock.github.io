@@ -150,14 +150,31 @@ def run():
         cls = pg.evaluate("[0.049,-0.049,0.07,-0.07,0.12,-0.12,0.05,-0.05,0.1,-0.1,0.1001,0,null].map(CMD.varClass)")
         check(cls == ["g", "g", "y", "y", "r", "r", "g", "g", "y", "y", "r", "g", "na"], "spend: variance colors 4.9% green, 7% yellow, 12% red (both signs; 5% and 10% boundaries) " + str(cls))
         check(pg.evaluate("CMD.varPct(107,100)") == 0.07 and pg.evaluate("CMD.varText(-0.12)") == "\u221212.0%", "spend: variance % = (actual - planned) / planned")
-        sfy = pg.evaluate("CMD.mods.sof.summary().fy")
-        check(pg.input_value("#spFy") == sfy, "hosted spend: opens on the same fiscal year as Status of Funds (FY" + sfy + ")")
-        M = pg.evaluate("(function(){var m=CMD.mods.spend.model();return {last:m.last,list:m.list.map(function(x){return [x.label,x.planned,x.a.reduce(function(s,v){return s+v},0),x.p]}),nm:m.noMonth}})()")
+        sfy = pg.evaluate("CMD.mods.sof.summary().fy"); curfy = str(fy)
+        check(sfy == curfy and pg.input_value("#spFy") == curfy, "hosted: SOF and Spend Plans open on the current fiscal year (FY" + curfy + ") when it has data")
+        def spend_model(): return pg.evaluate("(function(){var m=CMD.mods.spend.model();return {last:m.last,list:m.list.map(function(x){return [x.label,x.planned,x.a.reduce(function(s,v){return s+v},0),x.p]}),nm:m.noMonth}})()")
+        def sof_by_acct(y): return pg.evaluate(f"(function(){{var S=CMD.mods.sof._state,o={{}};S.recs.forEach(function(r){{if(r.fy==={json.dumps(y)}&&r.fmn){{o[r.acctL]=(o[r.acctL]||0)+(+r.com||0)}}}});return o}})()")
+        def sof_te(y): return pg.evaluate(f"CMD.mods.sof._state.recs.filter(function(r){{return r.fy==={json.dumps(y)}}}).reduce(function(t,r){{return t+(+r.com||0)}},0)")
+        M = spend_model()
         check([x[0] for x in M["list"] if x[1]] == ["Aviation", "Fuel", "Parts", "Safety"], "hosted spend: planned accounts Aviation, Fuel, Parts, Safety")
         act = sum(x[2] for x in M["list"]); nm = (M["nm"] or {"te": 0})["te"]
-        check(abs(act + nm - pg.evaluate("CMD.mods.sof.summary().te")) < 0.05, f"spend: actuals reconcile to SOF Total Expenditure ({act:,.2f} by month + {nm:,.2f} without a month)")
-        sofacc = pg.evaluate(f"(function(){{var S=CMD.mods.sof._state,o={{}};S.recs.forEach(function(r){{if(r.fy==={json.dumps(sfy)}&&r.fmn){{o[r.acctL]=(o[r.acctL]||0)+(+r.com||0)}}}});return o}})()")
+        check(abs(act + nm - pg.evaluate("CMD.mods.sof.summary().te")) < 0.05, f"spend: FY{curfy} actuals reconcile to SOF Total Expenditure ({act:,.2f} by month + {nm:,.2f} without a month)")
+        dA = pg.evaluate("DashKit.charts.cSpend.data.datasets[1].data")
+        check(M["last"] < 12 and all(v is None for v in dA[M["last"]:]) and pg.locator("#tSpend tbody td.vc.fut").count() > 0, f"hosted spend: FY{curfy} shows actuals only through month {M['last']}")
+        sfy = str(int(curfy) - 1)                                  # a full year for the color / toggle checks
+        pg.select_option("#spFy", sfy); pg.wait_for_timeout(400)
+        M = spend_model(); act = sum(x[2] for x in M["list"]); nm = (M["nm"] or {"te": 0})["te"]
+        check(abs(act + nm - sof_te(sfy)) < 0.05, f"spend: FY{sfy} actuals reconcile to SOF Total Expenditure ({act:,.2f} by month + {nm:,.2f} without a month)")
+        sofacc = sof_by_acct(sfy)
         check(all(abs(sofacc.get(x[0], 0) - x[2]) < 0.05 for x in M["list"]), "spend: each account's actuals = its SOF Total Expenditure")
+        # an uploaded plan without a Fiscal Year belongs to the current fiscal year
+        fyA = pg.evaluate("""(function(){function src(g){return {rows:g.length,cols:g[0].length,get:function(r,c){return g[r][c]}}}
+          var a=CMD.mods.spend.parse('plan12',src([['Account','Month 1','Month 2','Month 3','Month 4','Month 5','Month 6'],['Aviation',1,2,3,4,5,6]]),'x','','x.xlsx');
+          var b=CMD.mods.spend.parse('plan12',src([['Account','Fiscal Year','Month 1','Month 2','Month 3','Month 4','Month 5','Month 6'],['Aviation','FY25',1,2,3,4,5,6]]),'x','','y.xlsx');
+          var c=CMD.mods.sof.parse('plan',src([['Account','Fiscal Month','Planned Amount'],['Aviation',1,100]]),'z','','z.xlsx');
+          var d=CMD.mods.sof.parse('plan',src([['Fiscal Year','Account','Fiscal Month','Planned Amount'],['FY25','Aviation',1,100]]),'w','','w.xlsx');
+          return [a.rows[0].fy,b.rows[0].fy,c.rows[0].fy,d.rows[0].fy,!!a.fatal]})()""")
+        check(fyA == [curfy, "2025", curfy, "2025", False], "spend plan without a Fiscal Year -> current FY (monthly template and SOF spend plan); an explicit year is kept " + str(fyA))
         chips = pg.evaluate("Array.prototype.map.call(document.querySelectorAll('#tSpend tbody td.vc .vchip'),function(c){return [c.className.split(' ')[1],c.textContent]})")
         def cls_of(t):
             v = abs(float(t.replace("\u2212", "-").replace("+", "").rstrip("%"))) / 100
@@ -175,13 +192,9 @@ def run():
         pg.click('#tSpend [data-acct="Fuel"]'); pg.wait_for_timeout(400)
         fuelP = [x for x in M["list"] if x[0] == "Fuel"][0][3]
         check(pg.input_value("#spAcct") == "Fuel" and pg.locator("#tSpend tbody tr").count() == 1 and K_money(sum(fuelP[:M["last"]])) in pg.inner_text("#spKpis .kpi:nth-child(1)"), "hosted spend: clicking an account filters the page")
-        if SHOTS: pg.click("#spReset"); pg.wait_for_timeout(500); pg.screenshot(path=os.path.join(SHOTS, "command-spend.png"), full_page=True)
-        later = [y for y in pg.evaluate("Array.prototype.map.call(document.querySelectorAll('#spFy option'),function(o){return o.value})") if y > sfy]
-        if later:
-            pg.select_option("#spFy", later[-1]); pg.wait_for_timeout(400)
-            lm = pg.evaluate("CMD.mods.spend.model().last"); dA = pg.evaluate("DashKit.charts.cSpend.data.datasets[1].data")
-            check(lm < 12 and all(v is None for v in dA[lm:]) and pg.locator("#tSpend tbody td.vc.fut").count() > 0, f"hosted spend: FY{later[-1]} shows actuals only through month {lm}")
-            pg.click("#spReset"); pg.wait_for_timeout(300)
+        pg.click("#spReset"); pg.wait_for_timeout(500)
+        check(pg.input_value("#spFy") == curfy, "hosted spend: Reset returns to the current fiscal year")
+        if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "command-spend.png"), full_page=True)
 
         # ---------- AFTPs (hosted demo) ----------
         go(pg, "aftp")

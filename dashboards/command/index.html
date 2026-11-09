@@ -308,7 +308,7 @@
         <li>Total Expenditure (commitment_amt_cum) and Disbursement (disbursement_amt_cum) are the export's cumulative amounts, sign-flipped (&times; &minus;1) because the export carries them negative. A funds export needs both columns.</li>
         <li>Obligation is calculated: Obligation = Total Expenditure &minus; Disbursement (on the raw export: disbursement &minus; commitment). obligation_amt_cum is not read. Spent = Obligation + Disbursement = Total Expenditure.</li>
         <li>TDP and AFP come only from the funding file (Fiscal Year, Account, TDP, AFP), per Account. Functional Areas roll up to Accounts (with their Sag and MDEP) through the Account Key. Commitment items sharing a description in the Commitment Item Key are added together.</li>
-        <li>Balance = TDP &minus; Total Expenditure (= TDP &minus; Obligation &minus; Disbursement). Straight-line pace = TDP &times; fiscal month &divide; 12 (October = 1). The page opens on the current fiscal year once it has two months of lines, otherwise the latest earlier year.</li>
+        <li>Balance = TDP &minus; Total Expenditure (= TDP &minus; Obligation &minus; Disbursement). Straight-line pace = TDP &times; fiscal month &divide; 12 (October = 1). The page opens on the current fiscal year (1 October starts the next) whenever it has lines, otherwise the latest earlier year.</li>
         <li>Accounts: % expended = Total Expenditure &divide; TDP. Pace compares it with the share of the fiscal year elapsed (days since 1 October): within &plusmn;10% is on pace, above is over, below is under. Commitment items are measured by Total Expenditure.</li>
       </ul>
       <h4>PR Tracker</h4>
@@ -320,7 +320,7 @@
       </ul>
       <h4>Spend Plans</h4>
       <ul>
-        <li>Planned = the spend plan by Account and fiscal month (October = 1). An optional monthly plan (Account, Fiscal Year, Month 1&ndash;12) loaded here is used instead of the Status of Funds spend plan.</li>
+        <li>Planned = the spend plan by Account and fiscal month (October = 1). An optional monthly plan (Account, Fiscal Year, Month 1&ndash;12) loaded here is used instead of the Status of Funds spend plan. A spend plan is for the current fiscal year: rows without a Fiscal Year count for it (1 October starts the next), unless the file gives one. The page opens on the current fiscal year whenever it has a plan or actuals.</li>
         <li>Actual = Total Expenditure per Account and fiscal month, counted exactly as on Status of Funds (sign-flipped, Account Key). Each line's cumulative-to-date amount counts once, in its fiscal month; Cumulative is the running total from October, so September equals the year's Total Expenditure. Actuals show only through the latest month that has lines.</li>
         <li>Variance % = (Actual &minus; Planned) &divide; Planned. Up to &plusmn;5% is green, over 5% up to 10% yellow, over 10% red. An account is off plan when its to-date variance is outside &plusmn;5%.</li>
       </ul>

@@ -90,7 +90,14 @@
     else if (!r.amts.length) { r.fatal = "No TDP or AFP column was found."; p.rows = []; r.rowsLoaded = 0; }
     return p;
   }
-  function parseAs(kind, src, noFlip) { return kind === "funding" ? parseFunding(src) : kind === "plan" ? TR.parsePlan(src) : kind === "key" ? L.parseKey(src) : kind === "cikey" ? L.parseCiKey(src) : parseExport(src, noFlip); }
+  // the spend plan is always for the current fiscal year (1 October starts the next one) unless the file gives a Fiscal Year
+  function parsePlanCur(src) {
+    var res = TR.parsePlan(src), cur = C.currentFy(), k = 0;
+    res.rows.forEach(function (r) { if (!r.fy) { r.fy = cur; k++; } });
+    if (k) res.report.fyAssigned = { n: k, fy: cur };
+    return res;
+  }
+  function parseAs(kind, src, noFlip) { return kind === "funding" ? parseFunding(src) : kind === "plan" ? parsePlanCur(src) : kind === "key" ? L.parseKey(src) : kind === "cikey" ? L.parseCiKey(src) : parseExport(src, noFlip); }
   function derive(recs) {
     var ciLoaded = L.ciInfo().size > 0;
     recs.forEach(function (r) {
@@ -215,7 +222,7 @@
       : '<p class="ok">Commitment Item Key: ' + plural(L.ciInfo().size, "code") + " with descriptions.</p>" + (sh.length ? '<p class="muted">' + plural(sh.length, "description") + " shared by several codes, added together: " + sh.slice(0, 10).map(function (x) { return esc(x.desc) + " (" + esc(x.codes.join(", ")) + ")"; }).join("; ") + ".</p>" : "")
         + (ciList.length ? '<p class="warn">' + plural(ciList.length, "unmapped commitment item") + " shown as the raw code: " + codes(ciList.slice(0, 15)) + ".</p>" : "");
     if (ciList.length) warns++;
-    h.push('<div class="combined"><p class="ok"><strong>Combined: ' + plural(S.recs.length, "line") + " from " + plural(ex.length, "export file") + "</strong></p>" + fu.html + ci + (S.plan ? '<p class="ok">Spend plan: ' + plural(S.plan.rows.length, "row") + ".</p>" : '<p class="muted">No spend plan loaded (optional).</p>') + "</div>");
+    h.push('<div class="combined"><p class="ok"><strong>Combined: ' + plural(S.recs.length, "line") + " from " + plural(ex.length, "export file") + "</strong></p>" + fu.html + ci + (S.plan ? '<p class="ok">Spend plan: ' + plural(S.plan.rows.length, "row") + "." + S.files.filter(function (e) { return e.kind === "plan" && e.rep && e.rep.fyAssigned; }).map(function (e) { return " " + plural(e.rep.fyAssigned.n, "row") + " of " + esc(e.name) + " had no Fiscal Year and count for FY" + esc(e.rep.fyAssigned.fy) + " (the current fiscal year)."; }).join("") + "</p>" : '<p class="muted">No spend plan loaded (optional).</p>') + "</div>");
     return { html: h.join(""), warns: warns };
   }
 
@@ -244,11 +251,10 @@
   function docCount(rows) { var s = Object.create(null), c = 0; rows.forEach(function (r) { if (r.doc && !s[r.doc]) { s[r.doc] = 1; c++; } }); return c; }
   function te(r) { return n(r.com); }
   function r2(x) { return Math.round(x * 100) / 100; }
-  // the year the page opens on: current FY once it has 2 months of lines, else the latest earlier year
+  // the year the page opens on: the current fiscal year whenever it has lines, else the latest earlier year
   function autoFy() {
-    var years = K.uniq(S.recs.map(function (r) { return r.fy; }).filter(Boolean)).sort(), now = L.fiscalNow(new Date()), mby = {};
-    S.recs.forEach(function (r) { if (r.fy && r.fmn) { mby[r.fy] = mby[r.fy] || {}; mby[r.fy][r.fmn] = 1; } });
-    return years.indexOf(now.fy) >= 0 && Object.keys(mby[now.fy] || {}).length >= 2 ? now.fy : (years.filter(function (y) { return +y < +now.fy; }).pop() || years[years.length - 1] || "");
+    var years = K.uniq(S.recs.map(function (r) { return r.fy; }).filter(Boolean)).sort(), now = C.currentFy();
+    return years.indexOf(now) >= 0 ? now : (years.filter(function (y) { return +y < +now; }).pop() || years[years.length - 1] || "");
   }
   function scopeFy(f, rows) { if (f.fy && f.fy !== BLANK) return f.fy; var ys = K.uniq(rows.map(function (r) { return r.fy; }).filter(Boolean)); return ys.length === 1 ? ys[0] : ""; }
   function elapsedOf(fy) { return fy ? C.fyProgress(fy).pct : null; }

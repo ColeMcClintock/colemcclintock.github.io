@@ -74,7 +74,7 @@
     h = head("t-plan", "i-plan", "Spend Plans" + (spl ? " \u00b7 FY" + spl.fy : ""), C.mods.spend);
     if (!spl) h += '<div class="empty">No spend plan or Status of Funds lines loaded.</div>';
     else {
-      h += '<div class="big3">' + stat("Planned to date", K.money(spl.p), spl.last ? "Oct\u2013" + spl.month : "No actuals yet") + stat("Actual to date", K.money(spl.a), "Total Expenditure") +
+      h += '<div class="big3">' + stat("Planned to date", K.money(spl.p), spl.last ? (spl.last > 1 ? "Oct\u2013" : "") + spl.month : "No actuals yet") + stat("Actual to date", K.money(spl.a), "Total Expenditure") +
         stat("Variance", '<span class="vtxt ' + spl.k + '">' + C.varText(spl.v) + "</span>", plural(spl.off, "account") + " off plan (\u00b15%)") + "</div>";
       if (spl.accts.length) h += '<div class="hvar">' + spl.accts.slice(0, 8).map(function (a) { return '<div class="hv1"><div class="nm" title="' + esc(a.label) + '">' + esc(a.label) + '</div><span class="vchip ' + a.k + '">' + C.varText(a.v) + "</span></div>"; }).join("") + "</div>";
     }

@@ -47,10 +47,11 @@
     var h = headerRow(src), rows = [], blank = 0, bad = 0;
     var e = { name: name, kind: "plan12", kindLabel: "Monthly spend plan", count: 0, rows: rows };
     if (!h) { e.fatal = "Needs Account and Month 1 \u2026 Month 12 columns."; return e; }
-    if (h.map.fy == null) { e.fatal = "Needs a Fiscal Year column."; return e; }
+    var cur = C.currentFy(), assigned = 0;   // no Fiscal Year given: the plan is for the current fiscal year
     for (var r = h.row + 1; r < src.rows; r++) {
-      var acct = L.idText(src.get(r, h.map.acct)), fy = L.fyText(src.get(r, h.map.fy)), any = false;
+      var acct = L.idText(src.get(r, h.map.acct)), fy = h.map.fy == null ? "" : L.fyText(src.get(r, h.map.fy)), any = false;
       if (!acct && !fy) { blank++; continue; }
+      if (!fy) { fy = cur; assigned++; }
       for (var m = 1; m <= 12; m++) {
         if (h.map["m" + m] == null) continue;
         var v = src.get(r, h.map["m" + m]); if (L.blankish(v)) continue;
@@ -60,8 +61,8 @@
       if (any) e.count++;
     }
     if (!rows.length) e.fatal = "No planned amounts found.";
-    e.warns = bad ? 1 : 0;
-    e.status = plural(e.count, "plan row") + " (" + plural(rows.length, "month amount") + ")" + (bad ? " \u00b7 " + plural(bad, "unreadable amount") + " skipped" : "");
+    e.warns = bad ? 1 : 0; e.fyAssigned = assigned ? { n: assigned, fy: cur } : null;
+    e.status = plural(e.count, "plan row") + " (" + plural(rows.length, "month amount") + ")" + (assigned ? " \u00b7 " + plural(assigned, "row") + " without a Fiscal Year \u2192 FY" + cur + " (current)" : "") + (bad ? " \u00b7 " + plural(bad, "unreadable amount") + " skipped" : "");
     return e;
   }
   function ingest(list) {
@@ -81,6 +82,8 @@
     if (S.own) { d.plan = S.own.rows; d.planSrc = "monthly"; d.planFiles = S.own.files; } else d.planSrc = d.plan.length ? "sof" : "";
     return d;
   }
+  // opens on the current fiscal year whenever it has a plan or actuals, else the year Status of Funds opens on
+  function defaultFy(d, ys) { var now = C.currentFy(); return ys.indexOf(now) >= 0 ? now : ys.indexOf(d.fy) >= 0 ? d.fy : ys[ys.length - 1] || ""; }
   function years(d) {
     var ys = {}; d.actual.forEach(function (r) { ys[r.fy] = 1; }); d.plan.forEach(function (r) { if (r.fy) ys[r.fy] = 1; });
     return Object.keys(ys).sort();
@@ -108,7 +111,7 @@
   var M; // last model (tests read it through CMD.mods.spend.model())
   function render() {
     var d = feed(), ys = years(d);
-    var fySel = $("spFy"), cur = S.fy || (ys.indexOf(d.fy) >= 0 ? d.fy : ys[ys.length - 1] || "");
+    var fySel = $("spFy"), cur = S.fy && ys.indexOf(S.fy) >= 0 ? S.fy : defaultFy(d, ys);
     fySel.innerHTML = ys.map(function (y) { return '<option value="' + esc(y) + '">FY' + esc(y) + "</option>"; }).join("");
     if (cur) fySel.value = cur;
     M = model(d, cur);
@@ -126,7 +129,7 @@
   }
   function kpi(lbl, val, sub, color, title) { return '<div class="kpi" style="--st:' + color + '"' + (title ? ' title="' + esc(title) + '"' : "") + '><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div><div class="sub">' + (sub || "&nbsp;") + "</div></div>"; }
   function kpis(sel) {
-    var last = M.last, td = toDate(sel, last), k = C.varClass(td.v), thru = last ? "Oct\u2013" + FM[last - 1] : "No months with actuals";
+    var last = M.last, td = toDate(sel, last), k = C.varClass(td.v), thru = last ? (last > 1 ? "Oct\u2013" : "") + FM[last - 1] : "No months with actuals";
     var planned = M.list.filter(function (x) { return x.planned; }), off = { y: 0, r: 0 };
     planned.forEach(function (x) { var c = C.varClass(toDate(x, last).v); if (c === "y" || c === "r") off[c]++; });
     var nOff = off.y + off.r, offCol = !last ? VCOL.na : off.r ? VCOL.r : off.y ? VCOL.y : VCOL.g;
@@ -189,6 +192,7 @@
     if (d.planSrc === "monthly") h.push('<p class="ok">Plan: uploaded monthly spend plan (' + esc(d.planFiles.join(", ")) + "), " + plural(d.plan.length, "month amount") + ". It is used instead of the Status of Funds spend plan.</p>");
     else if (d.planSrc === "sof") h.push('<p class="ok">Plan: the spend plan loaded with Status of Funds, ' + plural(d.plan.length, "row") + ".</p>");
     else { h.push('<p class="warn">No spend plan loaded.</p>'); warns++; }
+    S.files.filter(function (e) { return e.fyAssigned; }).forEach(function (e) { h.push('<p class="ok">' + esc(e.name) + ": " + plural(e.fyAssigned.n, "row") + " without a Fiscal Year count for FY" + esc(e.fyAssigned.fy) + " (the current fiscal year; 1 October starts the next).</p>"); });
     h.push('<p class="ok">Actuals: ' + plural(d.actual.length, "Status of Funds line") + " with a fiscal month. Each line's cumulative-to-date amount is counted once, in its fiscal month; cumulative = running total from October, so September equals the year's Total Expenditure.</p>");
     Object.keys(d.noMonth).sort().forEach(function (fy) { var x = d.noMonth[fy]; warns++; h.push('<p class="warn">FY' + esc(fy) + ": " + plural(x.lines, "line") + " (" + full(x.te) + ") have no fiscal month. They count in Status of Funds Total Expenditure but in no month here.</p>"); });
     if (M && M.last) h.push('<p class="ok">FY' + esc(M.fy) + ": actuals through month " + M.last + " (" + FM[M.last - 1] + ").</p>");
@@ -199,7 +203,7 @@
   // ---------- home ----------
   function summary() {
     var d = feed(); if (!d.actual.length && !d.plan.length) return null;
-    var ys = years(d), fy = ys.indexOf(d.fy) >= 0 ? d.fy : ys[ys.length - 1], m = model(d, fy), tot = totals(m.list), td = toDate(tot, m.last);
+    var ys = years(d), fy = defaultFy(d, ys), m = model(d, fy), tot = totals(m.list), td = toDate(tot, m.last);
     var accts = m.list.filter(function (x) { return x.planned; }).map(function (x) { var t = toDate(x, m.last); return { label: x.label, v: t.v, k: C.varClass(t.v), p: t.p, a: t.a }; });
     return { fy: fy, last: m.last, month: m.last ? FM[m.last - 1] : "", p: td.p, a: td.a, v: td.v, k: C.varClass(td.v), accts: accts,
       off: accts.filter(function (x) { return x.k === "y" || x.k === "r"; }).length };

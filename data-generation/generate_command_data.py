@@ -376,7 +376,7 @@ def spend_monthly_template(path):                          # optional Spend Plan
         ws.cell(r, 2).number_format = "@"
         for c in range(3, 15): ws.cell(r, c).number_format = "#,##0.00"
     ws["P1"] = "How to fill in"; ws["P1"].font = Font(bold=True)
-    ws["P2"] = "One row per Account and Fiscal Year (e.g. 2026 or FY26). Month 1 = October ... Month 12 = September. Planned amounts in dollars."
+    ws["P2"] = "One row per Account. Fiscal Year is optional: leave it blank for the current fiscal year (1 October starts the next), or enter e.g. 2027 / FY27. Month 1 = October ... Month 12 = September. Planned amounts in dollars."
     ws.column_dimensions["P"].width = 100
     ws.freeze_panes = "C2"; wb.save(path)
 spend_monthly_template(os.path.join(DIR, "spendplan_monthly_template.xlsx"))
