@@ -3,7 +3,7 @@
   "use strict";
   var K = w.DashKit, L = w.FundsLib, C = w.CMD, $ = K.$, esc = K.esc, full = L.full, plural = L.plural;
   function pic(cls, icon) { return '<span class="pic ' + cls + '"><svg class="ic"><use href="#' + icon + '"/></svg></span>'; }
-  function head(cls, icon, title, m) { return "<h3>" + pic(cls, icon) + esc(title) + (m && m.asOf ? '<span class="oasof">' + esc(C.asOfText(m.asOf)) + "</span>" : "") + '<span class="more">Open &rsaquo;</span></h3>'; }
+  function head(cls, icon, title, m, demo) { return "<h3>" + pic(cls, icon) + esc(title) + (demo ? '<span class="demotag">Demo data</span>' : "") + (m && m.asOf ? '<span class="oasof">' + esc(C.asOfText(m.asOf)) + "</span>" : "") + '<span class="more">Open &rsaquo;</span></h3>'; }
   function stat(l, v, s, cls) { return '<div class="stat' + (cls ? " " + cls : "") + '"><div class="l">' + l + '</div><div class="v">' + v + '</div><div class="s">' + (s || "&nbsp;") + "</div></div>"; }
   function ring(p) {
     var r = 26, c = 2 * Math.PI * r, off = c * (1 - p.pct);
@@ -20,6 +20,7 @@
     $("tsPr").textContent = pr ? (pr.types ? pr.types.map(function (t) { return t.type + " " + K.money(t.value); }).join(" \u00b7 ") : plural(pr.count, "PR") + " \u00b7 " + K.money(pr.value)) : "No data loaded";
     $("tsFuel").textContent = fu ? (fu.used != null ? C.pct(fu.used) + " of budget used \u00b7 FY" + fu.fy : K.money(fu.spent) + " spent") : "No data loaded";
     $("tsSpend").textContent = spl ? (spl.last ? "Variance " + C.varText(spl.v) + " to date \u00b7 " + plural(spl.off, "account") + " off plan" : "Plan FY" + spl.fy + " \u00b7 no actuals yet") : "No data loaded";
+    $("tagAftp").hidden = !(af && af.demo);
     $("tsAftp").textContent = af ? K.fmt(af.unpaid) + " unpaid \u00b7 " + "$" + K.fmt(af.out) + " outstanding" : "No data loaded";
     if (!any) return;
     // Status of Funds
@@ -71,7 +72,7 @@
     }
     $("oFuel").innerHTML = h;
     // Spend Plans
-    h = head("t-plan", "i-plan", "Spend Plans" + (spl ? " \u00b7 FY" + spl.fy : ""), C.mods.spend);
+    h = head("t-plan", "i-plan", "Spend Plans" + (spl ? " \u00b7 FY" + spl.fy : ""), C.mods.spend, spl && spl.demo);
     if (!spl) h += '<div class="empty">No spend plan or Status of Funds lines loaded.</div>';
     else {
       h += '<div class="big3">' + stat("Planned to date", K.money(spl.p), spl.last ? (spl.last > 1 ? "Oct\u2013" : "") + spl.month : "No actuals yet") + stat("Actual to date", K.money(spl.a), "Total Expenditure") +
@@ -80,7 +81,7 @@
     }
     $("oSpend").innerHTML = h;
     // AFTPs
-    h = head("t-aftp", "i-heli", "AFTPs" + (af ? " \u00b7 FY" + af.fy : ""), C.mods.aftp);
+    h = head("t-aftp", "i-heli", "AFTPs" + (af ? " \u00b7 FY" + af.fy : ""), C.mods.aftp, af && af.demo);
     if (!af) h += '<div class="empty">No AFTP data loaded.</div>';
     else {
       var ac = af.red ? "bad" : af.unpaid ? "warnv" : "good";

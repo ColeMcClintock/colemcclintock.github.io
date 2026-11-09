@@ -59,6 +59,12 @@ ACT = [round(a, 2) for a in ACT]
 VAR = [0.049, -0.049, 0.07, -0.07, 0.12, -0.12, 0.0, 0.03, -0.09, 0.2, 0.0, 0.01]
 VCLS = ["g", "g", "y", "y", "r", "r", "g", "g", "y", "r", "g", "g"]
 PLAN = [round(a / (1 + v), 2) for a, v in zip(ACT, VAR)]
+# Cole's spend plan: Account, then October .. September; no Fiscal Year column (always the current fiscal year)
+SPM = ["October", "Nov", "Dec", "January", "Feb", "Mar", "Apr", "May", "June", "Jul", "Aug", "Sept"]
+plan_x = xlsx(os.path.join(tmp, "Spend Plan.xlsx"), [["Aviation spend plan"], [], ["Account"] + SPM,
+    ["  aviation ", "$1,234.50", 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000, 12000], [],
+    ["Fuel", 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200], ["Total", 1334.5, 2200, 3300, 4400, 5500, 6600, 7700, 8800, 9900, 11000, 12100, 13200]])
+plan_dates_x = xlsx(os.path.join(tmp, "Spend Plan dates.xlsx"), [["Account"] + [dt.datetime(2026 + (m < 10 and 1 or 0), m, 1) for m in [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9]], ["Aviation"] + list(range(1, 13))])
 plan12_x = xlsx(os.path.join(tmp, "Monthly Spend Plan.xlsx"), [["Account", "Fiscal Year"] + [f"Month {m}" for m in range(1, 13)], ["Aviation", "FY26"] + PLAN])                            # Aviation dashboard: no Reservations (the column in the test file is ignored)
 
 # ---- PR files ----
@@ -196,9 +202,21 @@ def run():
         check(pg.input_value("#spFy") == curfy, "hosted spend: Reset returns to the current fiscal year")
         if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "command-spend.png"), full_page=True)
 
+        check(pg.is_visible("#spDemo") and "DEMO DATA" in pg.inner_text("#page-spend h1").upper(), "hosted spend: 'Demo data' tag while no real spend plan is loaded")
+        mt = pg.evaluate("""(function(){function src(g){return {rows:g.length,cols:Math.max.apply(null,g.map(function(r){return r.length})),get:function(r,c){var v=g[r][c];return v===undefined?null:v}}}
+          var m=CMD.mods.spend, e=m.parse('plan12',src([['Plan'],['Account','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep'],[' aviation ',1,1,1,1,1,1,1,1,1,1,1,1],['FUEL ',2,2,2,2,2,2,2,2,2,2,2,2],['Parts',3,3,3,3,3,3,3,3,3,3,3,3],['Training Ammo',4,4,4,4,4,4,4,4,4,4,4,4],['Grand Total',10,10,10,10,10,10,10,10,10,10,10,10]]),'p','','Plan.xlsx');
+          m.ingest([e]); m.asOf=new Date(); CMD.refresh(); CMD.go('spend');
+          var M=m.model(), r={fy:M.fy, rows:M.list.map(function(x){return [x.label,x.planned]}), um:m.unmatched(), tag:document.getElementById('spDemo').hidden, totals:e.totals,
+            safety:(document.querySelector('#tSpend tbody tr:has([data-acct=Safety])')||{}).textContent||''};
+          m._state.own=null; m._state.files=[]; m.asOf=null; CMD.refresh();
+          r.tagBack=!document.getElementById('spDemo').hidden; return r})()""")
+        check(mt["fy"] == curfy and [x for x in mt["rows"] if x[1]] == [["Aviation", True], ["Fuel", True], ["Parts", True], ["Training Ammo", True]] and mt["totals"] == 1, "spend plan accounts match SOF accounts trimmed, ignoring case (Grand Total row skipped) " + str(mt["rows"]))
+        check(mt["um"] == ["Training Ammo"] and "no plan" in mt["safety"], "spend: unmatched plan accounts listed for the drawer; SOF account without a plan shows 'no plan'")
+        check(mt["tag"] is True and mt["tagBack"] is True, "spend: 'Demo data' tag hides once a real plan loads (and returns without one)")
         # ---------- AFTPs (hosted demo) ----------
         go(pg, "aftp")
         A = E["aftp"]; kt_ = pg.inner_text("#afKpis")
+        check(pg.is_visible("#afDemo") and "DEMO DATA" in pg.inner_text("#page-aftp h1").upper(), "hosted AFTP: 'Demo data' label on the page")
         check(pg.locator("#afKpis .kpi").count() == 5 and f"{A['used']}" in kt_ and money(A["outstanding"]) in kt_, "hosted AFTP: KPIs used / paid / unpaid / outstanding / soldiers with unpaid")
         tot_ = pg.evaluate("CMD.mods.aftp._state.total"); who = pg.evaluate("CMD.mods.aftp._state.who")
         check(tot_["used"] == A["used"] and tot_["paid"] == A["paid"] and tot_["unpaid"] == A["unpaid"] and abs(tot_["out"] - A["outstanding"]) < 0.01 and who == A["soldiersUnpaid"], "hosted AFTP: totals match the generator " + json.dumps(A))
@@ -230,6 +248,7 @@ def run():
         snap = pg.evaluate("(function(){var m=CMD.mods.aftp,s=m.snapshot();m.clear();m.restore(JSON.parse(JSON.stringify(s)));m.dirty=true;return [m._state.aftps.length,m.summary().out]})()")
         check(snap[0] == A["used"] and abs(snap[1] - A["outstanding"]) < 0.01, "AFTP: save/restore keeps the data")
         go(pg, "home")
+        check(pg.is_visible("#tagAftp") and "DEMO DATA" in pg.inner_text("#oAftp").upper() and "DEMO DATA" in pg.inner_text("#oSpend").upper(), "hosted home: 'Demo data' label on the AFTP tile and overview card (and the demo spend plan card)")
         check("Variance" in pg.inner_text("#tsSpend") and f"{A['unpaid']} unpaid" in pg.inner_text("#tsAftp") and "PLANNED TO DATE" in pg.inner_text("#oSpend").upper() and "MOST OUTSTANDING" in pg.inner_text("#oAftp").upper(), "hosted home: Spend Plans and AFTPs tiles and overview cards")
         if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "command-home.png"), full_page=True)
         go(pg, "sof")
@@ -363,7 +382,7 @@ def run():
         go(pg, "spend")
         check(pg.is_visible("#page-spend") and "No spend plan loaded" in pg.text_content("#spReport"), "single spend: actuals from SOF, no plan yet")
         pg.set_input_files("#fileInput", [plan12_x]); pg.wait_for_timeout(1500)
-        check("Monthly spend plan" in pg.text_content("#tFiles") and pg.evaluate("CMD.mods.spend._state.own.rows.length") == 12, "single spend: monthly plan template (Account, Fiscal Year, Month 1..12) read")
+        check("Spend plan" in pg.text_content("#tFiles") and pg.evaluate("CMD.mods.spend._state.own.rows.length") == 12, "single spend: monthly plan template (Account, Fiscal Year, Month 1..12) read")
         m_ = pg.evaluate("(function(){var m=CMD.mods.spend.model();return m.list.map(function(x){return [x.label,x.a,x.p]})})()")
         check(len(m_) == 1 and m_[0][0] == "Aviation" and all(abs(a - b) < 0.01 for a, b in zip(m_[0][1], ACT)) and abs(sum(ACT) - TE) < 0.05, "single spend: monthly actuals reconcile to SOF Total Expenditure")
         cells = pg.evaluate("Array.prototype.map.call(document.querySelectorAll('#tSpend tbody tr:first-child td.vc'),function(td){return td.className.replace('vc','').trim()})")
@@ -379,6 +398,21 @@ def run():
         cumc = pg.evaluate("Array.prototype.map.call(document.querySelectorAll('#tSpend tbody tr:first-child td.vc'),function(td){return td.className.replace('vc','').trim()})")[0:2]
         check(cumc[0] == "g" and pg.evaluate("DashKit.charts.cSpend.data.datasets[1].data[11]") == round(sum(ACT), 2), "single spend: cumulative view")
         pg.click("#spMode button[data-m=month]"); pg.wait_for_timeout(200)
+        check(pg.is_hidden("#spDemo"), "single spend: no 'Demo data' tag on uploaded data")
+        pg.set_input_files("#fileInput", [plan_dates_x]); pg.wait_for_timeout(1200)
+        ownD = pg.evaluate("CMD.mods.spend._state.own.rows.map(function(r){return [r.fm,r.amt]})")
+        check(ownD == [[m, m] for m in range(1, 13)], "spend plan: Excel date month headers (Oct .. Sep) read")
+        pg.set_input_files("#fileInput", [plan_x, fund_x, key_x]); pg.wait_for_timeout(1800)
+        kinds = pg.evaluate("CMD.mods.sof.entries().filter(function(e){return !e.dupOf}).map(function(e){return [e.name,e.kind]}).concat(CMD.mods.spend.entries().map(function(e){return [e.name,e.kind]}))")
+        check(["Funding.xlsx", "funding"] in kinds and ["Account Key.xlsx", "key"] in kinds and ["Spend Plan.xlsx", "plan12"] in kinds and not any(k[0] == "Spend Plan.xlsx" and k[1] != "plan12" for k in kinds), "spend plan detected by its headers in a multi-file upload, next to the funding file and Account Key")
+        own = pg.evaluate("CMD.mods.spend._state.own")
+        check(own["files"] == ["Spend Plan.xlsx"] and len(own["rows"]) == 24, "spend plan: a new upload replaces the plan; header found below row 1; blank and Total rows skipped")
+        check(all(r["fy"] == str(fy) for r in own["rows"]) and pg.input_value("#spFy") == str(fy), f"spend plan: no Fiscal Year column -> current FY{fy}; page opens on it")
+        av = sorted([r for r in own["rows"] if r["acct"].strip().lower() == "aviation"], key=lambda r: r["fm"])
+        check(av[0]["amt"] == 1234.5 and av[11]["amt"] == 12000 and [r["fm"] for r in av] == list(range(1, 13)), "spend plan: full and abbreviated month names (Sept too), currency strings, values as entered")
+        lab = pg.evaluate("CMD.mods.spend.model().list.map(function(x){return x.label})")
+        check("Aviation" in lab and pg.evaluate("CMD.mods.spend.unmatched()") == ["Fuel"] and "Fuel" in pg.text_content("#spReport") and "not found in Status of Funds" in pg.text_content("#spReport"), "spend plan: ' aviation ' matches SOF 'Aviation'; unmatched 'Fuel' listed in the drawer")
+        check(pg.is_hidden("#spDemo"), "single spend: real plan, no demo tag")
         go(pg, "aftp")
         check(pg.is_visible('[data-nodata="aftp"]') and pg.evaluate("CMD.mods.aftp.hasData()") is False and "coming soon" in pg.text_content("#afReport"), "single AFTP: no data and no upload yet (quiet drawer note)")
         go(pg, "home")
@@ -394,7 +428,7 @@ def run():
         prblk = json.dumps(json.loads(blk0)["pr"]["files"])
         check(not re.search(r"oneil|mcdonald|smith, robert|Robert Smith", prblk, re.I) and json.loads(blk0)["pr"]["key"]["name"] == "My Cardholders.xlsx", "save: left-out cardholders are not written into the saved copy; key kept")
         blk = json.loads(t.split('<script id="commandSaved" type="application/json">')[1].split("</script>")[0])
-        blk["pr"]["asOf"] = "2026-10-01T17:00:00.000Z"
+        blk["pr"]["asOf"] = "2026-10-01T17:00:00.000Z"; blk["spend"]["asOf"] = "2026-10-15T17:00:00.000Z"
         t = t.split('<script id="commandSaved" type="application/json">')[0] + '<script id="commandSaved" type="application/json">' + json.dumps(blk).replace("<", "\\u003c") + "</script>" + t.split('<script id="commandSaved" type="application/json">')[1].split("</script>", 1)[1]
         open(saved, "w", encoding="utf-8").write(t)
         # saved Obligation is used as stored, never recalculated: bump one stored Obligation and it shows up as is
@@ -416,13 +450,15 @@ def run():
         ks = pg.evaluate("CMD.mods.pr._state.ks")
         check(pg.evaluate("CMD.mods.pr._state.items.length") == 4 and pg.evaluate("CMD.mods.pr._state.typed") and ks["notInKey"] == 3 and ks["untyped"] == 1, "saved: key, type split and left-out counts survive Save with data")
         check(pg.is_visible("#prTypes") and "M. Smith-Jones" in pg.inner_text("#tPr"), "saved: display names and WHST/Safety shown")
+        go(pg, "spend"); check("15 Oct 2026" in pg.inner_text("#asof-spend") and pg.evaluate("CMD.mods.spend._state.own.rows.length") == 24 and pg.is_hidden("#spDemo"), "saved: spend plan kept with its Data-as-of date")
+        go(pg, "pr")
         # a viewer updates L4 in the saved copy, then saves again
         pg.set_input_files("#fileInput", [p4b]); pg.wait_for_timeout(1500)
         L4n = pg.evaluate("CMD.mods.pr._state.items.filter(function(i){return i.level===4}).length")
         check(pg.evaluate("CMD.mods.pr._state.ks.notInKey") == 3, "saved + new L4: left-out count kept")
         check(L4n == 2 and today in pg.inner_text("#asof-pr"), "saved: new L4 replaces the old one; PR date updated")
         check(pg.evaluate("CMD.mods.fuel._state.aasfs.length") == 2, "saved: other pages kept after an upload")
-        check(pg.evaluate("CMD.mods.spend._state.own && CMD.mods.spend._state.own.rows.length") == 12, "saved: monthly spend plan kept")
+        check(pg.evaluate("CMD.mods.spend._state.own && CMD.mods.spend._state.own.rows.length") == 24 and pg.evaluate("CMD.mods.spend._state.own.files[0]") == "Spend Plan.xlsx", "saved: spend plan kept")
         with pg.expect_download() as dl: pg.click("#btnInfo"); pg.click("#btnSave")
         saved2 = os.path.join(tmp, "second.html"); dl.value.save_as(saved2)
         pg.close()

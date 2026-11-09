@@ -248,6 +248,7 @@ with open(os.path.join(DIR, "data", "command_demo.js"), "w", encoding="utf-8") a
 # Same fictional export, keys and plan as dashboards/finance (that file is not changed). Aviation differences:
 # Obligation is calculated (Total Expenditure - Disbursement, obligation_amt_cum is ignored), so every line keeps
 # |commitment_amt_cum| >= |disbursement_amt_cum|; the funding file has no Reservations column.
+SPEND_DEMO = {}                                              # FY27 demo plan per account (for the spend plan template)
 def aviation_funds_demo():
     src = open(os.path.join(FIN, "data", "funds_demo.js"), encoding="utf-8").read()
     d = json.loads(src[src.index("{"):src.rindex("}") + 1])
@@ -303,6 +304,9 @@ def aviation_funds_demo():
             r[jp] = round(sum(pos) / max(1, len(pos)) * 0.3, -2); continue
         v = TARGET[ac] + prng.uniform(-0.09, 0.09)               # month-level variance around the account target
         r[jp] = round(base / (1 + v), -2)
+    SPEND_DEMO.update({ac: [0.0] * 12 for ac in TARGET})
+    for r in d["plan"]["rows"]:
+        if str(r[jf]).endswith("27"): SPEND_DEMO[r[ja]][int(r[jm]) - 1] = r[jp]
     e = d["expect"]; e.pop("reservations", None)
     e.update({"obligation": round(tot["obligation"], 2), "totalExpenditure": round(tot["te"], 2), "disbursement": round(tot["disb"], 2),
               "obligationAmtCumIgnored": round(tot["before_obligation"], 2), "kept": tot["kept"]})
@@ -314,6 +318,26 @@ def aviation_funds_demo():
         f.write("window.FUNDS_DEMO = " + json.dumps(d, separators=(",", ":")) + ";\n")
     return e
 print(json.dumps(aviation_funds_demo()))
+# Spend plan (Spend Plans page): Account, then October .. September; no Fiscal Year column (always the current fiscal year)
+SP_MONTHS = ["October", "November", "December", "January", "February", "March", "April", "May", "June", "July", "August", "September"]
+def spend_template(path):
+    from openpyxl.worksheet.table import Table, TableStyleInfo
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "SpendPlan"
+    ws.append(["Account"] + SP_MONTHS)
+    for ac in ["Aviation", "Fuel", "Parts", "Safety"]: ws.append([ac] + SPEND_DEMO[ac])   # fictional demo amounts; replace with your own
+    for c in ws[1]: c.font = Font(bold=True)
+    t = Table(displayName="SpendPlan", ref=f"A1:M{ws.max_row}"); t.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True); ws.add_table(t)
+    ws.column_dimensions["A"].width = 28
+    for i in range(2, 14): ws.column_dimensions[get_column_letter(i)].width = 14
+    for r in range(2, 200):
+        for c in range(2, 14): ws.cell(r, c).number_format = "#,##0.00"
+    ws["O1"] = "How to fill in"; ws["O1"].font = Font(bold=True)
+    ws["O2"] = "One row per Account, named as in Status of Funds. Planned dollars per month, October through September."
+    ws["O3"] = "The plan is for the current fiscal year (1 October starts the next). The four rows are fictional examples: replace them."
+    ws.column_dimensions["O"].width = 100
+    ws.freeze_panes = "B2"; wb.save(path)
+spend_template(os.path.join(DIR, "spendplan_template.xlsx"))
+shutil.copy(os.path.join(DIR, "spendplan_template.xlsx"), os.path.join(DL, "command-spend-plan-template.xlsx"))
 
 # ---------------- blank templates ----------------
 def pr_template(path):
@@ -364,23 +388,6 @@ def funding_template(path):                                 # Aviation funding f
     for r in range(2, 200): ws.cell(r, 1).number_format = "@"; ws.cell(r, 2).number_format = "@"; ws.cell(r, 3).number_format = "#,##0.00"; ws.cell(r, 4).number_format = "#,##0.00"
     wb.save(path)
 funding_template(os.path.join(DIR, "funding_template.xlsx"))
-def spend_monthly_template(path):                          # optional Spend Plans upload: one row per Account and Fiscal Year
-    from openpyxl.worksheet.table import Table, TableStyleInfo
-    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "SpendPlan"
-    ws.append(["Account", "Fiscal Year"] + [f"Month {m}" for m in range(1, 13)]); ws.append([None] * 14)
-    for c in ws[1]: c.font = Font(bold=True)
-    t = Table(displayName="SpendPlanMonthly", ref="A1:N2"); t.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True); ws.add_table(t)
-    ws.column_dimensions["A"].width = 30; ws.column_dimensions["B"].width = 12
-    for i in range(3, 15): ws.column_dimensions[get_column_letter(i)].width = 14
-    for r in range(2, 200):
-        ws.cell(r, 2).number_format = "@"
-        for c in range(3, 15): ws.cell(r, c).number_format = "#,##0.00"
-    ws["P1"] = "How to fill in"; ws["P1"].font = Font(bold=True)
-    ws["P2"] = "One row per Account. Fiscal Year is optional: leave it blank for the current fiscal year (1 October starts the next), or enter e.g. 2027 / FY27. Month 1 = October ... Month 12 = September. Planned amounts in dollars."
-    ws.column_dimensions["P"].width = 100
-    ws.freeze_panes = "C2"; wb.save(path)
-spend_monthly_template(os.path.join(DIR, "spendplan_monthly_template.xlsx"))
-shutil.copy(os.path.join(DIR, "spendplan_monthly_template.xlsx"), os.path.join(DL, "command-spend-plan-monthly-template.xlsx"))
-for t in ("funds_template.xlsx", "accountkey_template.xlsx", "cikey_template.xlsx", "spendplan_template.xlsx"):
+for t in ("funds_template.xlsx", "accountkey_template.xlsx", "cikey_template.xlsx"):
     shutil.copy(os.path.join(FIN, t), os.path.join(DIR, t))
 print(json.dumps(demo["expect"], default=str)[:600])

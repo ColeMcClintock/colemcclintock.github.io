@@ -19,9 +19,9 @@
     S.soldiers = (o.soldiers || []).map(function (s) { return { id: String(s.id), rank: String(s.rank || ""), name: String(s.name || "") }; });
     S.aftps = (o.aftps || []).map(function (a) { return { sid: String(a.sid), date: day(a.date), amount: +a.amount || 0, paid: !!a.paid, paidDate: a.paid ? day(a.paidDate) : null }; }).filter(function (a) { return a.date; });
   }
-  function toPlain() { return { soldiers: S.soldiers, aftps: S.aftps.map(function (a) { return { sid: a.sid, date: iso(a.date), amount: a.amount, paid: a.paid, paidDate: iso(a.paidDate) }; }) }; }
-  function clear() { S.soldiers = []; S.aftps = []; S.files = []; }
-  function demo() { var D = w.COMMAND_DEMO; if (D && D.aftp) { fromPlain(D.aftp); S.files = [{ name: "Demo AFTP data", kind: "aftp", kindLabel: "AFTP report (demo)", count: S.aftps.length, status: "Fictional soldiers" }]; } }
+  function toPlain() { return { demo: !!S.demo, soldiers: S.soldiers, aftps: S.aftps.map(function (a) { return { sid: a.sid, date: iso(a.date), amount: a.amount, paid: a.paid, paidDate: iso(a.paidDate) }; }) }; }
+  function clear() { S.soldiers = []; S.aftps = []; S.files = []; S.demo = false; }
+  function demo() { var D = w.COMMAND_DEMO; if (D && D.aftp) { fromPlain(D.aftp); S.demo = true; S.files = [{ name: "Demo AFTP data", kind: "aftp", kindLabel: "AFTP report (demo)", count: S.aftps.length, status: "Fictional soldiers" }]; } }
 
   // ---------- derived ----------
   function today() { var t = new Date(); return new Date(t.getFullYear(), t.getMonth(), t.getDate()); }
@@ -53,6 +53,7 @@
     var rk = $("afRank").value, have = K.uniq(S.soldiers.map(function (s) { return s.rank; })).sort(function (a, b) { return RANKS.indexOf(a) - RANKS.indexOf(b); });
     $("afRank").innerHTML = '<option value="">All ranks</option>' + have.map(function (r) { return "<option>" + esc(r) + "</option>"; }).join(""); $("afRank").value = have.indexOf(rk) >= 0 ? rk : "";
     var sid = C.sub, sol = sid ? S.soldiers.filter(function (s) { return s.id === sid; })[0] : null;
+    $("afDemo").hidden = !S.demo;
     $("afList").hidden = !!sol; $("afDetail").hidden = !sol;
     var f = F();
     $("afScope").innerHTML = "<strong>" + (f.fy ? "FY" + esc(f.fy) : "All years") + "</strong> \u00b7 " + plural(S.soldiers.length, "soldier");
@@ -143,13 +144,13 @@
     var fys = K.uniq(S.aftps.map(function (a) { return C.fyOf(a.date); })).sort(), fy = fys[fys.length - 1], list = stats({ fy: fy, rank: "", st: "" });
     var t = { used: 0, paid: 0, unpaid: 0, out: 0 }; list.forEach(function (x) { t.used += x.used; t.paid += x.paid; t.unpaid += x.unpaid; t.out += x.out; });
     var top = list.filter(function (x) { return x.out > 0; }).sort(function (a, b) { return b.out - a.out; });
-    return { fy: fy, used: t.used, paid: t.paid, unpaid: t.unpaid, out: Math.round(t.out * 100) / 100, who: top.length, red: top.filter(function (x) { return x.sev === "red"; }).length, top: top.slice(0, 3).map(function (x) { return { id: x.id, name: x.name, out: x.out, unpaid: x.unpaid, sev: x.sev }; }) };
+    return { demo: !!S.demo, fy: fy, used: t.used, paid: t.paid, unpaid: t.unpaid, out: Math.round(t.out * 100) / 100, who: top.length, red: top.filter(function (x) { return x.sev === "red"; }).length, top: top.slice(0, 3).map(function (x) { return { id: x.id, name: x.name, out: x.out, unpaid: x.unpaid, sev: x.sev }; }) };
   }
 
   C.register("aftp", {
     classify: function () { return null; },   // the AFTP report format is not known yet: no upload is read for this page
     parse: function () { return {}; }, ingest: function () {},
-    clear: clear, demo: demo, snapshot: toPlain, restore: function (o) { fromPlain(o); S.files = [{ name: "Saved AFTP data", kind: "aftp", kindLabel: "AFTP report", count: S.aftps.length, status: "Saved" }]; },
+    clear: clear, demo: demo, snapshot: toPlain, restore: function (o) { fromPlain(o); S.demo = !!o.demo; S.files = [{ name: "Saved AFTP data", kind: "aftp", kindLabel: "AFTP report", count: S.aftps.length, status: "Saved" }]; },
     report: report, render: render, summary: summary, entries: function () { return S.files; }, hasData: function () { return S.aftps.length > 0; }, _state: S,
     init: function () {
       ["afFy", "afRank", "afStatus"].forEach(function (id) { $(id).addEventListener("change", function () { if (id === "afFy") this.dataset.touched = "1"; render(); }); });

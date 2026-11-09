@@ -313,3 +313,9 @@ table.aftp td.out.amber{color:#b45309;font-weight:700}table.aftp td.out.red{colo
 .hafl .r:last-child{border-bottom:0}
 @media(max-width:1000px){.kpis.k4{grid-template-columns:repeat(2,1fr)}.hvar{grid-template-columns:1fr 1fr}}
 .stat.warnv .v{color:#b45309}
+.demotag{display:inline-flex;align-items:center;gap:5px;margin-left:10px;padding:2px 9px;border-radius:999px;border:1px solid #fcd34d;background:#fffbeb;color:#92400e;font-size:.7rem;font-weight:700;letter-spacing:.4px;text-transform:uppercase;vertical-align:middle;white-space:nowrap;line-height:1.5}
+.demotag::before{content:"";width:6px;height:6px;border-radius:50%;background:#f59e0b}
+.demotag[hidden]{display:none}
+h1 .demotag{font-size:.68rem;position:relative;top:-2px}
+.ocard h3 .demotag{margin-left:2px;font-size:.62rem}
+.tile .demotag.ontile{position:absolute;top:12px;right:12px;margin:0;z-index:1;font-size:.6rem}

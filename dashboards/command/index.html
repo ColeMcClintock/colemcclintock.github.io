@@ -59,7 +59,7 @@
       <button class="tile t-pr" type="button" data-go="pr"><span class="tic"><svg class="ic"><use href="#i-card"/></svg></span><span class="tt">PR Tracker</span><span class="ts" id="tsPr">&nbsp;</span></button>
       <button class="tile t-fuel" type="button" data-go="fuel"><span class="tic"><svg class="ic"><use href="#i-fuel"/></svg></span><span class="tt">Fuel</span><span class="ts" id="tsFuel">&nbsp;</span></button>
       <button class="tile t-plan" type="button" data-go="spend"><span class="tic"><svg class="ic"><use href="#i-plan"/></svg></span><span class="tt">Spend Plans</span><span class="ts" id="tsSpend">&nbsp;</span></button>
-      <button class="tile t-aftp" type="button" data-go="aftp"><span class="tic"><svg class="ic"><use href="#i-heli"/></svg></span><span class="tt">AFTPs</span><span class="ts" id="tsAftp">&nbsp;</span></button>
+      <button class="tile t-aftp" type="button" data-go="aftp"><span class="tic"><svg class="ic"><use href="#i-heli"/></svg></span><span class="tt">AFTPs</span><span class="ts" id="tsAftp">&nbsp;</span><span class="demotag ontile" id="tagAftp" hidden>Demo data</span></button>
     </div>
     <div class="dropzone" id="homeEmpty" hidden>
       <svg class="ic big"><use href="#i-upload"/></svg>
@@ -70,7 +70,7 @@
         <li><strong>Status of Funds</strong> funds export, funding file, Account Key, Commitment Item Key, spend plan</li>
         <li><strong>PR Tracker</strong> L1.xlsx, L2.xlsx, L3.xlsx, L4.xlsx</li>
         <li><strong>Fuel</strong> one tracker per AASF, named for the AASF</li>
-        <li><strong>Spend Plans</strong> actuals come from Status of Funds; optional monthly plan (Account, Fiscal Year, Month 1&ndash;12)</li>
+        <li><strong>Spend Plans</strong> spend plan: Account, October &hellip; September (current fiscal year); actuals come from Status of Funds</li>
       </ul>
     </div>
     <div class="overview" id="homeOverview">
@@ -202,7 +202,7 @@
   <!-- ================= SPEND PLANS ================= -->
   <section class="page" id="page-spend" hidden aria-label="Spend Plans">
     <div class="pagehead">
-      <div><h1><span class="pic t-plan"><svg class="ic"><use href="#i-plan"/></svg></span>Spend Plans</h1>
+      <div><h1><span class="pic t-plan"><svg class="ic"><use href="#i-plan"/></svg></span>Spend Plans<span class="demotag" id="spDemo" hidden>Demo data</span></h1>
       <div class="asofp" id="asof-spend"></div><div class="scope" id="spScope">&nbsp;</div></div>
       <button class="btn ghost" type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg>Home</button>
     </div>
@@ -229,7 +229,7 @@
   <!-- ================= AFTPs ================= -->
   <section class="page" id="page-aftp" hidden aria-label="AFTPs">
     <div class="pagehead">
-      <div><h1><span class="pic t-aftp"><svg class="ic"><use href="#i-heli"/></svg></span>AFTPs</h1>
+      <div><h1><span class="pic t-aftp"><svg class="ic"><use href="#i-heli"/></svg></span>AFTPs<span class="demotag" id="afDemo" hidden>Demo data</span></h1>
       <div class="asofp" id="asof-aftp"></div><div class="scope" id="afScope">&nbsp;</div></div>
       <button class="btn ghost" type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg>Home</button>
     </div>
@@ -291,8 +291,7 @@
       <a class="btn ghost sm" href="funding_template.xlsx" download>Funding file</a>
       <a class="btn ghost sm" href="accountkey_template.xlsx" download>Account Key</a>
       <a class="btn ghost sm" href="cikey_template.xlsx" download>Commitment Item Key</a>
-      <a class="btn ghost sm" href="spendplan_template.xlsx" download>Spend plan</a>
-      <a class="btn ghost sm" href="spendplan_monthly_template.xlsx" download>Spend plan (monthly, Spend Plans page)</a>
+      <a class="btn ghost sm" href="spendplan_template.xlsx" download>Spend plan (Account, Oct&ndash;Sep)</a>
     </div>
   </details>
   <details class="dsec"><summary>How the numbers are calculated</summary>
@@ -320,7 +319,8 @@
       </ul>
       <h4>Spend Plans</h4>
       <ul>
-        <li>Planned = the spend plan by Account and fiscal month (October = 1). An optional monthly plan (Account, Fiscal Year, Month 1&ndash;12) loaded here is used instead of the Status of Funds spend plan. A spend plan is for the current fiscal year: rows without a Fiscal Year count for it (1 October starts the next), unless the file gives one. The page opens on the current fiscal year whenever it has a plan or actuals.</li>
+        <li>Planned = the spend plan: one row per Account with planned dollars for October &hellip; September, used as entered. It is always for the current fiscal year (1 October starts the next) unless the file has a Fiscal Year column. Month headers can be full names, abbreviations or dates; the header row is found automatically; blank and Total rows are skipped. A new spend plan replaces the earlier one. Plan accounts match Status of Funds accounts by name, ignoring case and extra spaces; plan accounts not found are listed here, and accounts with spending but no plan show &ldquo;no plan&rdquo;.</li>
+        <li>The page opens on the current fiscal year whenever it has a plan or actuals. (A long-format spend plan loaded with Status of Funds &mdash; Fiscal Year, Account, Fiscal Month, Planned Amount &mdash; is also read when no spend plan is uploaded here.)</li>
         <li>Actual = Total Expenditure per Account and fiscal month, counted exactly as on Status of Funds (sign-flipped, Account Key). Each line's cumulative-to-date amount counts once, in its fiscal month; Cumulative is the running total from October, so September equals the year's Total Expenditure. Actuals show only through the latest month that has lines.</li>
         <li>Variance % = (Actual &minus; Planned) &divide; Planned. Up to &plusmn;5% is green, over 5% up to 10% yellow, over 10% red. An account is off plan when its to-date variance is outside &plusmn;5%.</li>
       </ul>
