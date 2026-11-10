@@ -11,13 +11,13 @@ if [ -n "$bad" ]; then
   echo "BLOCKED: these files look like real-data exports and must not be committed:" >&2
   printf '  %s\n' $bad >&2; fail=1
 fi
-bad=$(printf '%s\n' "$names" | grep -Ei '(aviation|command|g1)-dashboard-[0-9]{2}[a-z]{3}[0-9]{2}[^/]*\.html$')
+bad=$(printf '%s\n' "$names" | grep -Ei '(aviation|command|g1|owi)-dashboard-[0-9]{2}[a-z]{3}[0-9]{2}[^/]*\.html$')
 if [ -n "$bad" ]; then
   echo "BLOCKED: these look like dashboard copies saved with data:" >&2
   printf '  %s\n' $bad >&2; fail=1
 fi
 for f in $names; do
-  if git show ":$f" 2>/dev/null | grep -Eq '<script id="(safety|finance|prevention|command|g1)''Saved" type="application/json">\{"v":'; then
+  if git show ":$f" 2>/dev/null | grep -Eq '<script id="(safety|finance|prevention|command|g1|owi)''Saved" type="application/json">\{"v":'; then
     echo "BLOCKED: $f contains an embedded data block (saved with data)." >&2; fail=1
   fi
   if git show ":$f" 2>/dev/null | grep -q '<plaintext id="embedded''-data"' && \

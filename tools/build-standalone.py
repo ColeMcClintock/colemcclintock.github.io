@@ -14,7 +14,7 @@ For each dashboard this writes:
 Run from the repo root:  python3 tools/build-standalone.py
 Standard-library Python only.
 """
-import base64, csv, io, os, re, sys, zipfile
+import base64, csv, io, os, re, sys, zipfile, json
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "powerautomate"))
 import mdlite
 
@@ -36,6 +36,8 @@ PAGES = {
                               templates=["pr_template.xlsx", "cardholder_key_template.xlsx", "fuel_tracker_template.xlsx", "funds_template.xlsx", "funding_template.xlsx", "accountkey_template.xlsx", "cikey_template.xlsx", "spendplan_template.xlsx"]),
     "g1-dashboard": dict(dir="dashboards/g1", title="G1 Dashboard", strip_demo=True, save_prefix="G1",
         templates=["funds_template.xlsx", "pr_template.xlsx", "g1_accountkey_template.xlsx", "g1_cikey_template.xlsx", "g1_funding_template.xlsx", "g1_cardholder_key_template.xlsx", "g1_spendplan_template.xlsx", "g1_stipends_template.xlsx", "g1_mfh_duty_template.xlsx", "g1_dts_sample.xlsx"]),
+    "owi-dashboard": dict(dir="dashboards/owi", title="OWI Dashboard", strip_demo=True, save_prefix="OWI",
+        templates=["owi_template.xlsx", "owi_strength_template.xlsx"]),
 }
 
 def read(p, mode="r"):
@@ -75,7 +77,7 @@ def build_single(page_dir, html):
     html = common_rewrites(html)
     assert not re.search(r'<(script|link)[^>]+(src|href)="(?!data:|#)', html), "unresolved local reference"
     assert not re.search(r'https?://', re.sub(r'<script>.*?</script>|<style>.*?</style>', '', html, flags=re.S)), "external URL in offline build"
-    for sid in ("safety", "finance", "prevention"):
+    for sid in ("safety", "finance", "prevention", "owi"):
         assert ('<script id="' + sid + 'Saved"') not in html, "embedded data found in a public build"
     return "<!-- Offline copy of the dashboard. Runs entirely in the browser; makes no network requests. -->\n" + html
 
@@ -251,10 +253,17 @@ def main():
         html = read(os.path.join(page_dir, "index.html"))
         if cfg.get("strip_demo"):   # demo data scripts (<script data-demo ...>) stay on the hosted page only
             html = re.sub(r'<script data-demo src="[^"]+"></script>\n?', "", html)
+        folder_html = html
+        if name == "owi-dashboard":
+            html = re.sub(r'<script data-save-shell src="[^"]+"></script>\n?', "", html)
         single = check_clean(name, build_single(page_dir, html))
-        assert all('<script id="'+prefix+'Saved"' not in single for prefix in ("command", "g1")), "embedded data found in a public build"
+        if name == "owi-dashboard":
+            # Source script, not a runtime fetch; includes only an EMPTY public dashboard.
+            shell = "window.OWI_SAVE_SHELL=" + json.dumps(single).replace("<", "\\u003c") + ";\n"
+            with open(os.path.join(page_dir, "save_shell.js"), "w", encoding="utf-8") as f: f.write(shell)
+        assert all('<script id="'+prefix+'Saved"' not in single for prefix in ("command", "g1", "owi")), "embedded data found in a public build"
         with open(os.path.join(OUT, name + ".html"), "w", encoding="utf-8") as f: f.write(single)
-        idx, files = folder_files(page_dir, html); check_clean(name + " folder", idx)
+        idx, files = folder_files(page_dir, folder_html); check_clean(name + " folder", idx)
         zpath = os.path.join(OUT, name + ".zip")
         is_safety = cfg.get("guide")
         with Zip(zpath, "w", zipfile.ZIP_DEFLATED) as z:
@@ -268,7 +277,10 @@ def main():
                 z.write(os.path.join(page_dir, t), f"{name}/folder-version/{t}")   # keeps the in-page template links working
             if is_safety:
                 z.writestr(f"{name}/COLUMN-GUIDE.csv", column_guide(page_dir))
-            z.writestr(f"{name}/README - How to use at work.txt", README.replace("{save_block}", SAVE_BLOCK.replace("{name}", name).replace("{prefix}", cfg["save_prefix"]) if cfg.get("save_prefix") else "").format(
+            if name == "owi-dashboard":
+                z.writestr(f"{name}/README - How to use at work.txt", "OWI Dashboard\nOpen the single HTML locally in Chrome or Edge (including a synced SharePoint folder). It opens EMPTY; upload your workbook and optional Strength Key. No network requests are made. Data stays in the browser tab. The info drawer has templates, sources and Save with data. Saved copies are OWI-Dashboard-DDMonYY.html, containing the loaded names/incidents and strength settings. Keep them ONLY in approved restricted storage; never commit or publish them. No SSN values are read; DOB is discarded after age calculation. Clear data empties the tab. Public hosted demos are fictional. Peer proxy is NOT age-adjusted.\n")
+            else:
+                z.writestr(f"{name}/README - How to use at work.txt", README.replace("{save_block}", SAVE_BLOCK.replace("{name}", name).replace("{prefix}", cfg["save_prefix"]) if cfg.get("save_prefix") else "").format(
                 title=cfg["title"], name=name,
                 guide_line="  COLUMN-GUIDE.csv     Every column, whether it is required, and what it drives.\n" if is_safety else "",
                 multi_line="  - You can load several files at once (e.g. one tracker per fiscal year plus a roll-up).\n    Rows are combined and duplicate accidents are removed; \"Show duplicates removed\" lists them.\n" if is_safety else ""))
