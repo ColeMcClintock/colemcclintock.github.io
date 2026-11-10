@@ -34,6 +34,8 @@ PAGES = {
     # multipage Aviation Dashboard (Home, Status of Funds, PR Tracker, Fuel). The single file opens empty (demo scripts stripped).
     "command-dashboard": dict(dir="dashboards/command", title="Aviation Dashboard", strip_demo=True, save_prefix="COMMAND",
                               templates=["pr_template.xlsx", "cardholder_key_template.xlsx", "fuel_tracker_template.xlsx", "funds_template.xlsx", "funding_template.xlsx", "accountkey_template.xlsx", "cikey_template.xlsx", "spendplan_template.xlsx"]),
+    "g1-dashboard": dict(dir="dashboards/g1", title="G1 Dashboard", strip_demo=True, save_prefix="G1",
+        templates=["funds_template.xlsx", "pr_template.xlsx", "g1_accountkey_template.xlsx", "g1_cikey_template.xlsx", "g1_funding_template.xlsx", "g1_cardholder_key_template.xlsx", "g1_spendplan_template.xlsx", "g1_stipends_template.xlsx", "g1_mfh_duty_template.xlsx", "g1_dts_sample.xlsx"]),
 }
 
 def read(p, mode="r"):
@@ -250,7 +252,7 @@ def main():
         if cfg.get("strip_demo"):   # demo data scripts (<script data-demo ...>) stay on the hosted page only
             html = re.sub(r'<script data-demo src="[^"]+"></script>\n?', "", html)
         single = check_clean(name, build_single(page_dir, html))
-        assert '<script id="command' + 'Saved"' not in single, "embedded data found in a public build"
+        assert all('<script id="'+prefix+'Saved"' not in single for prefix in ("command", "g1")), "embedded data found in a public build"
         with open(os.path.join(OUT, name + ".html"), "w", encoding="utf-8") as f: f.write(single)
         idx, files = folder_files(page_dir, html); check_clean(name + " folder", idx)
         zpath = os.path.join(OUT, name + ".zip")

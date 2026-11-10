@@ -7,3 +7,6 @@ __pycache__/
 # Aviation Dashboard (dashboards/command) copies saved with data (Aviation-Dashboard-05Nov26.html; older name Command-Dashboard-*)
 Command-Dashboard-*.html
 Aviation-Dashboard-*.html
+
+# G1 Dashboard saved-with-data copies
+G1-Dashboard-*.html

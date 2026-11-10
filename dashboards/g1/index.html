@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>G1 Dashboard</title>
+<link rel="icon" href="../../assets/img/dash-icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="g1.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.8V20h13V9.8"/><path d="M10 20v-5.5h4V20"/></symbol>
+    <symbol id="i-sof" viewBox="0 0 24 24"><path d="M3 20h18"/><rect x="4.5" y="12" width="3" height="8" rx=".6"/><rect x="10.5" y="8" width="3" height="12" rx=".6"/><rect x="16.5" y="4" width="3" height="16" rx=".6"/><path d="M4 8.5 9 5l3 2 5-4"/><path d="M14.5 3H17v2.5"/></symbol>
+    <symbol id="i-card" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.2"/><path d="M2.5 9.5h19"/><path d="M6 15h4.5"/><path d="M14.5 15H18"/></symbol>
+<symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 22V3m0 1c5-4 9 4 15 0v10c-6 4-10-4-15 0"/></symbol>
+    <symbol id="i-plan" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16.5" rx="2"/><path d="M3 9.5h18"/><path d="M8 2.5v4M16 2.5v4"/><path d="m7.5 15 2.5 2.5 6.5-5.5"/></symbol>
+<symbol id="i-case" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V3h8v4M3 12h18M10 12v3h4v-3"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4"/><path d="m7.5 8.5 4.5-4.5 4.5 4.5"/><path d="M4 15v3.5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V15"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  </defs>
+</svg>
+
+<header class="top">
+  <div class="wrap bar">
+    <button class="brand" type="button" data-go="home" aria-label="Home">
+      <span class="mark"><svg class="ic"><use href="#i-sof"/></svg></span><span class="bname">G1 Dashboard</span>
+    </button>
+    <nav class="tabs" id="tabs" aria-label="Pages">
+      <button type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg><span>Home</span></button>
+      <button type="button" data-go="sof"><svg class="ic"><use href="#i-sof"/></svg><span>Status of Funds</span></button>
+      <button type="button" data-go="spend"><svg class="ic"><use href="#i-plan"/></svg><span>Spend Plans</span></button>
+      <button type="button" data-go="fh"><svg class="ic"><use href="#i-flag"/></svg><span>Funeral Honors</span></button>
+      <button type="button" data-go="pr"><svg class="ic"><use href="#i-card"/></svg><span>PR Tracker</span></button>
+      <button type="button" data-go="esgr"><svg class="ic"><use href="#i-case"/></svg><span>ESGR</span></button>
+    </nav>
+    <div class="tools">
+      <span class="asof" id="asOf"></span>
+      <button class="btn primary" id="btnUpload" type="button" title="Choose one or more Excel or CSV files; each goes to its page automatically"><svg class="ic"><use href="#i-upload"/></svg><span>Upload data</span></button>
+      <input type="file" id="fileInput" accept=".xlsx,.xlsm,.xls,.csv" multiple hidden>
+      <button class="iconbtn" id="btnInfo" type="button" title="Data details" aria-label="Data details" aria-controls="drawer" aria-expanded="false"><svg class="ic"><use href="#i-info"/></svg><span class="dot" id="infoDot" hidden></span></button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap" id="main">
+  <!-- ================= HOME ================= -->
+  <section class="page" id="page-home" aria-label="Home">
+    <div class="hero">
+      <div>
+        <div class="eyebrow" id="hEyebrow">&nbsp;</div>
+        <h1>G1 Dashboard</h1>
+        <p class="lead" id="hLead">Funds, spend plans, Funeral Honors, purchase requests and ESGR in one place.</p>
+      </div>
+      <div class="fyring" id="fyRing" aria-label="Fiscal year elapsed"></div>
+    </div>
+    <section class="g1-intro" id="g1Intro"><div><div class="eyebrow">Resource overview</div><h2 id="introTitle">Your G1 picture, in one place</h2><p id="introNote"></p></div><div><div class="g1-total" id="introTe"></div><div>Total Expenditure</div></div></section>
+    <div class="tiles" id="tiles">
+      <button class="tile t-sof" type="button" data-go="sof"><span class="tic"><svg class="ic"><use href="#i-sof"/></svg></span><span class="tt">Status of Funds</span><span class="ts" id="tsSof">&nbsp;</span></button>
+      <button class="tile t-pr" type="button" data-go="pr"><span class="tic"><svg class="ic"><use href="#i-card"/></svg></span><span class="tt">PR Tracker</span><span class="ts" id="tsPr">&nbsp;</span></button>
+      <button class="tile t-plan" type="button" data-go="spend"><span class="tic"><svg class="ic"><use href="#i-plan"/></svg></span><span class="tt">Spend Plans</span><span class="ts" id="tsSpend">&nbsp;</span></button>
+      <button class="tile t-fh" type="button" data-go="fh"><span class="tic"><svg class="ic"><use href="#i-flag"/></svg></span><span class="tt">Funeral Honors</span><span class="ts" id="tsFh"></span></button>
+      <button class="tile t-esgr" type="button" data-go="esgr"><span class="tic"><svg class="ic"><use href="#i-case"/></svg></span><span class="tt">ESGR</span><span class="ts" id="tsEsgr"></span></button>
+    </div>
+    <div class="dropzone" id="homeEmpty" hidden>
+      <svg class="ic big"><use href="#i-upload"/></svg>
+      <h2>Upload your Excel files to get started</h2>
+      <p>Choose them all at once or drag them onto this page. Each file goes to its page automatically.</p>
+      <button class="btn primary lg" type="button" data-upload="1"><svg class="ic"><use href="#i-upload"/></svg><span>Upload data</span></button>
+      <ul class="kinds">
+        <li><strong>Status of Funds</strong> funds export, funding file, Account Key, Commitment Item Key, spend plan</li>
+        <li><strong>PR Tracker</strong> L1.xlsx, L2.xlsx, L3.xlsx, L4.xlsx</li>
+
+        <li><strong>Spend Plans</strong> spend plan: Account, October &hellip; September (current fiscal year); actuals come from Status of Funds</li>
+      </ul>
+    </div>
+    <div class="overview" id="homeOverview">
+      <article class="ocard" id="oSof" data-go="sof" tabindex="0"></article>
+      <article class="ocard" id="oPr" data-go="pr" tabindex="0"></article>
+      <article class="ocard" id="oFh" data-go="fh" tabindex="0"></article>
+      <article class="ocard" id="oEsgr" data-go="esgr" tabindex="0"></article>
+      <article class="ocard" id="oSpend" data-go="spend" tabindex="0"></article>
+    </div>
+  </section>
+
+  <!-- ================= STATUS OF FUNDS ================= -->
+  <section class="page" id="page-sof" hidden aria-label="Status of Funds">
+    <div class="pagehead">
+      <div><h1><span class="pic t-sof"><svg class="ic"><use href="#i-sof"/></svg></span>Status of Funds</h1>
+      <div class="asofp" id="asof-sof"></div><div class="scope"><strong id="asofLabel">&mdash;</strong> &middot; <span id="scopeLabel">All funds</span></div></div>
+      <button class="btn ghost" type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg>Home</button>
+    </div>
+    <div class="nodata" data-nodata="sof" hidden>No Status of Funds files loaded yet. <button class="btn sm primary" type="button" data-upload="1">Upload data</button></div>
+    <div class="filters" role="group" aria-label="Status of Funds filters">
+      <label>Fiscal Year<select id="fFy"></select></label>
+      <label>Appropriation<select id="fAppn"></select></label>
+      <label>Sag<select id="fSag"></select></label>
+      <label>MDEP<select id="fMdep"></select></label>
+      <label>Account<select id="fAcct"></select></label>
+      <label>Functional Area<select id="fFa"></select></label>
+      <label>Commitment Item<select id="fCi"></select></label>
+      <label>Fiscal Month<select id="fFm"></select></label>
+      <button class="btn ghost" id="btnReset" type="button">Reset</button>
+    </div>
+    <section class="kpis" id="kpis" aria-label="Key indicators"></section>
+    <section class="panel summary"><h2>Resource Manager summary</h2><p id="summary">&nbsp;</p></section>
+    <section class="panel">
+      <div class="tablehead"><h2>Total Expenditure by Account vs TDP</h2><div class="tabletools"><label>Sort by <select id="acctSort" aria-label="Sort accounts"><option value="te">Total Expenditure</option><option value="pct">% expended</option></select></label></div></div>
+      <div class="chartbox"><canvas id="cAcctTe"></canvas></div>
+      <p class="muted small" id="acctNote"></p>
+    </section>
+    <section class="panel" id="trendPanel">
+      <div class="tablehead"><h2>Total Expenditure trend</h2><div class="tabletools">
+        <label>Year <select id="tFy" aria-label="Trend fiscal year"></select></label>
+        <label hidden>Spent = <select id="tMetric" aria-label="What counts as spent"><option value="od">Total Expenditure</option><option value="o">Obligation</option><option value="d">Disbursement</option></select></label>
+      </div></div>
+      <h3 class="sub">Where we should be</h3>
+      <div id="pace" class="pace"></div>
+      <div class="row r2">
+        <div><h3 class="sub">Cumulative Total Expenditure vs straight-line pace (TDP &times; month &divide; 12) and spend plan</h3><div class="chartbox"><canvas id="cCum"></canvas></div><p class="hint" id="paceHint" hidden>The straight-line pace appears once the funding file is loaded.</p></div>
+        <div><h3 class="sub">Monthly Total Expenditure</h3><div class="chartbox"><canvas id="cMon"></canvas></div><p class="hint" id="planHint" hidden>No spend plan loaded.</p></div>
+      </div>
+      <p class="muted small" id="trendNote"></p>
+    </section>
+    <div class="row r2">
+      <section class="panel"><h2>Commitment items within accounts</h2><div class="chartbox"><canvas id="cCiAcct"></canvas></div><p class="muted small">Total Expenditure per Account, split by commitment item (items sharing a description are combined). Click an account to filter.</p></section>
+      <section class="panel"><h2 id="ciSelTitle">Commitment items</h2><div class="chartbox"><canvas id="cCi"></canvas></div><p class="muted small">Total Expenditure by commitment item for the selected account. Click a bar to filter by it.</p></section>
+    </div>
+    <section class="panel" id="acctPanel">
+      <div class="tablehead"><h2>Accounts</h2><div class="tabletools"><button class="btn ghost sm" id="btnAcctCsv" type="button">Export CSV</button></div></div>
+      <p class="muted small" id="acctTableNote"></p>
+      <div class="tablewrap scrolly"><table class="grid acct" id="tAcct"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+    </section>
+    <section class="panel">
+      <div class="tablehead"><h2>Document detail</h2><div class="tabletools"><input type="search" id="fSearch" placeholder="Search document number, MDEP, account&hellip;" aria-label="Search lines" autocomplete="off"><button class="btn ghost sm" id="btnCsv" type="button">Export CSV</button><button class="btn ghost sm" id="btnAll" type="button">Show all</button></div></div>
+      <p class="muted small">One row per line. Click a column header to sort. <span id="searchNote" class="searchnote"></span></p>
+      <div class="tablewrap scrolly"><table class="grid" id="tDocs"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+    </section>
+  </section>
+
+  <!-- ================= PR TRACKER ================= -->
+  <section class="page" id="page-pr" hidden aria-label="PR Tracker">
+    <div class="pagehead">
+      <div><h1><span class="pic t-pr"><svg class="ic"><use href="#i-card"/></svg></span>PR Tracker</h1>
+      <div class="asofp" id="asof-pr"></div><div class="scope" id="prScope">&nbsp;</div></div>
+      <button class="btn ghost" type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg>Home</button>
+    </div>
+    <div class="nodata" data-nodata="pr" hidden>No PR files loaded yet (L1.xlsx to L4.xlsx). <button class="btn sm primary" type="button" data-upload="1">Upload data</button></div>
+    <div class="filters" role="group" aria-label="PR filters">
+      <label>Level<select id="prLevel"></select></label>
+      <label>Cardholder<select id="prCard"></select></label>
+      <label>Merchant<select id="prMerch"></select></label>
+      <label class="grow">Search<input type="search" id="prSearch" placeholder="PR number, cardholder, merchant, description&hellip;" autocomplete="off"></label>
+      <button class="btn ghost" id="prReset" type="button">Reset</button>
+    </div>
+    <section class="kpis" id="prKpis" aria-label="PR totals"></section>
+    <section class="panel"><h2>Where the PRs are</h2><div class="pipeline" id="prPipe"></div></section>
+    <div class="row r2">
+      <section class="panel"><h2>Value by cardholder</h2><div class="chartbox tall"><canvas id="cPrCard"></canvas></div></section>
+      <section class="panel"><h2>Value by merchant</h2><div class="chartbox tall"><canvas id="cPrMerch"></canvas></div></section>
+    </div>
+    <p class="muted small chartnote" id="prChartNote">Largest 10; bars are split by level. Click a bar to filter by it.</p>
+    <section class="panel">
+      <div class="tablehead"><h2>PR list</h2><div class="tabletools"><button class="btn ghost sm" id="prCsv" type="button">Export CSV</button><button class="btn ghost sm" id="prAll" type="button">Show all</button></div></div>
+      <p class="muted small">One row per PR, at the highest level it appears in. Click a column header to sort. <span class="searchnote" id="prNote"></span></p>
+      <div class="tablewrap scrolly"><table class="grid" id="tPr"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+    </section>
+  </section>
+
+  <!-- ================= FUEL ================= -->
+  <!-- ================= SPEND PLANS ================= -->
+  <section class="page" id="page-spend" hidden aria-label="Spend Plans">
+    <div class="pagehead">
+      <div><h1><span class="pic t-plan"><svg class="ic"><use href="#i-plan"/></svg></span>Spend Plans<span class="demotag" id="spDemo" hidden>Demo data</span></h1>
+      <div class="asofp" id="asof-spend"></div><div class="scope" id="spScope">&nbsp;</div></div>
+      <button class="btn ghost" type="button" data-go="home"><svg class="ic"><use href="#i-home"/></svg>Home</button>
+    </div>
+    <div class="nodata" data-nodata="spend" hidden>No spend plan or Status of Funds lines loaded yet. Actuals come from the Status of Funds export. <button class="btn sm primary" type="button" data-upload="1">Upload data</button></div>
+    <div class="filters" role="group" aria-label="Spend plan filters">
+      <label>Fiscal Year<select id="spFy"></select></label>
+      <label>Account<select id="spAcct"></select></label>
+      <div class="segwrap"><span class="seglbl">View</span><div class="seg" id="spMode" role="group" aria-label="Monthly or cumulative"><button type="button" data-m="month" class="on">Monthly</button><button type="button" data-m="cum">Cumulative</button></div></div>
+      <button class="btn ghost" id="spReset" type="button">Reset</button>
+    </div>
+    <section class="kpis k4" id="spKpis" aria-label="Spend plan totals"></section>
+    <section class="panel">
+      <div class="tablehead"><h2 id="spChartTitle">Planned vs actual by month</h2><div class="vlegend"><span class="vchip g">&le;5%</span><span class="vchip y">5&ndash;10%</span><span class="vchip r">&gt;10%</span></div></div>
+      <div class="chartbox tall"><canvas id="cSpend"></canvas></div>
+      <p class="muted small"><span id="spNote"></span> Actual = Total Expenditure from Status of Funds, colored by its variance from plan.</p>
+    </section>
+    <section class="panel">
+      <div class="tablehead"><h2>Accounts by month</h2></div>
+      <p class="muted small" id="spGridNote"></p>
+      <div class="tablewrap"><table class="grid spgrid" id="tSpend"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+    </section>
+  </section>
+
+<section class="page" id="page-fh" aria-label="Funeral Honors" hidden>
+ <div class="pagehead"><div><h1><span class="pic t-fh"><svg class="ic"><use href="#i-flag"/></svg></span>Funeral Honors</h1><div class="asofp" id="asof-fh"></div><div class="scope" id="fhScope"></div></div><button class="btn ghost" data-go="home" type="button">Home</button></div>
+ <div class="filters"><label>Fiscal Year<select id="fhFy"></select></label><label>Account<select id="fhAcct"></select></label><label>Spend view<select id="fhMode"><option value="month">Monthly</option><option value="cum">Cumulative</option></select></label></div>
+ <section class="kpis k4" id="fhKpis"></section>
+ <div class="row r2"><section class="panel"><h2>Total Expenditure vs funding</h2><div class="chartbox"><canvas id="cfhAcct"></canvas></div></section><section class="panel"><h2>Spend by account and fiscal month</h2><div class="chartbox"><canvas id="cfhMon"></canvas></div><p class="muted small">Total Expenditure; actuals stop at the last month with lines. October = month 1.</p></section></div>
+ <section class="panel"><h2>Accounts</h2><div class="tablewrap scrolly"><table class="grid" id="tfhAcct"><thead></thead><tbody></tbody></table></div></section><section class="panel"><div class="tablehead"><h2>Stipends</h2><div class="tabletools"><input type="search" id="stipSearch" placeholder="Search stipends…" aria-label="Search Stipends"><select id="stipStatus" aria-label="Stipends status"></select></div></div><div id="stipCounts" class="statuscounts"></div>
+ <div class="row r2"><div class="chartbox"><canvas id="cStip"></canvas></div></div><p class="muted small" id="stipNote"></p><div class="tablewrap scrolly"><table class="grid" id="tstip"><thead></thead><tbody></tbody></table></div></section><section class="panel"><div class="tablehead"><h2>MFH Duty</h2><div class="tabletools"><input type="search" id="dutySearch" placeholder="Search mfh duty…" aria-label="Search MFH Duty"><select id="dutyStatus" aria-label="MFH Duty status"></select></div></div><div id="dutyCounts" class="statuscounts"></div>
+ <div class="row r2"><div class="chartbox"><canvas id="cDuty"></canvas></div><div class="chartbox"><canvas id="cUic"></canvas></div></div><p class="muted small" id="dutyNote"></p><div class="tablewrap scrolly"><table class="grid" id="tduty"><thead></thead><tbody></tbody></table></div></section></section>
+<section class="page" id="page-esgr" aria-label="ESGR" hidden>
+ <div class="pagehead"><div><h1><span class="pic t-esgr"><svg class="ic"><use href="#i-case"/></svg></span>ESGR</h1><div class="asofp" id="asof-esgr"></div><div class="scope" id="esgrScope"></div></div><button class="btn ghost" data-go="home" type="button">Home</button></div>
+ <div class="filters"><label>Fiscal Year<select id="esgrFy"></select></label><label>Account<select id="esgrAcct"></select></label><label>Spend view<select id="esgrMode"><option value="month">Monthly</option><option value="cum">Cumulative</option></select></label></div>
+ <section class="kpis k4" id="esgrKpis"></section>
+ <div class="row r2"><section class="panel"><h2>Total Expenditure vs funding</h2><div class="chartbox"><canvas id="cesgrAcct"></canvas></div></section><section class="panel"><h2>Spend by account and fiscal month</h2><div class="chartbox"><canvas id="cesgrMon"></canvas></div><p class="muted small">Total Expenditure; actuals stop at the last month with lines. October = month 1.</p></section></div>
+ <section class="panel"><h2>Accounts</h2><div class="tablewrap scrolly"><table class="grid" id="tesgrAcct"><thead></thead><tbody></tbody></table></div></section><section class="kpis k4" id="dtsKpis"></section><section class="panel"><div class="tablehead"><h2>DTS trips</h2><div class="tabletools"><input type="search" id="dtsSearch" placeholder="Search dts trips…" aria-label="Search DTS trips"><select id="dtsStatus" aria-label="DTS trips status"></select></div></div><div id="dtsCounts" class="statuscounts"></div>
+ <div class="row r2"><div class="chartbox"><canvas id="cDtsMon"></canvas></div><div class="chartbox"><canvas id="cLoc"></canvas></div></div><p class="muted small" id="dtsNote"></p><div class="tablewrap scrolly"><table class="grid" id="tdts"><thead></thead><tbody></tbody></table></div></section></section>
+</main>
+
+<!-- ================= DATA DETAILS (opened from the small icon in the corner) ================= -->
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="Data details">
+  <div class="dhead"><h2>Data details</h2><button class="iconbtn" id="btnClose" type="button" aria-label="Close">&times;</button></div>
+  <p class="dstate" id="dState"></p>
+  <div class="dactions">
+    <button class="btn primary sm" type="button" data-upload="1"><svg class="ic"><use href="#i-upload"/></svg>Upload files</button>
+    <button class="btn sm" id="btnSave" type="button" disabled title="Load your files first">Save with data</button>
+    <button class="btn ghost sm" id="btnDemo" type="button" hidden>Load demo data</button>
+    <button class="btn ghost sm" id="btnClear" type="button">Clear data</button>
+  </div>
+  <h3>Files</h3>
+  <div class="tablewrap"><table class="grid files" id="tFiles"><thead><tr><th>File</th><th>Read as</th><th>Page</th><th class="num">Rows</th><th>Status</th></tr></thead><tbody></tbody></table></div>
+  <details class="dsec" id="dSof"><summary>Status of Funds</summary><div class="loadreport" id="loadReport"></div></details>
+  <details class="dsec" id="dPr"><summary>PR Tracker</summary><div class="loadreport" id="prReport"></div></details>
+  <details class="dsec" id="dSpend"><summary>Spend Plans</summary><div class="loadreport" id="spReport"></div></details>
+  <details class="dsec" id="dFh"><summary>Funeral Honors</summary><div class="loadreport" id="fhReport"></div></details>
+  <details class="dsec" id="dEsgr"><summary>ESGR</summary><div class="loadreport" id="esgrReport"></div></details>
+  <details class="dsec"><summary>G1 templates</summary>
+    <div class="tmpl">
+      <a class="btn ghost sm" href="pr_template.xlsx" download>PR file (L1&ndash;L4)</a>
+      <a class="btn ghost sm" href="g1_cardholder_key_template.xlsx" download>G1 Cardholder Key</a>
+      <a class="btn ghost sm" href="funds_template.xlsx" download>Funds export</a>
+      <a class="btn ghost sm" href="g1_funding_template.xlsx" download>G1 Funding file</a>
+      <a class="btn ghost sm" href="g1_accountkey_template.xlsx" download>G1 Account Key</a>
+      <a class="btn ghost sm" href="g1_cikey_template.xlsx" download>G1 Commitment Item Key</a>
+      <a class="btn ghost sm" href="g1_spendplan_template.xlsx" download>G1 Spend plan (Account, Oct&ndash;Sep)</a>
+      <a class="btn ghost sm" href="g1_stipends_template.xlsx" download>G1 Stipends</a>
+      <a class="btn ghost sm" href="g1_mfh_duty_template.xlsx" download>G1 MFH Duty</a>
+      <a class="btn ghost sm" href="g1_dts_sample.xlsx" download>G1 DTS sample</a>
+    </div>
+  </details>
+  <details class="dsec"><summary>How the numbers are calculated</summary>
+    <div class="method">
+      <h4>Loading</h4>
+      <ul>
+        <li>Files are read by this browser tab only. Each file is matched to its page by its column headers (PR files also need L1&ndash;L4 in the name).</li>
+        <li>Loading a file again replaces the earlier copy of the same kind: the same funds file type, the same PR level, or the same Stipends, MFH Duty or DTS report. Loading your first file clears the demo data.</li>
+        <li>Headers match regardless of case, spaces or underscores. Personal identifier columns (such as SSN) are skipped without being read. #REF! and other error cells count as blank.</li>
+      </ul>
+      <h4>Status of Funds</h4>
+      <ul>
+        <li>Total Expenditure (commitment_amt_cum) and Disbursement (disbursement_amt_cum) are the export's cumulative amounts, sign-flipped (&times; &minus;1) because the export carries them negative. A funds export needs both columns.</li>
+        <li>Obligation is calculated: Obligation = Total Expenditure &minus; Disbursement (on the raw export: disbursement &minus; commitment). obligation_amt_cum is not read. Spent = Obligation + Disbursement = Total Expenditure.</li>
+        <li>TDP and AFP come only from the funding file (Fiscal Year, Account, TDP, AFP), per Account. Functional Areas roll up to Accounts (with their Sag and MDEP) through the Account Key. Commitment items sharing a description in the Commitment Item Key are added together.</li>
+        <li>Balance = TDP &minus; Total Expenditure (= TDP &minus; Obligation &minus; Disbursement). Straight-line pace = TDP &times; fiscal month &divide; 12 (October = 1). The page opens on the current fiscal year (1 October starts the next) whenever it has lines, otherwise the latest earlier year.</li>
+        <li>Accounts: % expended = Total Expenditure &divide; TDP. Pace compares it with the share of the fiscal year elapsed (days since 1 October): within &plusmn;10% is on pace, above is over, below is under. Commitment items are measured by Total Expenditure.</li>
+      </ul>
+      <h4>PR Tracker</h4>
+      <ul>
+        <li>The level comes from the file name: L3.xlsx = Level 3. Columns read: Cardholder Name (shown as First Last), Purchase requisition (PR Number), Merchant / Description (Merchant), Short Text (Description), Total Value.</li>
+        <li>Rows with the same PR number in one level are one PR; each row is a separate line item. Its Total Value is always the sum of its rows, and its Description is the Short Text of the row with the highest Total Value (the first one on a tie).</li>
+        <li>A PR found in more than one level file is shown once, at the highest level.</li>
+        <li>G1 Cardholder Key (optional): Cardholder, Display Name. Only listed cardholders count; names match on normalized first and last name, ignoring case and middle names. Display Name is used when provided. Any Type column is ignored. This key is separate from Aviation's.</li>
+      </ul>
+      <h4>Spend Plans</h4>
+      <ul>
+        <li>Planned = the spend plan: one row per Account with planned dollars for October &hellip; September, used as entered. It is always for the current fiscal year (1 October starts the next) unless the file has a Fiscal Year column. Month headers can be full names, abbreviations or dates; the header row is found automatically; blank and Total rows are skipped. A new spend plan replaces the earlier one. Plan accounts match Status of Funds accounts by name, ignoring case and extra spaces; plan accounts not found are listed here, and accounts with spending but no plan show &ldquo;no plan&rdquo;.</li>
+        <li>The page opens on the current fiscal year whenever it has a plan or actuals. (A long-format spend plan loaded with Status of Funds &mdash; Fiscal Year, Account, Fiscal Month, Planned Amount &mdash; is also read when no spend plan is uploaded here.)</li>
+        <li>Actual = Total Expenditure per Account and fiscal month, counted exactly as on Status of Funds (sign-flipped, Account Key). Each line's cumulative-to-date amount counts once, in its fiscal month; Cumulative is the running total from October, so September equals the year's Total Expenditure. Actuals show only through the latest month that has lines.</li>
+        <li>Variance % = (Actual &minus; Planned) &divide; Planned. Up to &plusmn;5% is green, over 5% up to 10% yellow, over 10% red. An account is off plan when its to-date variance is outside &plusmn;5%.</li>
+      </ul>
+      <h4>Funeral Honors and ESGR</h4>
+      <ul><li>Account selection: names containing “Funeral Honors” or “ESGR”, ignoring case, after the G1 Account Key is applied. Spend is Total Expenditure, with TDP/AFP from the G1 funding file. Monthly amounts count each SOF line once in its fiscal month; cumulative is the running total from October.</li>
+      <li>Stipends: counts per Status as entered, by date of service. MFH Duty: duties by date performed; status matches ignoring case (Not started = red, Calendar submitted = amber, Pay submitted = green). Other statuses are retained and shown in grey.</li>
+      <li>DTS: only Approved date, Last name, First name, TANUM, Departure Date, Location/Destination and Total Obligation are read. Name = First Last in proper case. Obligation by month uses the Approved date; rows without an approved date remain in the table and totals. Repeat TANUMs stay in the report and are counted only in the drawer.</li>
+      <li>G1 data lives only in this tab or your G1 saved HTML. No localStorage or IndexedDB is used. G1 keys, funding, templates and saved block (g1Saved) are entirely separate from Aviation.</li></ul>
+    </div>
+  </details>
+</aside>
+<div class="dropover" id="dropOver" hidden><div><svg class="ic big"><use href="#i-upload"/></svg><p>Drop files to load</p></div></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>window.__dashSrc = document.documentElement.outerHTML; /* page markup before any script runs; used by "Save with data" */</script>
+<script src="../../assets/vendor/chart.umd.min.js"></script>
+<script src="../../assets/vendor/xlsx.full.min.js"></script>
+<script src="../../assets/js/dashkit.js"></script>
+<script data-demo src="data/funds_demo.js"></script>
+<script data-demo src="data/g1_demo.js"></script>
+<script src="../../dashboards/finance/funding.js"></script>
+<script src="../../dashboards/finance/plan.js"></script>
+<script src="core.js"></script>
+<script src="sof.js"></script>
+<script src="pr.js"></script>
+<script src="spend.js"></script>
+<script src="programs.js"></script>
+<script src="home.js"></script>
+</body>
+</html>
