@@ -80,7 +80,7 @@
     var reader = new FileReader(), isCsv = /\.csv$/i.test(file.name);
     reader.onload = function (e) {
       try {
-        var wb = isCsv ? XLSX.read(e.target.result, { type: "string", raw: true }) : XLSX.read(new Uint8Array(e.target.result), { type: "array", cellDates: false });
+        var wb = isCsv ? XLSX.read(e.target.result, { type: "string", raw: true }) : XLSX.read(new Uint8Array(e.target.result), { type: "array", cellDates: true });
         cb(null, routeWorkbook(file.name, wb, isCsv));
       } catch (err) { cb(err); }
     };
@@ -90,7 +90,10 @@
   function routeWorkbook(fileName, wb, isCsv) {
     var best = {};
     wb.SheetNames.forEach(function (sn) {
-      var ws = wb.Sheets[sn], src = L.sheetSource(ws);
+      var ws = wb.Sheets[sn], src = L.sheetSource(ws), read = src.get;
+      // SheetJS cellDates encodes Excel's timezone-free calendar in UTC fields.
+      // Normalize to LOCAL NOON before the shared parser; never shift it by local offset.
+      src.get = function (r, c) { var v = read(r, c); return v instanceof Date ? w.OWI_PARSE.day(v.getUTCFullYear(), v.getUTCMonth()+1, v.getUTCDate()) : v; };
       MODS.forEach(function (m) {
         [].concat(m.classify(src, fileName, ws) || []).forEach(function (c) {
           if (!c || !c.kind) return;

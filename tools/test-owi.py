@@ -24,7 +24,7 @@ R=[['Fictional Alpha','SPC',23,'M-Day','Demo BN A','Demo MSC A','TY'+FY,'Adel, I
    ['Fictional Foxtrot','1LT',27,'AGR','Demo BN C','Demo MSC B',str(int(FY)-1),'Carroll','IA',f'{Y-5}-01-01','',f'{Y}-09-30','999-00-1111','IGNORE-THIS-CELL']]
 incident=xlsx('OWI fictional.xlsx',[['Fictional OWI export'],[],[],H]+R+[['Total',None,None,None,None,None,None,None,None,None,None,None,None,None]])
 strength=xlsx('Strength.xlsx',[['Fictional key'],[],['MSC','Battalion','Strength'],[' demo msc a ','',100],['Demo MSC A','Demo BN A',40],['Demo MSC A','Demo BN B',60],['Demo MSC B','',200],['Demo MSC B','Demo BN C',200]])
-for name,head in [('owi_template.xlsx',H[:0]+['Soldier Name','Rank (grade)','Age','Duty Status','Battalion','MSC','DY','Home of Record','State','PEBD','DOB','Incident Date']),('owi_strength_template.xlsx',['MSC','Battalion','Strength'])]:
+for name,head in [('owi_template.xlsx',H[:0]+['Soldier Name','Rank (grade)','Age','Duty Status','Battalion','MSC','DY','Home of Record','State','Address','City','ZIP Code','County','PEBD','DOB','Incident Date']),('owi_strength_template.xlsx',['MSC','Battalion','Strength'])]:
  ws=openpyxl.load_workbook(ROOT/'dashboards/owi'/name).active
  check([c.value for c in ws[1]]==head and ws.max_row==1,'blank template schema '+name)
 check('OWI-Dashboard-*.html' in (ROOT/'.gitignore').read_text() and '|owi' in (ROOT/'tools/pre-commit-guard.sh').read_text(),'saved-copy ignore and embedded-data guard include OWI')
@@ -41,8 +41,8 @@ for fn,body in [('OWI-Dashboard-10Nov26.html','fictional test only'),('renamed.h
  subprocess.run(['git','-C',str(guard),'rm','--cached',fn],check=True,capture_output=True)
 with sync_playwright() as p:
  b=p.chromium.launch(executable_path='/usr/bin/google-chrome',args=['--no-sandbox']);ctx=b.new_context(viewport={'width':1440,'height':1000},accept_downloads=True);errors=[];net=[]
- def new():
-  pg=ctx.new_page();pg.on('pageerror',lambda e:errors.append(e.stack));pg.on('console',lambda m:errors.append(m.text) if m.type=='error' else None);pg.on('request',lambda r:net.append(r.url) if not r.url.startswith(('file:','data:','blob:')) else None);return pg
+ def new(context=None):
+  pg=(context or ctx).new_page();pg.on('pageerror',lambda e:errors.append(e.stack));pg.on('console',lambda m:errors.append(m.text) if m.type=='error' else None);pg.on('request',lambda r:net.append(r.url) if not r.url.startswith(('file:','data:','blob:')) else None);return pg
  def load(pg,paths):pg.set_input_files('#fileInput',paths);pg.wait_for_timeout(550)
  def ev(s):return pg.evaluate(s)
  pg=new();pg.goto((ROOT/'dashboards/owi/index.html').as_uri());pg.wait_for_timeout(800)
@@ -54,7 +54,7 @@ with sync_playwright() as p:
  check(pg.input_value('#fTy')==FY,'current training year selected when present')
  check(abs(ev('OWI.api.peerRate')-13786/2402129*1000)<1e-10,'verified statewide DOT administrative numerator and denominator')
  check('NOT age-adjusted' in pg.inner_text('#rateNote') and ev('OWI_PEER.ageAdjusted') is False,'no fabricated age-standardization claim')
- check(ev('Object.keys(OWI_GEO.towns).length')==942 and ev('OWI_GEO.towns.desmoines.pop')==214133,'real 2020 Census town population table')
+ check(ev('OWI_GEO.counts.incorporated')==942 and ev('OWI_GEO.counts.CDP')==86 and ev('Object.keys(OWI_GEO.zips).length')==1055 and ev('OWI_GEO.towns.desmoines.pop')==214133,'real 2020 Census town population table')
  if SHOTS:
   pg.screenshot(path=str(Path(SHOTS)/'owi-home.png'),full_page=True)
   for anchor,shot in [('geography','map'),('demographics','patterns'),('seasonPanel','timing'),('unitPanel','units')]:
@@ -143,6 +143,61 @@ with sync_playwright() as p:
  unknown=xlsx('Unknown.xlsx',[['Not','An','Incident','Schema'],['Fake','Fake','Fake','Fake']]);load(pg,unknown);check(ev('OWI.failed.length')==1 and ev('OWI.mods.owi._state.rows[0].name')=='Fictional No MSC','unknown workbook rejected without losing loaded data')
  # Excludes out-of-state even when the town has an Iowa namesake; sources don't fetch.
  check(ev('OWI.api.hor("Ames, NE","").size')=='Out of state' and ev('OWI.api.hor("Ames","Nebraska").ref') is None,'explicit non-IA town/state combinations excluded from map lookup')
+ # Messy, FICTIONAL sample: every supported format, split fields and deliberate failures.
+ messy_h=['Soldier Name','Grade','Age','Duty Status','Battalion','MSC','DY','HOR Address','Address','City','State','ZIP Code','County','PEBD','DOB','Incident Date','SSN']
+ addrs=[{'hor':'123 Main St, Ankeny, IA 50023'},{'hor':'ANKENY IA'},{'hor':'Ankeny, Iowa'},{'hor':'Des Moines IA 50310-1234'},{'hor':'50023'},{'hor':'W Des Moines'},{'hor':'St. Charles'},{'hor':'Mt Pleasant'},{'hor':'Ft Dodge'},{'hor':'123 Demo Main St Ankeny IA 50023 USA'},{'hor':'  aNkEnY    iA   '},{'hor':'Ankney IA'},{'hor':'Des Moinse IA'},{'hor':'N Liberty'},{'hor':'E Peru'},{'hor':'S English'},{'hor':'Amana, Iowa'},{'hor':'W. Des-Moines'},{'hor':'Saint Charles'},{'hor':'Mount Pleasant'},{'hor':'Fort Dodge'},{'zip':'50023'},{'address':'123 Demo Main St','city':'Ankeny','state':'Iowa','zip':'50023','county':'Polk'},{'city':'Boone','zip':'50023'},{'zip':'50117'},{'hor':'12345 Demo Rd Ankeny IA'},{'hor':'123 Demo St Ankeny'},{'hor':'W Des Moines IA 50266'},{'city':'Ankeny'},{'zip':'52809'},
+ {'hor':'123 Demo St, Omaha, NE 68102'},{'hor':'Des Moines, WA'},{'city':'Ankeny','zip':'68102'},
+ {'hor':'Demo Unlisted Town IA'},{'zip':'50100'}, {'hor':'Ankeny IA'}]
+ dvariants=[dt.datetime(2025,1,5),45662,45662.75,'1/5/2025','01/05/25','2025-01-05','5-Jan-25','05JAN2025','5 Jan 2025','January 5, 2025','20250105',20250105,'2025-01-05T23:30:00-06:00','1/5/2025 12:30 PM',dt.datetime(2025,1,5,23,30),'2025-01-05 00:00:00']
+ messy_rows=[]
+ for i,a in enumerate(addrs):
+  age='' if i%3==0 else 23;pebd=['1/1/2020','01JAN2020','20200101',dt.datetime(2020,1,1)][i%4];dob=['05JAN2002','5-Jan-02',dt.datetime(2002,1,5),20020105][i%4] if age=='' else 'DO-NOT-READ-DOB'
+  if i==1:pebd='PEBD-UNREADABLE'
+  if i==3:dob='BIRTH-UNREADABLE'
+  inc='DATE-UNREADABLE' if i==len(addrs)-1 else dvariants[i%len(dvariants)]
+  messy_rows.append([f'Fictional Messy Soldier {i+1:02d}','SPC',age,'M-Day','Demo Messy BN','Demo Messy MSC',2025,a.get('hor',''),a.get('address',''),a.get('city',''),a.get('state',''),a.get('zip',''),a.get('county',''),pebd,dob,inc,'999-00-1111'])
+ messy=xlsx('Fictional messy OWI.xlsx',[['FICTIONAL TEST SAMPLE ONLY'],[],messy_h]+messy_rows)
+ load(pg,messy);rs=ev('OWI.mods.owi._state.rows');tally={k:sum(r['matchMethod']==k for r in rs) for k in ['ZIP','city','fuzzy','out of state','unmatched']}
+ print('MESSY SAMPLE MATCH REPORT',json.dumps(tally),flush=True)
+ check(len(rs)==36 and sum(r['ref'] is not None for r in rs)==31,'messy sample maps all 31 usable Iowa records; 3 non-Iowa and 2 deliberate unmatched stay off map')
+ check(tally['fuzzy']==2 and tally['out of state']==3 and tally['unmatched']==2,'fuzzy typo matching plus precise out-of-state and unmatched reporting')
+ check(all(r['ref'] for r in rs[:30]),'all requested free-text, ZIP-only, abbreviation, typo, CDP and split-column examples match')
+ check(rs[23]['town']=='Ankeny' and rs[23]['matchMethod']=='ZIP','ZIP wins over inconsistent city in split columns')
+ check(rs[24]['size']=='Unknown size' and rs[24]['ref']=='zip:50117','unincorporated postal locality plots without fabricating population')
+ check(rs[16]['town']=='Amana' and rs[16]['size']=='Small','Census CDP maps with real 2020 population')
+ check(rs[25]['town']=='Ankeny' and rs[25]['matchMethod']=='city','five-digit house number not mistaken for a ZIP')
+ check(all(r['incident']=='2025-01-05' for r in rs[:-1]) and rs[-1]['incident']=='','35/36 messy incident dates parsed; intentional malformed value stays unknown')
+ check(rs[0]['age']==23 and rs[0]['yos']==5 and rs[2]['yos']==5,'same robust date parser applies to DOB fallback and PEBD')
+ check('DATE-UNREADABLE' in pg.inner_text('#loadReport') and 'PEBD-UNREADABLE' in pg.inner_text('#loadReport'),'unparsed incident/PEBD raw values and row numbers reported in drawer')
+ check('BIRTH-UNREADABLE' not in pg.content() and 'DOB not retained' in pg.inner_text('#loadReport'),'invalid DOB noted by row, but private DOB value still discarded')
+ check(all(x in pg.inner_text('#horMatchCounts') for x in ['Matched by ZIP:','by city:','fuzzy: 2','out of state: 3','unmatched: 2']),'drawer match report lists all five outcomes')
+ check('Demo Unlisted Town IA' in pg.inner_text('#loadReport') and '50100' in pg.inner_text('#loadReport'),'unmatched raw HOR text available in drawer')
+ plotted=ev(r'Array.from(document.querySelectorAll("#map circle title")).reduce((n,t)=>n+Number(t.textContent.match(/· (\d+) incidents/)[1]),0)')
+ check(plotted==31 and pg.locator('#map circle').count()>10,'all matched messy records actually plot as offline Iowa bubbles')
+ if SHOTS:
+  pg.locator('#geography').scroll_into_view_if_needed();pg.evaluate('document.getElementById("toast").hidden=true');pg.screenshot(path=str(Path(SHOTS)/'owi-map-messy.png'))
+ # Saved copies must retain reports, postal references and dates without DOB or SSN values.
+ pg.click('#btnInfo')
+ with pg.expect_download() as dl:pg.click('#btnSave')
+ msaved=TMP/'messy-saved.html';dl.value.save_as(msaved);mq=new();mq.goto(msaved.as_uri());mq.wait_for_timeout(500)
+ check(mq.evaluate('OWI.mods.owi._state.rows.filter(r=>r.ref).length')==31 and mq.evaluate('OWI.mods.owi._state.rows.filter(r=>r.incident).length')==35,'messy matches and parsed incident dates survive offline Save/reopen')
+ check('DATE-UNREADABLE' in mq.inner_text('#loadReport') and 'BIRTH-UNREADABLE' not in msaved.read_text(),'saved diagnostic report survives without retaining raw DOB')
+ mq.close();pg.click('#btnClose')
+ # Every date alias works; US ordering unless first component >12; strict invalid days.
+ for alias in ['Incident Date','Date of Incident','OWI Date','Arrest Date','Date','Event Date','Incident Date (MM/DD/YYYY)']:
+  afile=xlsx('Alias '+alias.replace('/','-')+'.xlsx',[["Name","Rank","Age","Duty Status","HOR",alias],["Fictional Date Alias","SPC",23,"M-Day","50023","05JAN2025"]])
+  load(pg,afile);check(ev('OWI.mods.owi._state.rows[0].incident')=='2025-01-05','incident date column alias '+alias)
+ check(ev('["31/1/25","1/5/25","01/05/49","01/05/50","01/05/99","2025-02-30","32/1/25"].map(x=>OWI_PARSE.iso(OWI.api.date(x)))')==['2025-01-31','2025-01-05','2049-01-05','1950-01-05','1999-01-05','',''],'US date order, unambiguous D/M fallback, 1950 cutoff and invalid-date rejection')
+ check(ev('["St Charles","Saint Charles","Mt Pleasant","Mount Pleasant","Ft Dodge","Fort Dodge","W Des Moines","West Des Moines","E Peru","East Peru","N Liberty","North Liberty","S English","South English"].map(x=>OWI_PARSE.normCity(x)).every((x,i,a)=>i%2===0||x===a[i-1])'),'all St/Mt/Ft/N/S/E/W abbreviation expansions normalize identically')
+ check(ev('OWI.api.hor({city:"Ankeny",state:"Nebraska",zip:"50023"}).ref') is None,'explicit non-Iowa state/ZIP conflict stays off map')
+ check(ev('OWI.api.hor({city:"Ankeny",state:"N/A"}).town')=='Ankeny','blank-like State cells do not prevent Iowa city matching')
+ check(ev('OWI.api.hor("52808").state')=='IA','any ZIP inside 50001–52809 is recognized as Iowa even when no point exists')
+ # Direct JS Date / SheetJS Date objects and timezone-sensitive date-time cells.
+ for tz in ['America/Chicago','America/Los_Angeles','Asia/Tokyo']:
+  tc=b.new_context(timezone_id=tz,viewport={'width':1280,'height':900});tp=new(tc);tp.goto((ROOT/'downloads/owi-dashboard.html').as_uri());tp.wait_for_timeout(200);load(tp,messy)
+  check(tp.evaluate('OWI.mods.owi._state.rows.slice(0,-1).every(r=>r.incident==="2025-01-05")'),'SheetJS UTC calendar dates do not shift in '+tz)
+  check(tp.evaluate('OWI.api.date(new Date("2025-01-05T00:00:00Z")).getDate()===5 && OWI.api.date(new Date(2025,0,5)).getHours()===12'),'Date objects normalized to calendar day/local noon in '+tz)
+  tc.close()
  # Packaged folder version also works from file:// and saves without fetching.
  zdir=TMP/'zip';zipfile.ZipFile(ROOT/'downloads/owi-dashboard.zip').extractall(zdir)
  z=new();z.goto((zdir/'owi-dashboard/folder-version/index.html').as_uri());z.wait_for_timeout(500)
