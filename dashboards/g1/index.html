@@ -144,15 +144,17 @@
           <div><h3 class="sub">Projected remaining balance by month</h3><div class="chartbox"><canvas id="cPrsaMonth"></canvas></div></div>
         </div>
         <div class="statuscounts" id="prsaStatus"></div>
-        <div class="tablehead"><h3 class="sub">Planning factors</h3><div class="tabletools">
+        <div class="tablehead"><h3 class="sub">Planning factors &amp; orders</h3><div class="tabletools">
           <button class="btn sm primary" id="prsaAdd" type="button">+ Add row</button>
           <button class="btn ghost sm" id="prsaExport" type="button">Export plan</button>
           <button class="btn ghost sm" id="prsaImport" type="button">Import plan</button><input type="file" id="prsaFile" accept=".xlsx,.xls,.csv" hidden>
           <button class="btn ghost sm" id="prsaClear" type="button">Clear plan</button>
+          <button class="btn ghost sm" id="prsaRatesLink" type="button" title="Daily pay rates used by Orders lines">Pay rates</button>
         </div></div>
         <div class="tablewrap"><table class="grid prsaplan" id="tPrsaPlan"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+        <p class="muted small" id="prsaOrdNote"></p>
         <details class="prsa-cats"><summary>Edit categories</summary><label>Categories (comma separated) <input type="text" id="prsaCats" aria-label="Plan categories"></label></details>
-        <p class="muted small">Available balance = TDP &minus; Total Expenditure for the ticked accounts (fiscal year shown above). Projected remaining = Available + Adjust &minus; included rows. Rows already marked Done may already be in Total Expenditure: untick Include to avoid counting them twice. The plan saves automatically in this browser and goes into Save with data.</p>
+        <p class="muted small">Available balance = TDP &minus; Total Expenditure for the ticked accounts (fiscal year shown above). Projected remaining = Available + Adjust &minus; included rows. Set Type to Orders to price a line from Rank, Start and End dates (inclusive) and soldiers using the daily pay rates under Pay rates; Orders are spread across months by the days in each month. Rows already marked Done may already be in Total Expenditure: untick Include to avoid counting them twice. The plan saves automatically in this browser and goes into Save with data.</p>
       </div>
     </details>
     <section class="panel">
@@ -254,6 +256,14 @@
   <details class="dsec" id="dSpend"><summary>Spend Plans</summary><div class="loadreport" id="spReport"></div></details>
   <details class="dsec" id="dFh"><summary>Funeral Honors</summary><div class="loadreport" id="fhReport"></div></details>
   <details class="dsec" id="dEsgr"><summary>ESGR</summary><div class="loadreport" id="esgrReport"></div></details>
+  <details class="dsec" id="dRates"><summary>Daily pay rates (PRSA Orders)</summary>
+    <div class="rates">
+      <p class="muted small">$ per day for each grade, used by Orders lines in the PRSA Planner (rate &times; days &times; soldiers). Enter your own rates; nothing is preset.</p>
+      <div class="ratesgrid" id="ratesGrid"></div>
+      <p class="muted small" id="ratesNote"></p>
+      <div class="tabletools"><button class="btn ghost sm" id="ratesExport" type="button">Export rates</button><button class="btn ghost sm" id="ratesImport" type="button">Import rates</button><input type="file" id="ratesFile" accept=".xlsx,.xls,.csv" hidden></div>
+    </div>
+  </details>
   <details class="dsec"><summary>G1 templates</summary>
     <div class="tmpl">
       <a class="btn ghost sm" href="pr_template.xlsx" download>PR file (L1&ndash;L4)</a>
@@ -266,6 +276,7 @@
       <a class="btn ghost sm" href="g1_stipends_template.xlsx" download>G1 Stipends</a>
       <a class="btn ghost sm" href="g1_mfh_duty_template.xlsx" download>G1 MFH Duty</a>
       <a class="btn ghost sm" href="g1_dts_sample.xlsx" download>G1 DTS sample</a>
+      <a class="btn ghost sm" href="g1_pay_rates_template.xlsx" download>G1 Daily pay rates</a>
     </div>
   </details>
   <details class="dsec"><summary>How the numbers are calculated</summary>
@@ -302,7 +313,7 @@
       <ul><li>Account selection: names containing “Funeral Honors” or “ESGR”, ignoring case, after the G1 Account Key is applied. Spend is Total Expenditure, with TDP/AFP from the G1 funding file. Monthly amounts count each SOF line once in its fiscal month; cumulative is the running total from October.</li>
       <li>Stipends: counts per Status as entered, by date of service. MFH Duty: duties by date performed; status matches ignoring case (Not started = red, Calendar submitted = amber, Pay submitted = green). Other statuses are retained and shown in grey.</li>
       <li>DTS: only Approved date, Last name, First name, TANUM, Departure Date, Location/Destination and Total Obligation are read. Name = First Last in proper case. Obligation by month uses the Approved date; rows without an approved date remain in the table and totals. Repeat TANUMs stay in the report and are counted only in the drawer.</li>
-      <li>G1 data lives only in this tab or your G1 saved HTML. The one exception is the PRSA Planner: your planning rows autosave in this browser (localStorage key g1-prsa-plan) so edits survive a reload. SOF and other report data is never stored by the browser. G1 keys, funding, templates and saved block (g1Saved) are entirely separate from Aviation.</li></ul>
+      <li>G1 data lives only in this tab or your G1 saved HTML. The one exception is the PRSA Planner: your planning rows autosave in this browser (localStorage key g1-prsa-plan) and the daily pay rates you enter autosave under g1-pay-rates, so edits survive a reload. SOF and other report data is never stored by the browser. G1 keys, funding, templates and saved block (g1Saved) are entirely separate from Aviation.</li></ul>
     </div>
   </details>
 </aside>

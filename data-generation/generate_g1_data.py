@@ -73,6 +73,7 @@ workbook('g1_spendplan_template.xlsx',['Account']+MONTHS,tab='G1SpendPlan',table
 workbook('g1_stipends_template.xlsx',['Retiree','Date of service','Cage code','Status'],tab='G1Stipends',table='G1Stipends',note='One row per service. Status is displayed as entered.')
 workbook('g1_mfh_duty_template.xlsx',['Name','Date performed','UIC','Status'],tab='G1MFHDuty',table='G1MFHDuty',note='Statuses: Calendar submitted, Not started, Pay submitted (case-insensitive).')
 workbook('funds_template.xlsx',H,tab='G1Funds',table='G1Funds',note='G1 SOF export. commitment_amt_cum = Total Expenditure; disbursement_amt_cum = Disbursements (both negative in the export).')
+workbook('g1_pay_rates_template.xlsx',['Grade','Daily rate'],rows=[[g,None] for g in ['E1','E2','E3','E4','E5','E6','E7','E8','E9','W1','W2','W3','W4','W5','O1','O2','O3','O4','O5','O6']],tab='Rates',table='G1PayRates',note='G1 PRSA Planner daily pay rates. Enter your own $ per day for each grade; blank by default (no built-in pay table).')
 workbook('pr_template.xlsx',prh,tab='G1PRs',table='G1PRs',note='Name the file L1.xlsx, L2.xlsx, L3.xlsx or L4.xlsx.')
 wb=openpyxl.Workbook();ws=wb.active;ws.title='G1 DTS Sample'
 for row in dts:ws.append(row)

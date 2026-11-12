@@ -367,3 +367,19 @@ table.prsaplan .rowbtns button.del:hover{color:var(--bad)}
 table.prsaplan{min-width:1180px}
 table.prsaplan td.desc{min-width:260px}
 table.prsaplan select{min-width:118px}
+
+/* PRSA Orders lines + daily pay rates */
+table.prsaplan{min-width:1320px}
+table.prsaplan td.orders{white-space:nowrap}
+table.prsaplan td.orders select{min-width:84px}
+table.prsaplan td.orders input[type=date]{width:136px;margin:0 4px}
+table.prsaplan td.orders .ocount input{width:56px}
+table.prsaplan td.ocalc{min-width:130px}
+table.prsaplan td.ocalc .ctext{color:#64748b;font-weight:400;white-space:nowrap}
+table.prsaplan td.ocalc .flag{color:#b45309}
+.ratesgrid{display:grid;gap:8px}
+.ratesgrid fieldset{border:1px solid #e2e8f0;border-radius:8px;padding:6px 8px;display:flex;flex-wrap:wrap;gap:6px 10px;margin:0}
+.ratesgrid legend{font-size:12px;color:#64748b;padding:0 4px}
+.ratesgrid label{font-size:12px;display:flex;align-items:center;gap:4px}
+.ratesgrid input{width:84px}
+.rates .tabletools{margin-top:6px}

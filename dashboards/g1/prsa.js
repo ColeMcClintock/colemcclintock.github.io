@@ -14,7 +14,61 @@
   var STATUSES = ["Idea", "Planned", "Committed", "Done"];
   var SCOLOR = { Idea: "#64748b", Planned: "#2563eb", Committed: "#b45309", Done: "#15803d" };
   var DEFAULT_CATS = ["Travel", "Supplies", "Contracts", "Training", "Other"];
-  var HEAD = ["Order", "Description / Planning factor", "Account", "Category", "Amount", "Target month", "Status", "Include", "Notes"];
+  var HEAD = ["Order", "Description / Planning factor", "Account", "Category", "Amount", "Target month", "Status", "Include", "Notes", "Type", "Rank", "Start date", "End date", "Soldiers"];
+  // ---------- Orders lines: daily pay rates per grade (entered by the user; no built-in pay table) ----------
+  var GRADES = ["E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "W1", "W2", "W3", "W4", "W5", "O1", "O2", "O3", "O4", "O5", "O6"];
+  var RATES_KEY = "g1-pay-rates", TYPES = { factor: "Planning factor", orders: "Orders" };
+  function blankRates() { var o = {}; GRADES.forEach(function (g) { o[g] = null; }); return { v: 1, updatedAt: null, demo: false, rates: o }; }
+  var R = blankRates(), rateTimer = null;
+  function cleanRates(o) {
+    var r = blankRates(); o = o || {}; r.updatedAt = o.updatedAt || null; r.demo = !!o.demo;
+    var src = o.rates || {}; GRADES.forEach(function (g) { var x = L.parseAmt(src[g]); r.rates[g] = x == null || !isFinite(x) || x < 0 ? null : Math.round(x * 100) / 100; });
+    return r;
+  }
+  function hasRates(o) { return GRADES.some(function (g) { return (o || R).rates[g] != null; }); }
+  function readRates() { try { var t = w.localStorage.getItem(RATES_KEY); return t ? cleanRates(JSON.parse(t)) : null; } catch (e) { return null; } }
+  function writeRates() { rateTimer = null; if (R.demo) return; try { w.localStorage.setItem(RATES_KEY, JSON.stringify(R)); } catch (e) { storeOk = false; } }
+  function normGrade(v) { var s = L.txt(v).toUpperCase().replace(/[\s\-]/g, ""); var m = s.match(/^([EOW])0?(\d)$/); return m && GRADES.indexOf(m[1] + m[2]) >= 0 ? m[1] + m[2] : ""; }
+  // ISO date (yyyy-mm-dd) from a date input, Excel serial, Date or text such as 10/03/2026
+  function isoDate(v) {
+    if (v == null || v === "") return "";
+    var d = null;
+    if (v instanceof Date) d = isNaN(v) ? null : new Date(Date.UTC(v.getFullYear(), v.getMonth(), v.getDate()));
+    else if (typeof v === "number") { if (v > 20000 && v < 80000) { var pc = XLSX.SSF.parse_date_code(v); if (pc) d = new Date(Date.UTC(pc.y, pc.m - 1, pc.d)); } }
+    else { var t = L.txt(v), m;
+      if ((m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+      else if ((m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/))) d = new Date(Date.UTC(m[3].length === 2 ? 2000 + +m[3] : +m[3], +m[1] - 1, +m[2]));
+      else if (/^\d{5}$/.test(t)) return isoDate(+t); }
+    return d && !isNaN(d) ? d.toISOString().slice(0, 10) : "";
+  }
+  function utc(iso) { var p = iso.split("-"); return Date.UTC(+p[0], +p[1] - 1, +p[2]); }
+  // Orders: days are counted inclusive of start and end; amount = daily rate x days x soldiers
+  function ordersCalc(r) {
+    var o = { days: 0, rate: r.rank ? R.rates[r.rank] : null, count: r.count, amount: 0, warn: "" };
+    if (!r.rank) o.warn = "Pick a rank";
+    else if (o.rate == null) o.warn = "Set rate for " + r.rank;
+    if (!r.start || !r.end) o.warn = o.warn || "Enter start and end dates";
+    else { var d = Math.round((utc(r.end) - utc(r.start)) / 864e5) + 1; if (d < 1) o.warn = o.warn || "End date is before start date"; else o.days = d; }
+    if (!o.warn) o.amount = r2(o.rate * o.days * o.count);
+    return o;
+  }
+  // cost of an Orders line by fiscal month of the planner year (days in each month); days before / after that year are kept apart
+  function ordersMonths(r, fyv) {
+    var c = ordersCalc(r), out = { months: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], before: 0, after: 0 };
+    if (!c.amount) return out;
+    var per = c.rate * c.count, s = utc(r.start), e = utc(r.end), fs = Date.UTC(+fyv - 1, 9, 1), fe = Date.UTC(+fyv, 8, 30);
+    for (var t = s; t <= e; t += 864e5) {
+      if (t < fs) out.before += per; else if (t > fe) out.after += per; else { var d = new Date(t); out.months[(d.getUTCMonth() + 3) % 12] += per; }
+    }
+    out.months = out.months.map(r2); out.before = r2(out.before); out.after = r2(out.after);
+    return out;
+  }
+  function refreshOrders() { P.rows.forEach(function (r) { if (r.type === "orders") r.amount = ordersCalc(r).amount; }); }
+  function calcText(r) {
+    var c = ordersCalc(r);
+    if (c.warn) return '<span class="flag">' + esc(c.warn) + "</span>" + (c.days ? ' <span class="muted">' + c.days + " day" + (c.days === 1 ? "" : "s") + "</span>" : "");
+    return c.days + " day" + (c.days === 1 ? "" : "s") + " \u00d7 " + esc(full(c.rate)) + " \u00d7 " + c.count;
+  }
   var seq = 0, saveTimer = null, storeOk = true, lastSaved = null;
   function blank() { return { v: 1, updatedAt: null, demo: false, excluded: [], adjust: 0, categories: DEFAULT_CATS.slice(), rows: [] }; }
   var P = blank();
@@ -37,8 +91,12 @@
     p.excluded = Array.isArray(o.excluded) ? o.excluded.map(L.txt).filter(Boolean) : [];
     p.categories = Array.isArray(o.categories) && o.categories.length ? o.categories.map(L.txt).filter(Boolean) : DEFAULT_CATS.slice();
     p.rows = (Array.isArray(o.rows) ? o.rows : []).map(function (r) {
-      return { id: L.txt(r.id) || id(), desc: L.txt(r.desc), account: L.txt(r.account) || "Pooled", category: L.txt(r.category), amount: num(r.amount),
+      // rows saved before line types existed load as planning factors (unchanged behaviour)
+      var type = /^orders?$/i.test(L.txt(r.type)) ? "orders" : "factor", cnt = Math.floor(L.parseAmt(r.count) || 0);
+      var row = { id: L.txt(r.id) || id(), type: type, desc: L.txt(r.desc), account: L.txt(r.account) || "Pooled", category: L.txt(r.category), amount: num(r.amount),
         month: normMonth(r.month), status: normStatus(r.status), include: r.include !== false, notes: L.txt(r.notes) };
+      if (type === "orders") { row.rank = normGrade(r.rank); row.start = isoDate(r.start); row.end = isoDate(r.end); row.count = cnt >= 1 ? cnt : 1; row.month = ""; }
+      return row;
     });
     return p;
   }
@@ -79,15 +137,20 @@
     if (moved && !P.demo) { clearTimeout(saveTimer); saveTimer = setTimeout(writeLocal, 250); }
   }
   function calc() {
+    refreshOrders();
     var md = match(), acc = accounts(md), on = acc.filter(function (a) { return a.on; });
     var avail = r2(on.reduce(function (s, a) { return s + (a.bal || 0); }, 0)), adj = P.adjust || 0, start = r2(avail + adj);
     var inc = P.rows.filter(function (r) { return r.include; }), planned = r2(inc.reduce(function (s, r) { return s + r.amount; }, 0));
     var st = {}; STATUSES.forEach(function (s) { st[s] = { inc: 0, all: 0, n: 0 }; });
     P.rows.forEach(function (r) { var o = st[r.status]; o.all = r2(o.all + r.amount); o.n++; if (r.include) o.inc = r2(o.inc + r.amount); });
-    var unsched = r2(inc.filter(function (r) { return !r.month; }).reduce(function (s, r) { return s + r.amount; }, 0)), run = start - unsched, months = FM.map(function (m, i) {
-      run = r2(run - inc.filter(function (r) { return r.month === i + 1; }).reduce(function (s, r) { return s + r.amount; }, 0)); return run; });
+    // planning factors land in their target month (unscheduled up front); Orders are spread by the days falling in each month
+    var fyv = fy(), om = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], before = 0, after = 0;
+    inc.filter(function (r) { return r.type === "orders"; }).forEach(function (r) { var x = ordersMonths(r, fyv); x.months.forEach(function (v, i) { om[i] += v; }); before += x.before; after += x.after; });
+    var fac = inc.filter(function (r) { return r.type !== "orders"; });
+    var unsched = r2(fac.filter(function (r) { return !r.month; }).reduce(function (s, r) { return s + r.amount; }, 0)), run = start - unsched - before, months = FM.map(function (m, i) {
+      run = r2(run - om[i] - fac.filter(function (r) { return r.month === i + 1; }).reduce(function (s, r) { return s + r.amount; }, 0)); return run; });
     var byAcct = {}; inc.forEach(function (r) { byAcct[r.account] = r2((byAcct[r.account] || 0) + r.amount); });
-    return { accounts: acc, available: avail, adjust: adj, start: start, planned: planned, remaining: r2(start - planned), status: st, unscheduled: unsched, months: months, byAcct: byAcct, fy: fy(), match: md };
+    return { accounts: acc, available: avail, adjust: adj, start: start, planned: planned, remaining: r2(start - planned), status: st, unscheduled: unsched, months: months, ordersMonths: om.map(r2), ordersBefore: r2(before), ordersAfter: r2(after), byAcct: byAcct, fy: fyv, match: md };
   }
   // ---------- rendering ----------
   function kpi(l, v, sub, color, neg) { return '<div class="kpi' + (neg ? " neg" : "") + '" style="--st:' + color + '"><div class="lbl">' + l + '</div><div class="val">' + v + '</div><div class="sub">' + sub + "</div></div>"; }
@@ -108,7 +171,8 @@
     var pooled = m.byAcct.Pooled || 0;
     t.tFoot.innerHTML = m.accounts.length ? '<tr><td></td><td>Pooled (ticked accounts)' + (pooled ? ' \u00b7 pooled rows ' + esc(full(pooled)) : "") + '</td><td></td><td class="num">' + full(sum(m.accounts, "tdp")) + '</td><td class="num">' + full(sum(m.accounts, "afp")) + '</td><td class="num">' + full(sum(m.accounts, "te")) + '</td><td class="num">' + full(sum(m.accounts, "obl")) + '</td><td class="num">' + full(sum(m.accounts, "disb")) + '</td><td class="num">' + full(m.available) + '</td><td class="num">' + full(m.planned) + '</td><td class="num' + (m.available - m.planned < 0 ? " neg" : "") + '">' + full(r2(m.available - m.planned)) + "</td></tr>" : "";
     $("prsaStatus").innerHTML = STATUSES.map(function (s) { var o = m.status[s]; return '<div class="statuscount" style="--sc:' + SCOLOR[s] + '" data-status="' + s + '"><strong>' + esc(full(o.inc)) + "</strong><span>" + s + " \u00b7 " + o.n + " row" + (o.n === 1 ? "" : "s") + (o.all !== o.inc ? " \u00b7 " + esc(full(o.all)) + " incl. what-ifs" : "") + "</span></div>"; }).join("");
-    var foot = $("tPrsaPlan").tFoot; foot.innerHTML = P.rows.length ? '<tr><td></td><td>Included total</td><td></td><td></td><td class="num">' + full(m.planned) + '</td><td colspan="5"></td></tr>' : "";
+    var foot = $("tPrsaPlan").tFoot; foot.innerHTML = P.rows.length ? '<tr><td></td><td></td><td>Included total</td><td></td><td></td><td class="num">' + full(m.planned) + '</td><td colspan="5"></td></tr>' : "";
+    $("prsaOrdNote").textContent = m.ordersBefore || m.ordersAfter ? "Orders days outside FY" + m.fy + ": " + (m.ordersBefore ? full(m.ordersBefore) + " before October (taken off up front)" : "") + (m.ordersBefore && m.ordersAfter ? "; " : "") + (m.ordersAfter ? full(m.ordersAfter) + " after September (in the total, not in this year\u2019s months)" : "") + "." : "";
     charts(m);
   }
   var SRC = { "export": "SOF export MDEP column", key: "Account Key MDEP", funding: "funding file MDEP column" };
@@ -155,22 +219,29 @@
   }
   function opts(list, value, extra) { if (value && list.indexOf(value) < 0) list = list.concat([value]); return (extra || "") + list.map(function (v) { return '<option value="' + esc(v) + '"' + (v === value ? " selected" : "") + ">" + esc(v) + "</option>"; }).join(""); }
   function table() {
+    refreshOrders();
     var acc = ["Pooled"].concat(accounts().map(function (a) { return a.name; })), y = fy();
     var t = $("tPrsaPlan");
-    t.tHead.innerHTML = "<tr><th></th><th>Description / Planning factor</th><th>Account</th><th>Category</th><th class=\"num\">Amount</th><th>Target month</th><th>Status</th><th>Include</th><th>Notes</th><th></th></tr>";
+    t.tHead.innerHTML = "<tr><th></th><th>Type</th><th>Description / Planning factor</th><th>Account</th><th>Category</th><th class=\"num\">Amount</th><th>Target month / Orders</th><th>Status</th><th>Include</th><th>Notes</th><th></th></tr>";
     t.tBodies[0].innerHTML = P.rows.map(function (r, i) {
       var mo = '<option value="">Unscheduled</option>' + FM.map(function (m, j) { var cy = j < 3 ? +y - 1 : +y; return '<option value="' + (j + 1) + '"' + (r.month === j + 1 ? " selected" : "") + ">" + m + " " + String(cy).slice(2) + "</option>"; }).join("");
       return '<tr data-id="' + esc(r.id) + '"' + (r.include ? "" : ' class="off"') + '><td class="rowbtns"><button type="button" data-act="up" title="Move up" aria-label="Move up"' + (i ? "" : " disabled") + '>\u2191</button><button type="button" data-act="down" title="Move down" aria-label="Move down"' + (i < P.rows.length - 1 ? "" : " disabled") + '>\u2193</button></td>' +
-        '<td class="desc"><input type="text" data-f="desc" value="' + esc(r.desc) + '" placeholder="Planning factor" aria-label="Description"></td>' +
+        '<td><select data-f="type" aria-label="Line type">' + Object.keys(TYPES).map(function (k) { return '<option value="' + k + '"' + (r.type === k ? " selected" : "") + ">" + TYPES[k] + "</option>"; }).join("") + "</select></td>" +
+        '<td class="desc"><input type="text" data-f="desc" value="' + esc(r.desc) + '" placeholder="' + (r.type === "orders" ? "Orders (e.g. exercise support)" : "Planning factor") + '" aria-label="Description"></td>' +
         '<td><select data-f="account" aria-label="Account">' + opts(acc, r.account) + "</select></td>" +
         '<td><select data-f="category" aria-label="Category">' + opts(P.categories.slice(), r.category, '<option value="">\u2014</option>') + "</select></td>" +
-        '<td><input type="number" step="0.01" data-f="amount" value="' + (r.amount || r.amount === 0 ? r.amount : "") + '" aria-label="Amount"></td>' +
-        '<td><select data-f="month" aria-label="Target month">' + mo + "</select></td>" +
+        (r.type === "orders" ?
+          '<td class="num ocalc"><b class="oamt">' + esc(full(r.amount)) + '</b><div class="small ctext">' + calcText(r) + "</div></td>" +
+          '<td class="orders"><select data-f="rank" aria-label="Rank"><option value="">Rank</option>' + GRADES.map(function (g) { return '<option value="' + g + '"' + (r.rank === g ? " selected" : "") + ">" + g + (R.rates[g] == null ? " (no rate)" : "") + "</option>"; }).join("") + "</select>" +
+          '<input type="date" data-f="start" value="' + esc(r.start || "") + '" aria-label="Start date"><span class="muted">to</span><input type="date" data-f="end" value="' + esc(r.end || "") + '" aria-label="End date">' +
+          '<label class="ocount">\u00d7 <input type="number" min="1" step="1" data-f="count" value="' + (r.count || 1) + '" aria-label="Number of soldiers"> soldier' + ((r.count || 1) === 1 ? "" : "s") + "</label></td>"
+        : '<td><input type="number" step="0.01" data-f="amount" value="' + (r.amount || r.amount === 0 ? r.amount : "") + '" aria-label="Amount"></td>' +
+          '<td><select data-f="month" aria-label="Target month">' + mo + "</select></td>") +
         '<td><select data-f="status" aria-label="Status">' + opts(STATUSES.slice(), r.status) + "</select></td>" +
         '<td><input type="checkbox" data-f="include"' + (r.include ? " checked" : "") + ' aria-label="Include in projection"></td>' +
         '<td class="notes"><input type="text" data-f="notes" value="' + esc(r.notes) + '" aria-label="Notes"></td>' +
         '<td class="rowbtns"><button type="button" class="del" data-act="del" title="Delete row" aria-label="Delete row">\u2715</button></td></tr>';
-    }).join("") || '<tr><td colspan="10" class="muted">No planning rows yet. Use “+ Add row”.</td></tr>';
+    }).join("") || '<tr><td colspan="11" class="muted">No planning rows yet. Use “+ Add row”.</td></tr>';
   }
   function render() {
     if (!$("prsaPanel")) return;
@@ -181,15 +252,16 @@
   }
   // ---------- import / export ----------
   function exportPlan() {
-    var m = calc(), rows = [HEAD].concat(P.rows.map(function (r, i) { return [i + 1, r.desc, r.account, r.category, r.amount, r.month ? FM[r.month - 1] : "", r.status, r.include ? "Yes" : "No", r.notes]; }));
+    var m = calc(), rows = [HEAD].concat(P.rows.map(function (r, i) { var o = r.type === "orders"; return [i + 1, r.desc, r.account, r.category, r.amount, !o && r.month ? FM[r.month - 1] : "", r.status, r.include ? "Yes" : "No", r.notes, TYPES[r.type], o ? r.rank : "", o ? r.start : "", o ? r.end : "", o ? r.count : ""]; }));
     var settings = [["Setting", "Value"], ["Adjust available", P.adjust || 0], ["Categories", P.categories.join(", ")], ["Excluded accounts", P.excluded.join("; ")], ["Fiscal year", "FY" + m.fy], ["Updated", P.updatedAt || ""]];
     var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "PRSA Plan"); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(settings), "Settings");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ratesAoa()), "Rates");
     var d = new Date(), name = "G1-PRSA-Plan-" + ("0" + d.getDate()).slice(-2) + K.MON[d.getMonth()] + String(d.getFullYear()).slice(2) + ".xlsx";
     var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([XLSX.write(wb, { type: "array", bookType: "xlsx" })], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })); a.download = name;
     document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
   function parsePlan(wb) {
-    var out = null, hmap = { order: "order", descriptionplanningfactor: "desc", description: "desc", planningfactor: "desc", account: "account", category: "category", amount: "amount", targetmonth: "month", month: "month", status: "status", include: "include", included: "include", notes: "notes" };
+    var out = null, hmap = { order: "order", descriptionplanningfactor: "desc", description: "desc", planningfactor: "desc", account: "account", category: "category", amount: "amount", targetmonth: "month", month: "month", status: "status", include: "include", included: "include", notes: "notes", type: "type", linetype: "type", rank: "rank", grade: "rank", startdate: "start", start: "start", enddate: "end", end: "end", soldiers: "count", count: "count", numberofsoldiers: "count" };
     wb.SheetNames.forEach(function (sn) {
       if (out) return; var aoa = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: true, defval: "" });
       for (var r = 0; r < Math.min(15, aoa.length); r++) {
@@ -199,13 +271,14 @@
           for (var i = r + 1; i < aoa.length; i++) {
             var row = aoa[i] || [], g = function (k) { return map[k] == null ? "" : row[map[k]]; };
             if (!L.txt(g("desc")) && L.blankish(g("amount"))) continue;
-            out.rows.push({ desc: g("desc"), account: g("account"), category: g("category"), amount: g("amount"), month: normMonth(g("month")), status: g("status"), include: yes(g("include")), notes: g("notes") });
+            out.rows.push({ type: g("type"), desc: g("desc"), account: g("account"), category: g("category"), amount: g("amount"), month: normMonth(g("month")), status: g("status"), include: yes(g("include")), notes: g("notes"), rank: g("rank"), start: g("start"), end: g("end"), count: g("count") });
           }
           return;
         }
       }
     });
     if (!out) return null;
+    var rt = parseRates(wb, true); if (rt) out.payRates = rt;
     var st = wb.Sheets.Settings;
     if (st) XLSX.utils.sheet_to_json(st, { header: 1, raw: true, defval: "" }).forEach(function (r) {
       var k = L.norm(r[0]); if (k === "adjustavailable") out.adjust = r[1]; else if (k === "categories") out.categories = L.txt(r[1]).split(",").map(L.txt).filter(Boolean); else if (k === "excludedaccounts") out.excluded = L.txt(r[1]).split(";").map(L.txt).filter(Boolean);
@@ -219,10 +292,68 @@
       if (!o) { C.toast("Not a PRSA plan: needs Description and Amount columns.", true); return; }
       if (P.rows.length && !confirm("Replace the current PRSA plan (" + P.rows.length + " rows) with " + o.rows.length + " rows from " + file.name + "?")) return;
       var keep = P; P = clean(o); if (o.categories == null) P.categories = keep.categories; P.rows.forEach(function (r) { if (r.category && P.categories.indexOf(r.category) < 0) P.categories.push(r.category); });
-      P.demo = false; changed(true); C.toast("Imported " + P.rows.length + " PRSA plan rows.");
+      var nr = o.payRates && hasRates(o.payRates);
+      if (nr) { R = cleanRates(o.payRates); R.demo = false; R.updatedAt = new Date().toISOString(); writeRates(); }
+      P.demo = false; changed(true); renderRates(); C.toast("Imported " + P.rows.length + " PRSA plan rows" + (nr ? " and daily pay rates." : "."));
     };
     reader.readAsArrayBuffer(file);
   }
+  // ---------- daily pay rates: settings section, export/import ----------
+  function ratesAoa() { return [["Grade", "Daily rate"]].concat(GRADES.map(function (g) { return [g, R.rates[g] == null ? "" : R.rates[g]]; })); }
+  // any sheet with Grade + Daily rate (or Rate) columns; sheetOnly = only a sheet named Rates (plan files)
+  function parseRates(wb, sheetOnly) {
+    var names = sheetOnly ? wb.SheetNames.filter(function (n) { return /^rates?$/i.test(n) || /pay\s*rates?/i.test(n); }) : wb.SheetNames, out = null;
+    names.forEach(function (sn) {
+      if (out) return; var aoa = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: true, defval: "" });
+      for (var r = 0; r < Math.min(10, aoa.length); r++) {
+        var gc = null, rc = null; (aoa[r] || []).forEach(function (h, c) { var k = L.norm(h); if (gc == null && /^(grade|rank|paygrade)$/.test(k)) gc = c; else if (rc == null && /^(dailyrate|rate|perday|dailypay|payperday|rateperday)$/.test(k)) rc = c; });
+        if (gc == null || rc == null) continue;
+        var o = { rates: {} };
+        for (var i = r + 1; i < aoa.length; i++) { var g = normGrade((aoa[i] || [])[gc]); if (g) o.rates[g] = (aoa[i] || [])[rc]; }
+        out = cleanRates(o); return;
+      }
+    });
+    return out;
+  }
+  function download(wb, name) {
+    var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([XLSX.write(wb, { type: "array", bookType: "xlsx" })], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })); a.download = name;
+    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  function exportRates() { var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ratesAoa()), "Rates"); var d = new Date(); download(wb, "G1-Pay-Rates-" + ("0" + d.getDate()).slice(-2) + K.MON[d.getMonth()] + String(d.getFullYear()).slice(2) + ".xlsx"); }
+  function importRates(file) {
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var o = null; try { o = parseRates(XLSX.read(new Uint8Array(e.target.result), { type: "array" }), false); } catch (err) { o = null; }
+      if (!o) { C.toast("Not a pay rates file: needs Grade and Daily rate columns.", true); return; }
+      R = o; R.demo = false; R.updatedAt = new Date().toISOString(); writeRates(); ratesChanged(true);
+      C.toast("Imported daily pay rates for " + GRADES.filter(function (g) { return R.rates[g] != null; }).length + " grades.");
+    };
+    reader.readAsArrayBuffer(file);
+  }
+  function ratesChanged(full) { if (full) renderRates(); else ratesNote(); render(); }
+  function ratesNote() {
+    var n = GRADES.filter(function (g) { return R.rates[g] != null; }).length;
+    $("ratesNote").textContent = R.demo ? "Fictional demo rates for the sample plan only \u2014 not a real pay table. Typing a rate starts your own (blank) table." : n ? n + " of 20 grades have a rate \u00b7 saved in this browser and in Save with data" : "No rates yet. Enter your own $/day; nothing is preset.";
+    $("dRates").querySelector("summary").textContent = "Daily pay rates (PRSA Orders)" + (n ? " \u00b7 " + n + "/20" : "");
+  }
+  function renderRates() {
+    var box = $("ratesGrid"); if (!box) return;
+    box.innerHTML = [["Enlisted", "E"], ["Warrant", "W"], ["Officer", "O"]].map(function (grp) {
+      return '<fieldset><legend>' + grp[0] + "</legend>" + GRADES.filter(function (g) { return g[0] === grp[1]; }).map(function (g) {
+        return '<label>' + g + ' <input type="number" min="0" step="0.01" data-grade="' + g + '" value="' + (R.rates[g] == null ? "" : R.rates[g]) + '" placeholder="$/day" aria-label="' + g + ' daily rate"></label>';
+      }).join("") + "</fieldset>";
+    }).join("");
+    ratesNote();
+  }
+  function rateInput(e) {
+    var t = e.target, g = t.getAttribute && t.getAttribute("data-grade"); if (!g) return;
+    if (R.demo) { var keep = R.rates; R = blankRates(); R.demo = false; box().querySelectorAll("input[data-grade]").forEach(function (i) { if (i !== t) i.value = ""; }); void keep; }
+    var x = L.parseAmt(t.value); R.rates[g] = x == null || !isFinite(x) || x < 0 ? null : Math.round(x * 100) / 100;
+    R.updatedAt = new Date().toISOString(); clearTimeout(rateTimer); rateTimer = setTimeout(writeRates, 250);
+    ratesChanged(false);
+  }
+  function box() { return $("ratesGrid"); }
+  function demoRates() { var r = blankRates(); r.demo = true; GRADES.forEach(function (g, i) { r.rates[g] = 100 + i * 10; }); return r; }
   // ---------- demo ----------
   function demoPlan() {
     var p = blank(); p.demo = true; p.updatedAt = new Date().toISOString(); p.adjust = 15000;
@@ -231,16 +362,25 @@
       { desc: "Office supplies restock (example)", account: "Outreach Supplies", category: "Supplies", amount: 6200, month: 5, status: "Committed", include: true, notes: "" },
       { desc: "Facilitator contract (example)", account: "Pooled", category: "Contracts", amount: 42000, month: 7, status: "Idea", include: true, notes: "What-if: toggle Include" },
       { desc: "Workshop training seats (example)", account: "Outreach Operations", category: "Training", amount: 9800, month: 9, status: "Planned", include: true, notes: "" },
-      { desc: "Year-end equipment buy (example)", account: "Pooled", category: "Other", amount: 25000, month: "", status: "Idea", include: false, notes: "Excluded scenario" }
-    ].map(function (r) { r.id = id(); return r; });
+      { desc: "Year-end equipment buy (example)", account: "Pooled", category: "Other", amount: 25000, month: "", status: "Idea", include: false, notes: "Excluded scenario" },
+      { type: "orders", desc: "Exercise support orders (example)", account: "Outreach Operations", category: "Training", rank: "E5", start: (+fy() - 1) + "-11-17", end: (+fy() - 1) + "-12-16", count: 2, status: "Planned", include: true, notes: "Fictional demo orders" }
+    ].map(function (r) { r.id = id(); if (!r.type) r.type = "factor"; return r; });
     return p;
   }
   // ---------- wiring ----------
   function init() {
     var local = readLocal(); if (local) { P = local; lastSaved = local.updatedAt ? new Date(local.updatedAt) : null; }
+    var lr = readRates(); if (lr) R = lr;
+    renderRates();
+    box().addEventListener("input", rateInput);
+    $("ratesExport").addEventListener("click", exportRates);
+    $("ratesImport").addEventListener("click", function () { $("ratesFile").click(); });
+    $("ratesFile").addEventListener("change", function () { if (this.files[0]) importRates(this.files[0]); this.value = ""; });
+    $("prsaRatesLink").addEventListener("click", function () { $("btnInfo").click(); setTimeout(function () { var d = $("dRates"); d.open = true; d.scrollIntoView({ block: "start" }); }, 50); });
+    w.addEventListener("storage", function (e) { if (e.key !== RATES_KEY || !e.newValue) return; try { R = cleanRates(JSON.parse(e.newValue)); ratesChanged(true); } catch (err) { } });
     var sof = C.mods.sof, orig = sof.render; sof.render = function () { orig.apply(this, arguments); render(); };
     var origRep = sof.report; sof.report = function () { var r = origRep.apply(this, arguments) || { html: "", warns: 0 }, d = ""; try { d = drawer(); } catch (e) { } return { html: (r.html || "") + d, warns: r.warns || 0 }; };
-    $("prsaAdd").addEventListener("click", function () { P.rows.push({ id: id(), desc: "", account: "Pooled", category: "", amount: 0, month: "", status: "Idea", include: true, notes: "" }); changed(true); var ins = $("tPrsaPlan").querySelectorAll('input[data-f="desc"]'); if (ins.length) ins[ins.length - 1].focus(); });
+    $("prsaAdd").addEventListener("click", function () { P.rows.push({ id: id(), type: "factor", desc: "", account: "Pooled", category: "", amount: 0, month: "", status: "Idea", include: true, notes: "" }); changed(true); var ins = $("tPrsaPlan").querySelectorAll('input[data-f="desc"]'); if (ins.length) ins[ins.length - 1].focus(); });
     $("prsaExport").addEventListener("click", exportPlan);
     $("prsaImport").addEventListener("click", function () { $("prsaFile").click(); });
     $("prsaFile").addEventListener("change", function () { if (this.files[0]) importPlan(this.files[0]); this.value = ""; });
@@ -258,7 +398,12 @@
       if (f === "include") { r.include = t.checked; tr.classList.toggle("off", !t.checked); }
       else if (f === "amount") r.amount = num(t.value);
       else if (f === "month") r.month = t.value ? +t.value : "";
+      else if (f === "type") { r.type = t.value === "orders" ? "orders" : "factor"; if (r.type === "orders") { r.month = ""; r.count = r.count || 1; r.rank = r.rank || ""; r.start = r.start || ""; r.end = r.end || ""; } fullRender = true; }
+      else if (f === "rank") r.rank = normGrade(t.value);
+      else if (f === "start" || f === "end") r[f] = isoDate(t.value);
+      else if (f === "count") { var cn = Math.floor(L.parseAmt(t.value) || 0); r.count = cn >= 1 ? cn : 1; }
       else r[f] = t.value;
+      if (r.type === "orders" && !fullRender) { r.amount = ordersCalc(r).amount; var oa = tr.querySelector(".oamt"), ct = tr.querySelector(".ctext"); if (oa) oa.textContent = full(r.amount); if (ct) ct.innerHTML = calcText(r); }
       changed(fullRender);
     }
     body.addEventListener("input", function (e) { if (e.target.tagName === "INPUT" && e.target.type !== "checkbox") edit(e, false); });
@@ -280,13 +425,16 @@
   C.register("prsa", {
     classify: function () { return null; }, parse: function () { return {}; }, ingest: function () { },
     // Loading files or Clear data never wipes a real plan; only the fictional demo plan is reset.
-    clear: function () { if (P.demo) { P = readLocal() || blank(); } },
-    demo: function () { if (!readLocal() && !P.rows.length) P = demoPlan(); },
-    snapshot: function () { return JSON.parse(JSON.stringify(P)); },
+    clear: function () { if (P.demo) { P = readLocal() || blank(); } if (R.demo) { R = readRates() || blankRates(); renderRates(); } },
+    demo: function () { if (!readLocal() && !P.rows.length) P = demoPlan(); if (!readRates() && !hasRates()) { R = demoRates(); renderRates(); } },
+    snapshot: function () { refreshOrders(); var o = JSON.parse(JSON.stringify(P)); if (!R.demo && hasRates()) o.payRates = JSON.parse(JSON.stringify(R)); return o; },
     // Embedded (Save with data) plan wins when it is newer than this browser's autosave.
-    restore: function (o) { var e = clean(o), local = readLocal(); if (!local || !local.updatedAt || (e.updatedAt && e.updatedAt > local.updatedAt)) { P = e; P.demo = false; writeLocal(); } },
+    restore: function (o) {
+      var e = clean(o), local = readLocal(); if (!local || !local.updatedAt || (e.updatedAt && e.updatedAt > local.updatedAt)) { P = e; P.demo = false; writeLocal(); }
+      if (o.payRates) { var er = cleanRates(o.payRates), lr = readRates(); if (!lr || !lr.updatedAt || (er.updatedAt && er.updatedAt > lr.updatedAt)) { R = er; R.demo = false; writeRates(); } renderRates(); }
+    },
     render: render, report: function () { return { html: "", warns: 0 }; }, entries: function () { return []; },
-    hasData: function () { return !P.demo && (P.rows.length > 0 || !!P.adjust || P.excluded.length > 0); }, init: init
+    hasData: function () { return !P.demo && (P.rows.length > 0 || !!P.adjust || P.excluded.length > 0) || !R.demo && hasRates(); }, init: init
   });
-  C.prsa = { STORE_KEY: STORE_KEY, match: match, rekey: rekey, state: function () { return P; }, calc: calc, accounts: accounts, parsePlan: parsePlan, render: render };
+  C.prsa = { STORE_KEY: STORE_KEY, RATES_KEY: RATES_KEY, GRADES: GRADES, rates: function () { return R; }, ordersCalc: ordersCalc, ordersMonths: ordersMonths, parseRates: parseRates, match: match, rekey: rekey, state: function () { return P; }, calc: calc, accounts: accounts, parsePlan: parsePlan, render: render };
 })(window);

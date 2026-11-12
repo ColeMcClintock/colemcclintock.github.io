@@ -15,6 +15,13 @@ The one exception is the G1 PRSA Planner (`prsa.js`): its planning rows and sett
 localStorage key `g1-prsa-plan` in this browser only. The plan is also part of document state, so
 Save with data embeds it in `g1Saved`; on open, the embedded plan wins if it is newer than the
 browser copy. The fictional demo plan is never autosaved. Export plan / Import plan use xlsx.
+PRSA Orders lines: each plan row has a Type, Planning factor (amount + target month, the original behaviour; rows
+saved before types existed load as this) or Orders (Rank, Start/End date, soldiers). Orders amount = daily rate x days
+(start and end inclusive) x soldiers, recalculated whenever rates change; a grade with no rate shows "Set rate" and counts $0.
+Orders are spread across the planner's fiscal months by the days in each month; days before October are taken off up front,
+days after September stay in the total but outside that year's months. Daily pay rates (E1-E9, W1-W5, O1-O6) are entered
+by the user in the drawer's "Daily pay rates" section (blank by default, no built-in pay table), autosave to localStorage
+key `g1-pay-rates`, go into Save with data (`g1Saved.prsa.payRates`, newer wins) and into the plan export as a "Rates" sheet.
 PRSA is an MDEP: lines are matched by `PROGRAM_MDEP_MATCH.prsa = /^PRSA/i` in `programs.js` (trimmed MDEP equal to
 or starting with PRSA, any case). MDEP comes from the SOF export line when it has an MDEP column (headers such as `mdep`,
 `MDEP`, `mdep_cd`, `mdep_code`, `Management Decision Package`), otherwise from the Account Key's optional MDEP column.
