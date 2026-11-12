@@ -9,12 +9,14 @@ from openpyxl.utils import get_column_letter
 ROOT=Path(__file__).resolve().parents[1]; OUT=ROOT/'dashboards/g1'; DL=ROOT/'downloads'
 OUT.mkdir(exist_ok=True);(OUT/'data').mkdir(exist_ok=True)
 rng=random.Random(107)
-ACCTS=['Funeral Honors','Funeral Honors Stipends','ESGR','Retention','Personnel Ops']
+ACCTS=['Funeral Honors','Funeral Honors Stipends','ESGR','Retention','Personnel Ops','PRSA Operations','PRSA Travel','PRSA Supplies']
 MONTHS=['October','November','December','January','February','March','April','May','June','July','August','September']
-FA=['FAKE-FH','FAKE-FHS','FAKE-ESGR','FAKE-RET','FAKE-OPS']
+FA=['FAKE-FH','FAKE-FHS','FAKE-ESGR','FAKE-RET','FAKE-OPS','FAKE-PRSA-OPS','FAKE-PRSA-TRV','FAKE-PRSA-SUP']
 H=['fund','contract_doc_no','commitment_item_fipex','functional_area_farea','appropriation_type','fiscal_year','fiscal_month','commitment_amt_cum','disbursement_amt_cum']
 rows=[];fund=[];plan=[]
-annual=[360000,180000,450000,720000,540000]
+annual=[360000,180000,450000,720000,540000,240000,120000,90000]
+# Fictional PRSA accounts use their own generator so the earlier demo values stay unchanged.
+prsa_rng=random.Random(113)
 for fy in [2026,2027]:
  for i,acct in enumerate(ACCTS):
   fund.append([fy,acct,annual[i],round(annual[i]*.93,2)])
@@ -22,7 +24,8 @@ for fy in [2026,2027]:
    planned=round(annual[i]/12*(1+.16*(m-6)/6),2);plan.append([fy,acct,m,planned])
    if fy==2027 and m>1:continue
    for j,ci in enumerate(['FAKE-CI1','FAKE-CI2','FAKE-CI3']):
-    te=round(planned*[.48,.32,.20][j]*(.85+rng.random()*.40),2);disb=round(te*(.60+rng.random()*.35),2)
+    g=rng if i<5 else prsa_rng
+    te=round(planned*[.48,.32,.20][j]*(.85+g.random()*.40),2);disb=round(te*(.60+g.random()*.35),2)
     rows.append(['FAKE-FUND',f'FAKE-DOC-{fy}-{i}-{m}-{j}',ci,FA[i],'OMNG',fy,m,-te,-disb])
 # Excluded silently as on Aviation
 rows.append(['FAKE-FUND','FAKE-SUMMARY','ALLOBJ',FA[0],'OMNG',2027,1,-9999999,-8888888])

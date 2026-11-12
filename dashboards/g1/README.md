@@ -9,8 +9,14 @@ charts and Save with data run locally in the document. No network requests or ex
 G1 copies the Aviation core, SOF, spend-plan and PR implementation rather than modifying Aviation.
 Its global is `window.G1`, demos are `G1_DEMO` / `G1_FUNDS_DEMO`, saved block is `g1Saved`,
 and filename is `G1-Dashboard-DDMonYY.html`. Aviation's `commandSaved` block is never read.
-There is no localStorage, sessionStorage or IndexedDB persistence in either dashboard; document
-state is completely separate, even when both pages are open. G1 keys and funding templates are
+Report data (SOF, keys, PRs, DTS, etc.) is never written to localStorage, sessionStorage or
+IndexedDB in either dashboard; document state is completely separate, even when both pages are open.
+The one exception is the G1 PRSA Planner (`prsa.js`): its planning rows and settings autosave to
+localStorage key `g1-prsa-plan` in this browser only. The plan is also part of document state, so
+Save with data embeds it in `g1Saved`; on open, the embedded plan wins if it is newer than the
+browser copy. The fictional demo plan is never autosaved. Export plan / Import plan use xlsx.
+PRSA accounts are detected by `PROGRAM_ACCOUNT_MATCH.prsa = /PRSA/i` in `programs.js` (account
+name contains "PRSA", any case), next to the Funeral Honors and ESGR rules. G1 keys and funding templates are
 separate files under this directory and the `downloads/g1-*` prefix. The stateless vendor/parser
 source files under assets and finance are loaded into each document separately, not shared data.
 

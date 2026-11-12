@@ -131,6 +131,30 @@
       <p class="muted small" id="acctTableNote"></p>
       <div class="tablewrap scrolly"><table class="grid acct" id="tAcct"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
     </section>
+    <details class="panel prsa" id="prsaPanel">
+      <summary><span class="prsa-title">PRSA Planner</span><span class="prsa-sum" id="prsaSummary"></span><span class="prsa-saved" id="prsaSaved"></span></summary>
+      <div class="prsa-body">
+        <p class="muted small" id="prsaNote">PRSA is one fund spread across several accounts. Tick the accounts that make up the pool, then add planning factors to see what is left.</p>
+        <section class="kpis k4" id="prsaKpis" aria-label="PRSA planner totals"></section>
+        <h3 class="sub">PRSA accounts <span class="muted small" id="prsaFy"></span></h3>
+        <div class="tablewrap"><table class="grid" id="tPrsaAcct"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+        <div class="prsa-adjust"><label>Adjust available <input type="number" step="0.01" id="prsaAdjust" placeholder="0.00" aria-label="Adjust available balance"></label><span class="muted small">Scenario offset, for example expected incoming funds (+) or a hold-back (&minus;).</span></div>
+        <div class="row r2">
+          <div><h3 class="sub">Available to projected remaining</h3><div class="chartbox"><canvas id="cPrsaFall"></canvas></div></div>
+          <div><h3 class="sub">Projected remaining balance by month</h3><div class="chartbox"><canvas id="cPrsaMonth"></canvas></div></div>
+        </div>
+        <div class="statuscounts" id="prsaStatus"></div>
+        <div class="tablehead"><h3 class="sub">Planning factors</h3><div class="tabletools">
+          <button class="btn sm primary" id="prsaAdd" type="button">+ Add row</button>
+          <button class="btn ghost sm" id="prsaExport" type="button">Export plan</button>
+          <button class="btn ghost sm" id="prsaImport" type="button">Import plan</button><input type="file" id="prsaFile" accept=".xlsx,.xls,.csv" hidden>
+          <button class="btn ghost sm" id="prsaClear" type="button">Clear plan</button>
+        </div></div>
+        <div class="tablewrap"><table class="grid prsaplan" id="tPrsaPlan"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+        <details class="prsa-cats"><summary>Edit categories</summary><label>Categories (comma separated) <input type="text" id="prsaCats" aria-label="Plan categories"></label></details>
+        <p class="muted small">Available balance = TDP &minus; Total Expenditure for the ticked accounts (fiscal year shown above). Projected remaining = Available + Adjust &minus; included rows. Rows already marked Done may already be in Total Expenditure: untick Include to avoid counting them twice. The plan saves automatically in this browser and goes into Save with data.</p>
+      </div>
+    </details>
     <section class="panel">
       <div class="tablehead"><h2>Document detail</h2><div class="tabletools"><input type="search" id="fSearch" placeholder="Search document number, MDEP, account&hellip;" aria-label="Search lines" autocomplete="off"><button class="btn ghost sm" id="btnCsv" type="button">Export CSV</button><button class="btn ghost sm" id="btnAll" type="button">Show all</button></div></div>
       <p class="muted small">One row per line. Click a column header to sort. <span id="searchNote" class="searchnote"></span></p>
@@ -278,7 +302,7 @@
       <ul><li>Account selection: names containing “Funeral Honors” or “ESGR”, ignoring case, after the G1 Account Key is applied. Spend is Total Expenditure, with TDP/AFP from the G1 funding file. Monthly amounts count each SOF line once in its fiscal month; cumulative is the running total from October.</li>
       <li>Stipends: counts per Status as entered, by date of service. MFH Duty: duties by date performed; status matches ignoring case (Not started = red, Calendar submitted = amber, Pay submitted = green). Other statuses are retained and shown in grey.</li>
       <li>DTS: only Approved date, Last name, First name, TANUM, Departure Date, Location/Destination and Total Obligation are read. Name = First Last in proper case. Obligation by month uses the Approved date; rows without an approved date remain in the table and totals. Repeat TANUMs stay in the report and are counted only in the drawer.</li>
-      <li>G1 data lives only in this tab or your G1 saved HTML. No localStorage or IndexedDB is used. G1 keys, funding, templates and saved block (g1Saved) are entirely separate from Aviation.</li></ul>
+      <li>G1 data lives only in this tab or your G1 saved HTML. The one exception is the PRSA Planner: your planning rows autosave in this browser (localStorage key g1-prsa-plan) so edits survive a reload. SOF and other report data is never stored by the browser. G1 keys, funding, templates and saved block (g1Saved) are entirely separate from Aviation.</li></ul>
     </div>
   </details>
 </aside>
@@ -298,6 +322,7 @@
 <script src="pr.js"></script>
 <script src="spend.js"></script>
 <script src="programs.js"></script>
+<script src="prsa.js"></script>
 <script src="home.js"></script>
 </body>
 </html>

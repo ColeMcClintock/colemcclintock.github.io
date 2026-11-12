@@ -1,9 +1,10 @@
 /* G1 program adapters. Only recognized columns are read. All state is document-local; no network/storage.
-   Change these two constants to change which Account Key-mapped SOF accounts belong to each program. */
+   Change these constants to change which Account Key-mapped SOF accounts belong to each program. */
 (function(w){
  "use strict";
  var C=w.G1,K=w.DashKit,L=w.FundsLib,$=K.$,esc=K.esc,full=L.full;
- var ACCOUNT_MATCH={fh:/Funeral Honors/i,esgr:/ESGR/i};
+ // PRSA: one fund spread across several SOF accounts; drives the PRSA Planner on the SOF page.
+ var ACCOUNT_MATCH={fh:/Funeral Honors/i,esgr:/ESGR/i,prsa:/PRSA/i};
  C.PROGRAM_ACCOUNT_MATCH=ACCOUNT_MATCH;
  var FM=['Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep'];
  var STATUS={'not started':{label:'Not started',color:'#dc2626',cls:'red'},'calendar submitted':{label:'Calendar submitted',color:'#f59e0b',cls:'amber'},'pay submitted':{label:'Pay submitted',color:'#16a34a',cls:'green'}};
@@ -61,10 +62,10 @@
  // ----- SOF accounts for this program -----
  function accountData(page,fy){
   var s=C.mods.sof._state,acc={},last=0;
-  function get(a){return acc[a]||(acc[a]={name:a,te:0,tdp:0,afp:0,funded:false,mon:Array(12).fill(0)});}
-  s.recs.forEach(function(r){if(r.fy!==fy)return;if(r.fmn)last=Math.max(last,r.fmn);if(!ACCOUNT_MATCH[page].test(r.acctL||''))return;var a=get(r.acctL);a.te+=L.n(r.com);if(r.fmn)a.mon[r.fmn-1]+=L.n(r.com);});
+  function get(a){return acc[a]||(acc[a]={name:a,te:0,obl:0,disb:0,tdp:0,afp:0,funded:false,mon:Array(12).fill(0)});}
+  s.recs.forEach(function(r){if(r.fy!==fy)return;if(r.fmn)last=Math.max(last,r.fmn);if(!ACCOUNT_MATCH[page].test(r.acctL||''))return;var a=get(r.acctL);a.te+=L.n(r.com);a.obl+=L.n(r.obl);a.disb+=L.n(r.disb);if(r.fmn)a.mon[r.fmn-1]+=L.n(r.com);});
   if(s.fund)s.fund.rows.forEach(function(r){if(s.fund.useFy&&r.fy!==fy||!ACCOUNT_MATCH[page].test(r.acct||''))return;var a=get(r.acct);a.tdp+=L.n(r.tdp);a.afp+=L.n(r.afp);a.funded=true;});
-  return {last:last,list:Object.keys(acc).map(function(k){var a=acc[k];a.te=r2(a.te);a.mon=a.mon.map(r2);return a;}).sort(function(a,b){return b.te-a.te;})};
+  return {last:last,list:Object.keys(acc).map(function(k){var a=acc[k];a.te=r2(a.te);a.obl=r2(a.obl);a.disb=r2(a.disb);a.mon=a.mon.map(r2);return a;}).sort(function(a,b){return b.te-a.te;})};
  }
  function getYears(){var f=C.mods.sof.feed(),ys=f.actual.map(function(r){return r.fy;}).concat(f.plan.map(function(r){return r.fy;}));var fund=C.mods.sof._state.fund;if(fund)fund.rows.forEach(function(r){ys.push(r.fy);});Object.keys(SCHEMAS).forEach(function(k){data(k).forEach(function(r){var d=date(k==='dts'?r.approved:r.date);if(d)ys.push(C.fyOf(d));});});return K.uniq(ys.filter(Boolean)).sort();}
  function defaultFy(ys){return ys.indexOf(C.currentFy())>=0?C.currentFy():ys[ys.length-1]||C.currentFy();}
@@ -79,9 +80,9 @@
   var te=sum(list,'te'),tdp=sum(list,'tdp'),afp=sum(list,'afp');
   $(page+'Kpis').innerHTML=kpi('Total Expenditure',full(te),'From Status of Funds')+kpi('TDP',full(tdp),'G1 funding file','#64748b')+kpi('AFP',full(afp),'G1 funding file','#a16207')+kpi('Balance',full(tdp-te),'TDP − Total Expenditure',tdp-te<0?'#dc2626':'#16a34a');
   var o=K.chartBase();o.indexAxis='y';o.scales.x.ticks={callback:function(v){return K.money(v);}};o.plugins.tooltip.callbacks={label:function(c){return c.dataset.label+': '+full(c.raw);}};
-  K.upsert('c'+page+'Acct',{type:'bar',data:{labels:list.map(function(a){return a.name;}),datasets:[{label:'TDP',data:list.map(function(a){return a.tdp;}),backgroundColor:'#e2e8f0'},{label:'Total Expenditure',data:list.map(function(a){return a.te;}),backgroundColor:page==='fh'?'#0d9488':'#7c3aed'},{label:'AFP',data:list.map(function(a){return a.afp;}),backgroundColor:'#d4a745'}]},options:o});
+  K.upsert('c'+page+'Acct',{type:'bar',data:{labels:list.map(function(a){return a.name;}),datasets:[{label:'TDP',data:list.map(function(a){return a.tdp;}),backgroundColor:'#e2e8f0'},{label:'Total Expenditure',data:list.map(function(a){return a.te;}),backgroundColor:page==='fh'?'#be123c':'#ea580c'},{label:'AFP',data:list.map(function(a){return a.afp;}),backgroundColor:'#d4a745'}]},options:o});
   var mon=K.chartBase();mon.scales.y.ticks={callback:function(v){return K.money(v);}};mon.plugins.tooltip.callbacks={label:function(c){return c.dataset.label+': '+full(c.raw);}};
-  var colors=['#0d9488','#2563eb','#7c3aed','#ea580c','#64748b'];
+  var colors=page==='fh'?['#be123c','#f43f5e','#9f1239','#fb7185','#64748b']:['#ea580c','#fb923c','#c2410c','#fdba74','#64748b'];
   K.upsert('c'+page+'Mon',{type:S.mode==='cum'?'line':'bar',data:{labels:FM,datasets:list.map(function(a,i){var t=0;return {label:a.name,data:a.mon.map(function(v,j){t+=v;return j>=d.last?null:S.mode==='cum'?r2(t):v;}),backgroundColor:colors[i%colors.length],borderColor:colors[i%colors.length],tension:0,spanGaps:false};})},options:mon});
   var tbl=$('t'+page+'Acct');tbl.tHead.innerHTML='<tr><th>Account</th><th class="num">TDP</th><th class="num">AFP</th><th class="num">Total Expenditure</th><th class="num">Balance</th><th class="num">% expended</th></tr>';
   tbl.tBodies[0].innerHTML=list.map(function(a){return '<tr><td>'+esc(a.name)+'</td><td class="num">'+(a.funded?full(a.tdp):'—')+'</td><td class="num">'+(a.funded?full(a.afp):'—')+'</td><td class="num">'+full(a.te)+'</td><td class="num">'+(a.funded?full(a.tdp-a.te):'—')+'</td><td class="num">'+(a.tdp?C.pct(a.te/a.tdp,1):'—')+'</td></tr>';}).join('')||'<tr><td colspan="6" class="muted">No matching SOF accounts.</td></tr>';
@@ -105,8 +106,8 @@
   var selected=rows.filter(function(r){return !$(kind+'Status').value||r.status===$(kind+'Status').value;}),mon=Array(12).fill(0);
   if(kind==='dts'){
    selected.forEach(function(r){var d=date(r.approved);if(d)mon[C.fmOf(d)-1]+=L.n(r.amount);});
-   $('dtsKpis').innerHTML=kpi('Trips',K.fmt(rows.length),'All report rows')+kpi('Total obligation',full(sum(rows,'amount')),'DTS obligation, not SOF TE','#7c3aed');
-   countChart('cDtsMon',FM,[{label:'Obligation by approved month',data:mon.map(r2),backgroundColor:'#7c3aed'}],true);
+   $('dtsKpis').innerHTML=kpi('Trips',K.fmt(rows.length),'All report rows')+kpi('Total obligation',full(sum(rows,'amount')),'DTS obligation, not SOF TE','#ea580c');
+   countChart('cDtsMon',FM,[{label:'Obligation by approved month',data:mon.map(r2),backgroundColor:'#ea580c'}],true);
    var loc={};rows.forEach(function(r){loc[r.location||'(blank)']=(loc[r.location||'(blank)']||0)+L.n(r.amount);});var ls=Object.keys(loc).sort(function(a,b){return loc[b]-loc[a];}).slice(0,8);countChart('cLoc',ls,[{label:'Top locations · obligation',data:ls.map(function(l){return r2(loc[l]);}),backgroundColor:'#a78bfa'}],true,true);
   }else{
    var statuses=K.uniq(selected.map(function(r){return r.status||'';}));countChart(kind==='stip'?'cStip':'cDuty',FM,statuses.map(function(s,i){var m=Array(12).fill(0);selected.forEach(function(r){var d=date(r.date);if(r.status===s&&d)m[C.fmOf(d)-1]++;});return {label:s||'(blank)',data:m,backgroundColor:kind==='duty'?color(s):['#2563eb','#0d9488','#7c3aed','#ea580c'][i%4]};}),false);
@@ -125,5 +126,5 @@
   ['Fy','Acct','Mode'].forEach(function(suffix){$(page+suffix).addEventListener('change',function(){STATES[page][suffix.toLowerCase()]=this.value;render(page);});});
   Object.keys(SCHEMAS).filter(function(k){return SCHEMAS[k].page===page;}).forEach(function(k){$(k+'Search').addEventListener('input',function(){table(k,rowsFor(k));});$(k+'Status').addEventListener('change',function(){renderReport(k);});$('t'+k).tHead.addEventListener('click',function(e){var h=e.target.closest('th[data-k]');if(!h)return;var v=VIEW[k]||(VIEW[k]={}),key=h.getAttribute('data-k');v.dir=v.sort===key?-v.dir:1;v.sort=key;table(k,rowsFor(k));});});
  }};var own=null;Object.defineProperty(mod,'asOf',{get:function(){var s=C.mods.sof.asOf;return own&&(!s||own>s)?own:s;},set:function(v){own=v;},enumerable:true});C.register(page,mod);});
- C.programs={data:data,accountData:accountData,date:date,person:person};
+ C.programs={data:data,accountData:accountData,getYears:getYears,defaultFy:defaultFy,date:date,person:person};
 })(window);

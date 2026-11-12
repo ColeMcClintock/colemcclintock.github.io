@@ -4,7 +4,7 @@
   --text:#0f172a; --muted:#64748b; --soft:#94a3b8;
   --accent:#2563eb; --accent2:#1d4ed8; --navy:#1e3a8a;
   --good:#15803d; --goodbg:#dcfce7; --warn:#b45309; --warnbg:#fef3c7; --bad:#b91c1c; --badbg:#fee2e2;
-  --sof:#2563eb; --pr:#7c3aed; --fuel:#ea580c; --plan:#0d9488; --aftp:#475569;
+  --sof:#2563eb; --pr:#7c3aed; --fuel:#ea580c; --plan:#0d9488; --aftp:#475569; --fh:#be123c; --esgr:#ea580c;
   --radius:14px; --shadow:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06);
   --font:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;
 }
@@ -319,7 +319,8 @@ table.aftp td.out.amber{color:#b45309;font-weight:700}table.aftp td.out.red{colo
 h1 .demotag{font-size:.68rem;position:relative;top:-2px}
 .ocard h3 .demotag{margin-left:2px;font-size:.62rem}
 .tile .demotag.ontile{position:absolute;top:12px;right:12px;margin:0;z-index:1;font-size:.6rem}
-.t-fh{--c:#0d9488}.t-esgr{--c:#7c3aed}
+/* One distinct accent per G1 page, used by tiles, overview cards, page headers and charts. */
+.t-fh{--c:var(--fh)}.t-esgr{--c:var(--esgr)}
 .statuscounts{display:flex;gap:12px;flex-wrap:wrap;margin:14px 0 22px}
 .statuscount{padding:10px 16px;border-left:3px solid var(--sc);background:var(--panel2);border-radius:8px;min-width:140px}
 .statuscount strong{display:block;font-size:1.65rem;line-height:1.2;color:var(--sc)}
@@ -332,3 +333,37 @@ h1 .demotag{font-size:.68rem;position:relative;top:-2px}
 .row.r2:has(#cStip){grid-template-columns:1fr}
 #oSpend{grid-column:1/-1}
 #oSpend .big3{margin:10px 0}
+
+/* PRSA Planner (inside Status of Funds) */
+details.prsa{padding:0}
+details.prsa>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:16px 20px;border-left:4px solid var(--sof);border-radius:var(--radius)}
+details.prsa>summary::-webkit-details-marker{display:none}
+details.prsa>summary::before{content:"\25B8";color:var(--sof);font-size:.9rem;transition:transform .15s}
+details.prsa[open]>summary::before{transform:rotate(90deg)}
+details.prsa[open]>summary{border-bottom:1px solid var(--line);border-radius:var(--radius) var(--radius) 0 0}
+.prsa-title{font-weight:750;font-size:1.1rem}
+.prsa-sum{color:var(--muted);font-size:.9rem}.prsa-sum b{color:var(--text)}.prsa-sum b.neg{color:var(--bad)}
+.prsa-saved{margin-left:auto;font-size:.76rem;color:var(--good);font-weight:650}.prsa-saved.off{color:var(--soft)}
+.prsa-body{padding:6px 20px 20px}
+.prsa-adjust{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:14px 0}
+.prsa-adjust label,.prsa-cats label{display:flex;align-items:center;gap:8px;font-size:.86rem;font-weight:650}
+.prsa-adjust input,.prsa-cats input{padding:7px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--panel2)}
+.prsa-adjust input{width:160px;text-align:right}.prsa-cats input{width:min(560px,70vw)}
+.prsa-cats{margin-top:10px;font-size:.86rem}
+.kpi.neg .val{color:var(--bad)}.kpi.neg{--st:var(--bad)!important}
+table.prsaplan td{padding:4px 5px;vertical-align:middle}
+table.prsaplan input,table.prsaplan select{width:100%;padding:5px 7px;border:1px solid transparent;border-radius:6px;font:inherit;font-size:.85rem;background:transparent;color:var(--text)}
+table.prsaplan input:hover,table.prsaplan select:hover{border-color:var(--line)}
+table.prsaplan input:focus,table.prsaplan select:focus{border-color:var(--sof);background:#fff;outline:none}
+table.prsaplan input[type=number]{text-align:right;min-width:110px}
+table.prsaplan input[type=checkbox]{width:auto}
+table.prsaplan td.desc{min-width:200px}table.prsaplan td.notes{min-width:160px}
+table.prsaplan tr.off td{opacity:.5}
+table.prsaplan .rowbtns{white-space:nowrap}
+table.prsaplan .rowbtns button{border:0;background:none;cursor:pointer;color:var(--soft);font-size:.95rem;padding:2px 5px;border-radius:5px}
+table.prsaplan .rowbtns button:hover{background:var(--line2);color:var(--text)}
+table.prsaplan .rowbtns button.del:hover{color:var(--bad)}
+#tPrsaAcct td.num.neg,#tPrsaPlan td.neg{color:var(--bad)}
+table.prsaplan{min-width:1180px}
+table.prsaplan td.desc{min-width:260px}
+table.prsaplan select{min-width:118px}
