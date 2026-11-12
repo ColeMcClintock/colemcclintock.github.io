@@ -239,6 +239,64 @@ def aftp_demo():
            "outstanding": round(sum(a["amount"] for a in unpaid), 2), "soldiersUnpaid": len({a["sid"] for a in unpaid})}
     return {"soldiers": soldiers, "aftps": aftps}, exp
 demo["aftp"], aftp_expect = aftp_demo()
+# ---------------- Flying Hour Program (FHP) + Aircraft Key (fictional) ----------------
+# Default FHP layout: month headers F11:Q11, aircraft rows 13-16 (planned hours per month in F:Q), cost per hour E20:E23
+# (E20 = row 13, E21 = row 14 ...). Rows 13 and 15 are two aircraft of the same AASF; the Aircraft Key maps aircraft to AASFs.
+FHP_W = [7, 7, 6, 6, 7, 8, 9, 10, 10, 10, 10, 10]
+FHP_LINES = [("UH-60M Blackhawk", 300, 1050.0), ("CH-47F Chinook", 140, 2450.0), ("UH-72A Lakota", 160, 620.0), ("UH-60L Blackhawk", 280, 1080.0)]
+def fhp_grid(fy=2027, labels=True, values=True):
+    g = [[None] * 18 for _ in range(23)]
+    g[0][0] = f"Flying Hour Program FY{str(fy)[2:]} (fictional demo)" if values else "Flying Hour Program (FHP)"
+    g[1][0] = "Planned flying hours by month; cost per flying hour below." if values else "Planned hours per month in F13:Q16; cost per hour in E20:E23 (E20 = row 13, E21 = row 14, E22 = row 15, E23 = row 16)."
+    g[10][0] = "Aircraft"; g[10][17] = "Total"
+    for i in range(12):
+        m = (10 + i - 1) % 12 + 1; y = fy - 1 if m >= 10 else fy
+        g[10][5 + i] = dt.date(y, m, 1) if values else ["Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"][i]
+    names = [x[0] for x in FHP_LINES] if values else ["AASF A \u2013 Aircraft 1", "AASF B \u2013 Aircraft 1", "AASF A \u2013 Aircraft 2", "AASF C \u2013 Aircraft 1"]
+    for j, (lab, hrs, cph) in enumerate(FHP_LINES):
+        r = 12 + j; g[r][0] = names[j]
+        if values:
+            mh = [round(hrs * w / 100 * 2) / 2 for w in FHP_W]
+            for i in range(12): g[r][5 + i] = mh[i]
+            g[r][17] = sum(mh)
+    if values:
+        g[16][0] = "Total hours"
+        for i in range(12): g[16][5 + i] = sum(g[12 + j][5 + i] for j in range(4))
+    g[18][3] = "Cost per flying hour"
+    for j, (lab, hrs, cph) in enumerate(FHP_LINES):
+        g[19 + j][3] = (lab.split()[0] if values else f"Row {13 + j} \u2013 {names[j]}") + " $/hr"
+        g[19 + j][4] = cph if values else None
+    return g
+AKEY_GRID = [["Aircraft", "AASF"], ["UH-60M", "Cedar Valley"], ["CH-47F Chinook", "Prairie Point"], ["UH-72A", "CEDAR VALLEY"], ["UH-60L", " river bend "]]
+demo["fhp"] = {"name": "Flying Hour Program FY27.xlsx", "grid": [[js_val(c) for c in r] for r in fhp_grid()]}
+demo["aircraftKey"] = {"name": "Aircraft Key.xlsx", "grid": AKEY_GRID}
+def fhp_xlsx(path, grid, money=True):
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "FHP"
+    for r, row in enumerate(grid, 1):
+        for c, v in enumerate(row, 1):
+            if v is not None: ws.cell(r, c, v)
+    for c in range(6, 18): ws.cell(11, c).number_format = "mmm-yy"; ws.cell(11, c).font = Font(bold=True); ws.cell(11, c).fill = PatternFill("solid", fgColor="DCE6F2")
+    ws["A1"].font = Font(bold=True, size=13); ws["A11"].font = Font(bold=True); ws["D19"].font = Font(bold=True)
+    for r in range(20, 24): ws.cell(r, 5).number_format = "$#,##0.00"; ws.cell(r, 5).fill = PatternFill("solid", fgColor="FFF2CC")
+    for r in range(13, 17):
+        for c in range(6, 18): ws.cell(r, c).fill = PatternFill("solid", fgColor="EAF2E3") if not grid[12][5] else PatternFill()
+    ws.column_dimensions["A"].width = 26; ws.column_dimensions["D"].width = 30
+    for c in range(6, 19): ws.column_dimensions[get_column_letter(c)].width = 9
+    wb.save(path)
+fhp_xlsx(os.path.join(DEMO, "Flying Hour Program FY27.xlsx"), fhp_grid())
+write_grid(os.path.join(DEMO, "Aircraft Key.xlsx"), AKEY_GRID, "AircraftKey", widths=[26, 22])
+fhp_xlsx(os.path.join(DIR, "fhp_template.xlsx"), fhp_grid(values=False))
+def akey_template(path):
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "AircraftKey"
+    ws.append(["Aircraft", "AASF"]); ws.append(["Aircraft 1", "AASF A"]); ws.append(["Aircraft 2", "AASF A"]); ws.append(["Aircraft 3", "AASF B"])
+    for c in ws[1]: c.font = Font(bold=True)
+    ws["D1"] = "How to fill in"; ws["D1"].font = Font(bold=True)
+    ws["D2"] = "Aircraft: as labelled in the Flying Hour Program rows. AASF: the fuel tracker name (its file name). Several aircraft can share one AASF."
+    ws.column_dimensions["A"].width = 26; ws.column_dimensions["B"].width = 22; ws.column_dimensions["D"].width = 90
+    wb.save(path)
+akey_template(os.path.join(DIR, "aircraft_key_template.xlsx"))
+shutil.copy(os.path.join(DIR, "fhp_template.xlsx"), os.path.join(DL, "command-fhp-template.xlsx"))
+shutil.copy(os.path.join(DIR, "aircraft_key_template.xlsx"), os.path.join(DL, "command-aircraft-key-template.xlsx"))
 demo["expect"] = {"pr": pr_expect, "prKey": kexp, "fuel": fuel_expect, "aftp": aftp_expect}
 with open(os.path.join(DIR, "data", "command_demo.js"), "w", encoding="utf-8") as f:
     f.write("// AUTO-GENERATED by data-generation/generate_command_data.py - fictional data\n")

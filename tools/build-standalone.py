@@ -33,7 +33,7 @@ PAGES = {
                                  templates=["prevention_template.xlsx", "roster_template.xlsx"], save_prefix="PREVENTION"),
     # multipage Aviation Dashboard (Home, Status of Funds, PR Tracker, Fuel). The single file opens empty (demo scripts stripped).
     "command-dashboard": dict(dir="dashboards/command", title="Aviation Dashboard", strip_demo=True, save_prefix="COMMAND",
-                              templates=["pr_template.xlsx", "cardholder_key_template.xlsx", "fuel_tracker_template.xlsx", "funds_template.xlsx", "funding_template.xlsx", "accountkey_template.xlsx", "cikey_template.xlsx", "spendplan_template.xlsx"]),
+                              templates=["pr_template.xlsx", "cardholder_key_template.xlsx", "fuel_tracker_template.xlsx", "fhp_template.xlsx", "aircraft_key_template.xlsx", "funds_template.xlsx", "funding_template.xlsx", "accountkey_template.xlsx", "cikey_template.xlsx", "spendplan_template.xlsx"]),
     "g1-dashboard": dict(dir="dashboards/g1", title="G1 Dashboard", strip_demo=True, save_prefix="G1",
         templates=["funds_template.xlsx", "pr_template.xlsx", "g1_accountkey_template.xlsx", "g1_cikey_template.xlsx", "g1_funding_template.xlsx", "g1_cardholder_key_template.xlsx", "g1_spendplan_template.xlsx", "g1_stipends_template.xlsx", "g1_mfh_duty_template.xlsx", "g1_dts_sample.xlsx"]),
     "owi-dashboard": dict(dir="dashboards/owi", title="OWI Dashboard", strip_demo=True, save_prefix="OWI",

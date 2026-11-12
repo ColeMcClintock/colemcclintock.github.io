@@ -319,3 +319,17 @@ table.aftp td.out.amber{color:#b45309;font-weight:700}table.aftp td.out.red{colo
 h1 .demotag{font-size:.68rem;position:relative;top:-2px}
 .ocard h3 .demotag{margin-left:2px;font-size:.62rem}
 .tile .demotag.ontile{position:absolute;top:12px;right:12px;margin:0;z-index:1;font-size:.6rem}
+
+/* Flying Hour Program pace */
+.pill.funder{background:#fef3c7;color:#b45309}
+.fpace .pstat.funder strong{color:#b45309}
+.pstat.fhpnote{font-size:.8rem}
+.dotc{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.fhpcharts{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;margin-top:12px}
+.fhpcharts .panel{margin:0;box-shadow:none;border:1px solid var(--line2)}
+.fhpcharts h3{display:flex;align-items:center;gap:6px;font-size:.92rem;margin:0 0 6px}
+.chartbox.sm{height:220px}
+details.fhpmap{margin-top:12px}details.fhpmap summary{cursor:pointer;font-weight:650}
+#tFhpMap select{max-width:280px}
+#tFhp td.neg{color:var(--bad)}
+.flag.unm{white-space:normal}

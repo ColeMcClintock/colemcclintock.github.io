@@ -69,7 +69,7 @@
       <ul class="kinds">
         <li><strong>Status of Funds</strong> funds export, funding file, Account Key, Commitment Item Key, spend plan</li>
         <li><strong>PR Tracker</strong> L1.xlsx, L2.xlsx, L3.xlsx, L4.xlsx</li>
-        <li><strong>Fuel</strong> one tracker per AASF, named for the AASF</li>
+        <li><strong>Fuel</strong> one tracker per AASF, named for the AASF; optional Flying Hour Program and Aircraft Key</li>
         <li><strong>Spend Plans</strong> spend plan: Account, October &hellip; September (current fiscal year); actuals come from Status of Funds</li>
       </ul>
     </div>
@@ -179,13 +179,20 @@
     <div class="filters" role="group" aria-label="Fuel filters">
       <label>Fiscal Year<select id="fuFy"></select></label>
       <label>AASF<select id="fuAasf"></select></label>
+      <label id="fuBasisL" hidden>Pace basis<select id="fuBasis"><option value="fhp">Flying Hour Program</option><option value="line">Straight-line budget</option></select></label>
       <button class="btn ghost" id="fuReset" type="button">Reset</button>
     </div>
     <section class="kpis k6" id="fuKpis" aria-label="Fuel totals"></section>
     <section class="panel"><h2>Budget vs where we are in the fiscal year</h2><div id="fuPace"></div></section>
     <div class="aasfs" id="fuCards"></div>
+    <section class="panel" id="fuFhp" hidden>
+      <h2>Flying Hour Program pace</h2>
+      <div id="fuFhpBody"></div>
+      <div class="fhpcharts" id="fuFhpCharts"></div>
+      <details class="fhpmap" id="fuFhpMapBox"><summary id="fuFhpMapSum">FHP rows &rarr; AASF</summary><div id="fuFhpMap"></div></details>
+    </section>
     <div class="row r2">
-      <section class="panel"><h2>Cumulative spend vs straight-line budget pace</h2><div class="chartbox"><canvas id="cFuCum"></canvas></div><p class="muted small" id="fuCumNote"></p></section>
+      <section class="panel"><h2 id="fuCumTitle">Cumulative spend vs straight-line budget pace</h2><div class="chartbox"><canvas id="cFuCum"></canvas></div><p class="muted small" id="fuCumNote"></p></section>
       <section class="panel"><h2>% of budget used by AASF</h2><div class="chartbox"><canvas id="cFuPct"></canvas></div><p class="muted small">Straight-line pace = 1/12 of the budget per fiscal month.</p></section>
     </div>
     <div class="row r2">
@@ -287,6 +294,8 @@
       <a class="btn ghost sm" href="pr_template.xlsx" download>PR file (L1&ndash;L4)</a>
       <a class="btn ghost sm" href="cardholder_key_template.xlsx" download>Cardholder Key</a>
       <a class="btn ghost sm" href="fuel_tracker_template.xlsx" download>Fuel tracker (AASF)</a>
+      <a class="btn ghost sm" href="fhp_template.xlsx" download>Flying Hour Program (FHP)</a>
+      <a class="btn ghost sm" href="aircraft_key_template.xlsx" download>Aircraft Key</a>
       <a class="btn ghost sm" href="funds_template.xlsx" download>Funds export</a>
       <a class="btn ghost sm" href="funding_template.xlsx" download>Funding file</a>
       <a class="btn ghost sm" href="accountkey_template.xlsx" download>Account Key</a>
@@ -332,7 +341,10 @@
       <h4>Fuel</h4>
       <ul>
         <li>Each tracker's budget is cell B1; the table header (Date, Milstrip Number, Gallons, Total Cost) is found near row 13. Blank rows and total rows are ignored.</li>
-        <li>Fiscal year elapsed is counted in days from 1 October. On pace = spending within 10% of the straight-line budget pace; the projection is spend to date &divide; share of the year elapsed.</li>
+        <li>Fiscal year elapsed is counted in days from 1 October. Without a Flying Hour Program: on pace = spending within 10% of the straight-line budget pace; the projection is spend to date &divide; share of the year elapsed.</li>
+        <li>Flying Hour Program (optional Excel): month headers October &hellip; September (default F11:Q11; the row with 10+ month headers is found automatically), one aircraft per row below with planned hours per month, and a cost-per-hour block below (default E20 = the first row&rsquo;s $/hr, E21 the second&rsquo;s &hellip;; matched by label when the labels match, otherwise by order). Total rows are skipped. Planned $ = hours &times; $/hr per month.</li>
+        <li>FHP rows are aircraft. Each row goes to an AASF by: your choice in &ldquo;FHP rows &rarr; AASF&rdquo;, then the Aircraft Key (Aircraft, AASF; case-insensitive, trimmed, tolerant of small typos in names without digits), then a match of the row label to a fuel tracker name. Aircraft on the same AASF are added together.</li>
+        <li>FHP pace compares actual fuel Total Cost to date with planned $ to date (completed months plus the current month prorated by days): within &plusmn;5% is on pace (exactly 5% counts as on pace), more than 5% above is over (red), more than 5% below is under (amber). Implied hours = actual $ &divide; the AASF&rsquo;s blended $/hr (full-year FHP $ &divide; planned hours).</li>
       </ul>
     </div>
   </details>
@@ -351,6 +363,7 @@
 <script src="core.js"></script>
 <script src="sof.js"></script>
 <script src="pr.js"></script>
+<script src="fhp.js"></script>
 <script src="fuel.js"></script>
 <script src="spend.js"></script>
 <script src="aftp.js"></script>

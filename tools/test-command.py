@@ -100,6 +100,43 @@ fb_rows = [[d0, "W81B0001", 1000.0, 3600.0]]
 fa = tracker("North Field", 12000.0, fa_rows); fb = tracker("South Field", 3000.0, fb_rows)
 FA_SPENT, FB_SPENT = 362.0 + 730.0 + 180.0, 3600.0
 
+
+# ---- Flying Hour Program (FHP) + Aircraft Key: exact default layout (months F11:Q11, rows 13-16, $/hr E20:E23) ----
+# Hours are set from today's date so North Field is Over pace and South Field On pace (planned to date = full months + current month by days).
+_t = dt.date.today(); _cur = (_t.month + 2) % 12 + 1; _dim = ((dt.date(_t.year + (_t.month == 12), _t.month % 12 + 1, 1)) - dt.timedelta(days=1)).day
+SHARE = (_cur - 1) + _t.day / _dim
+A_H = round((FA_SPENT / 1.20 / SHARE - 5.0) / 10.0, 4); B_H = round(FB_SPENT / 1.02 / SHARE / 20.0, 4)
+MONTHS3 = ["Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"]
+def fhp_exact():
+    g = [[None] * 18 for _ in range(23)]
+    g[0][0] = f"Flying Hour Program FY{fy} (fictional)"; g[10][0] = "Aircraft"
+    for i, m in enumerate(MONTHS3): g[10][5 + i] = m
+    for r, (lab, h) in zip(range(12, 16), [("Aircraft Alpha", A_H), ("Aircraft Bravo", B_H), ("Aircraft Charlie", 1.0), ("Aircraft Delta", 1.0)]):
+        g[r][0] = lab
+        for i in range(12): g[r][5 + i] = h
+    g[16][0] = "Total"
+    for i in range(12): g[16][5 + i] = round(A_H + B_H + 2, 4)
+    for r, v in zip(range(19, 23), ["$10.00", 20, "5", 300]): g[r][4] = v
+    return g
+fhp_x = xlsx(os.path.join(tmp, "FHP FY.xlsx"), fhp_exact(), "FHP")
+akey_x = xlsx(os.path.join(tmp, "Aircraft Key.xlsx"), [["Aircraft", "AASF"], ["aircraft alpha ", "north field"], ["Aircraft Charlie", "NORTH FIELD"], ["Aircraft Bravo", "Suoth Field"]], "AircraftKey")
+# shifted / variant layout: month names in C6:N6 plus a Total column, labels in A and B, a blank row then Grand Total,
+# cost block in column B with labels in A listed in a different order (matched by label)
+def fhp_shift():
+    g = [[None] * 16 for _ in range(22)]
+    g[1][0] = f"FY {fy} flying hours (fictional)"; g[5][0] = "Line"; g[5][1] = "Aircraft"
+    for i, m in enumerate(["October", "November", "December", "January", "February", "March", "April", "May", "June", "July", "August", "Sept."]): g[5][2 + i] = m
+    g[5][14] = "Total"
+    for r, (ln, lab, h) in zip(range(7, 10), [(1, "Aircraft Bravo", 3), (2, "Aircraft Alpha", 4), (3, "Aircraft Echo", 2)]):
+        g[r][0] = ln; g[r][1] = lab
+        for i in range(12): g[r][2 + i] = h
+        g[r][14] = h * 12
+    g[11][1] = "Grand Total"
+    for i in range(12): g[11][2 + i] = 9
+    g[14][0] = "Cost per flying hour"
+    for r, (lab, v) in zip(range(15, 18), [("Aircraft Echo $/hr", 700), ("Aircraft Alpha $/hr", "$1,200.50"), ("Aircraft Bravo $/hr", 900)]): g[r][0] = lab; g[r][1] = v
+    return g
+fhp_shift_x = xlsx(os.path.join(tmp, "Flying hours variant.xlsx"), fhp_shift(), "Plan")
 check([c.value for c in openpyxl.load_workbook(os.path.join(ROOT, "dashboards", "command", "funding_template.xlsx")).active[1]] == ["Fiscal Year", "Account", "TDP", "AFP"], "aviation funding template: Fiscal Year, Account, TDP, AFP")
 check("Reservations" in [c.value for c in openpyxl.load_workbook(os.path.join(ROOT, "dashboards", "finance", "funding_template.xlsx")).active[1]], "finance funding template keeps Reservations")
 def run():
@@ -138,6 +175,9 @@ def run():
             got = pg.evaluate(f"CMD.mods.fuel._state.recs.filter(function(r){{return r.aasf==={json.dumps(name)} && r.fy==={json.dumps(cur)}}}).reduce(function(t,r){{return t+r.cost}},0)")
             check(abs(got - x["byFy"].get(cur, {"cost": 0})["cost"]) < 0.02, f"hosted: fuel {name} FY{cur} cost")
         check(pg.evaluate("CMD.mods.fuel._state.aasfs.map(function(a){return a.budget})") == [x["budget"] for x in E["fuel"].values()], "hosted: budgets from B1")
+        DM = pg.evaluate("(function(){var s=CMD.mods.fuel.fhpStats(CMD.mods.fuel._state.fhp.fy);return s?s.list.map(function(x){return [x.name,x.group.rows.length]}):null})()")
+        check(DM == [["Cedar Valley", 2], ["Prairie Point", 1], ["River Bend", 1]], "hosted: demo FHP aircraft mapped through the demo Aircraft Key (two aircraft summed for one AASF) " + str(DM))
+        check(pg.evaluate("localStorage.getItem('aviation-fuel-fhp-settings')") is None, "hosted: demo FHP settings never written to browser storage")
         if SHOTS: pg.screenshot(path=os.path.join(SHOTS, "command-home.png"), full_page=True)
         go(pg, "sof")
         check(pg.input_value("#fFy") == pg.evaluate("CMD.mods.sof.summary().fy") != "", "hosted SOF: opens on one fiscal year " + pg.input_value("#fFy"))
@@ -471,6 +511,95 @@ def run():
         pg.click("#btnInfo"); pg.wait_for_timeout(300)
         check("Missing commitment_amt_cum (Total Expenditure)" in pg.text_content("#drawer") and pg.evaluate("CMD.mods.sof.hasData()") is False, "SOF: export without commitment_amt_cum rejected with a clear message")
         pg.close()
+
+        # ---------- Flying Hour Program pace (fresh browser profile) ----------
+        ctx2 = b.new_context(viewport={"width": 1440, "height": 1000}, accept_downloads=True)
+        def page2():
+            q = ctx2.new_page()
+            q.on("console", lambda m: errors.append(m.text) if m.type == "error" else None); q.on("pageerror", lambda e: errors.append(str(e)))
+            q.on("request", lambda r: net.append(r.url) if not r.url.startswith(("file:", "data:", "blob:")) else None)
+            return q
+        T = os.path.join(ROOT, "dashboards", "command")
+        tw = openpyxl.load_workbook(os.path.join(T, "fhp_template.xlsx")).active
+        check([tw.cell(11, c).value for c in range(6, 18)] == MONTHS3 and tw["A13"].value == "AASF A \u2013 Aircraft 1" and tw["A15"].value == "AASF A \u2013 Aircraft 2" and tw["E20"].value is None and tw["F13"].value is None, "FHP template: Oct..Sep in F11:Q11, placeholder rows 13-16, blank $/hr E20:E23")
+        aw = openpyxl.load_workbook(os.path.join(T, "aircraft_key_template.xlsx")).active
+        check([aw["A1"].value, aw["B1"].value] == ["Aircraft", "AASF"], "Aircraft Key template: Aircraft, AASF")
+        q = page2(); q.goto("file://" + SINGLE); q.wait_for_timeout(900)
+        check(q.locator('#drawer a[download]', has_text="Flying Hour Program (FHP)").count() == 1 and q.locator('#drawer a[download]', has_text="Aircraft Key").count() == 1, "drawer: FHP and Aircraft Key templates")
+        q.set_input_files("#fileInput", [fa, fb]); q.wait_for_timeout(1500); go(q, "fuel")
+        check("Load the Flying Hour Program" in q.inner_text("#fuPace") and q.is_hidden("#fuFhp") and q.is_hidden("#fuBasisL"), "no FHP: straight-line pace kept with a note to load the FHP")
+        q.set_input_files("#fileInput", [fhp_x, akey_x]); q.wait_for_timeout(1500)
+        ent = q.evaluate("CMD.mods.fuel.entries().map(function(e){return [e.kind,e.page,e.name]})")
+        check(["fhp", "fuel", "FHP FY.xlsx"] in ent and ["akey", "fuel", "Aircraft Key.xlsx"] in ent and q.evaluate("CMD.mods.fuel._state.aasfs.length") == 2, "upload router: FHP and Aircraft Key detected by structure/headers; trackers kept")
+        R = q.evaluate("CMD.mods.fuel._state.fhp.rep"); rows = q.evaluate("CMD.mods.fuel._state.fhp.rows.map(function(r){return [r.row,r.label,r.cph,r.costCell,r.costBy]})")
+        check(R["headerRow"] == 11 and R["months"] == "F11:Q11" and R["costBlock"] == "E20:E23" and R["layout"] == "default" and R["totalRow"] == 17, "FHP exact layout: header F11:Q11, cost E20:E23, Total row 17 skipped " + str(R))
+        check(rows == [[13, "Aircraft Alpha", 10, "E20", "order"], [14, "Aircraft Bravo", 20, "E21", "order"], [15, "Aircraft Charlie", 5, "E22", "order"], [16, "Aircraft Delta", 300, "E23", "order"]], "FHP: E20 -> row 13 ... E23 -> row 16 by order; '$10.00' and '5' read " + str(rows))
+        M = q.evaluate("CMD.mods.fuel._state.fhp.rows.map(function(r){var m=CMD.mods.fuel.mapRow(r);return [r.label,m.aasf,m.via]})")
+        check(M == [["Aircraft Alpha", "North Field", "Aircraft Key"], ["Aircraft Bravo", "South Field", "Aircraft Key"], ["Aircraft Charlie", "North Field", "Aircraft Key"], ["Aircraft Delta", None, "unmapped"]], "Aircraft Key: trimmed, any case, typo 'Suoth Field' -> South Field; Delta unmapped " + str(M))
+        F = q.evaluate("(function(){var s=CMD.mods.fuel.fhpStats();return {fy:s.fy,l:s.list.map(function(x){return [x.name,x.group.rows.length,x.plannedTD,x.spent,x.pace.t,x.annual,x.implied,x.hoursTD]}),r:[s.roll.plannedTD,s.roll.spent,s.roll.annual,s.roll.budget]}})()")
+        nP = round((10 * A_H + 5) * SHARE, 2); sP = round(20 * B_H * SHARE, 2)
+        check(F["fy"] == str(fy) and [x[0] for x in F["l"]] == ["North Field", "South Field"] and F["l"][0][1] == 2, "rows 13 + 15 (two aircraft) summed into one AASF")
+        check(abs(F["l"][0][2] - nP) < 0.05 and abs(F["l"][1][2] - sP) < 0.05 and F["l"][0][4] == "Over pace" and F["l"][1][4] == "On pace", "FHP pace: planned to date = hours x $/hr (current month by days); North Over, South On " + str(F["l"]))
+        nAnn = round((10 * A_H + 5) * 12, 2); bl = nAnn / ((A_H + 1) * 12)
+        check(abs(F["l"][0][5] - nAnn) < 0.05 and abs(F["l"][0][6] - round(FA_SPENT / bl, 1)) < 0.11, "implied hours = actual $ / blended $/hr")
+        check(abs(F["r"][3] - 15000) < 0.01 and abs(F["r"][1] - (FA_SPENT + FB_SPENT)) < 0.01, "roll-up across AASFs with budget (B1) total")
+        check(q.evaluate("[0.05,-0.05,0.050002,-0.050002,0].map(function(v){return CMD.mods.fuel.fhpPace(v).t})") == ["On pace", "On pace", "Over pace", "Under pace", "On pace"], "exactly 5% counts as on pace; beyond 5% over/under")
+        check("against the Flying Hour Program" in q.inner_text("#fuPace") and q.is_visible("#fuBasisL") and q.input_value("#fuBasis") == "fhp", "FHP is the default pace basis when loaded")
+        col = q.evaluate("(function(){var o={};document.querySelectorAll('#tFhp tbody .pill').forEach(function(p){o[p.textContent]=getComputedStyle(p).color});return o})()")
+        check(col.get("Over pace") == "rgb(185, 28, 28)" and col.get("On pace") == "rgb(21, 128, 61)", "Over pace chip red, On pace green " + str(col))
+        check("Over pace" in q.inner_text('#fuCards [data-aasf="North Field"]') and "On pace" in q.inner_text('#fuCards [data-aasf="South Field"]'), "AASF cards use FHP pace")
+        check(q.locator("#fuFhpCharts canvas").count() == 2 and q.evaluate("DashKit.charts.cFhp0.data.datasets.map(function(d){return d.label})") == ["FHP planned (cumulative)", "Actual fuel (cumulative)", "Budget (B1)"], "per-AASF chart: cumulative FHP vs actual with B1 reference")
+        check(q.evaluate("DashKit.charts.cFuCum.data.datasets.map(function(d){return d.label})")[:2] == ["Cumulative spend", "FHP planned (hours \u00d7 $/hr)"] and "Flying Hour Program" in q.inner_text("#fuCumTitle"), "cumulative chart uses the FHP trend line")
+        check("Not mapped" in q.inner_text("#tFhpMap") and "add \u201cAircraft Delta\u201d to the Aircraft Key" in q.inner_text("#tFhpMap"), "unmapped aircraft shown with an 'add to Aircraft Key' hint")
+        q.click("#btnInfo"); q.wait_for_timeout(300)
+        dr = q.text_content("#fuReport")
+        check("F11:Q11" in dr and "E20:E23" in dr and "Aircraft Alpha" in dr and "E23" in dr and "Aircraft Key" in dr and "Not mapped" in dr, "drawer shows what was read: rows, hours, $/hr cells, AASF")
+        q.keyboard.press("Escape")
+        q.select_option("#fuBasis", "line"); q.wait_for_timeout(300)
+        check("against the Flying Hour Program" not in q.inner_text("#fuPace") and "straight-line" in q.inner_text("#fuPace").lower() and "straight-line" in q.inner_text("#fuCumTitle"), "Pace basis can switch back to straight-line")
+        q.select_option("#fuBasis", "fhp"); q.wait_for_timeout(300)
+        # manual choice wins over Aircraft Key / auto; persisted in this browser
+        q.select_option('#tFhpMap select[data-row="aircraftdelta"]', "South Field"); q.wait_for_timeout(400)
+        check(q.evaluate("CMD.mods.fuel.fhpStats().list[1].pace.t") == "Under pace" and q.evaluate("CMD.mods.fuel.fhpStats().list[1].group.rows.length") == 2, "manual mapping: Delta added to South Field -> Under pace")
+        check(q.evaluate("getComputedStyle(document.querySelector('#tFhp tbody tr[data-aasf=\"South Field\"] .pill')).color") == "rgb(180, 83, 9)", "Under pace chip is amber")
+        q.select_option('#tFhpMap select[data-row="aircraftalpha"]', "__ignore__"); q.wait_for_timeout(300)
+        check(q.evaluate("CMD.mods.fuel.mapRow(CMD.mods.fuel._state.fhp.rows[0]).via") == "ignored", "manual choice (Ignore) wins over the Aircraft Key")
+        q.select_option('#tFhpMap select[data-row="aircraftalpha"]', ""); q.wait_for_timeout(300)
+        st = json.loads(q.evaluate("localStorage.getItem('aviation-fuel-fhp-settings')") or "{}")
+        check(st.get("over") == {"aircraftdelta": "South Field"} and len(st.get("akey", {}).get("rows", [])) == 3 and "Aircraft Alpha" not in json.dumps(st.get("over")), "mapping + Aircraft Key kept in localStorage (Aviation key)")
+        check(not any(k in json.dumps(st) for k in ["W81A0001", "Gallons", "362"]), "browser storage holds no fuel/FHP numbers")
+        q.reload(); q.wait_for_timeout(900)
+        q.set_input_files("#fileInput", [fa, fb, fhp_x]); q.wait_for_timeout(1500); go(q, "fuel")
+        check(q.evaluate("CMD.mods.fuel.mapRow(CMD.mods.fuel._state.fhp.rows[3]).via") == "manual" and q.evaluate("CMD.mods.fuel.mapRow(CMD.mods.fuel._state.fhp.rows[1]).via") == "Aircraft Key", "after reload: Aircraft Key and manual mapping restored from browser storage")
+        if SHOTS: q.evaluate("document.getElementById('fuFhpMapBox').open=true"); q.wait_for_timeout(200); q.evaluate("document.getElementById('toast').hidden=true"); q.screenshot(path=os.path.join(SHOTS, "command-fuel-fhp-upload.png"), full_page=True)
+        with q.expect_download() as dl: q.click("#btnInfo"); q.click("#btnSave")
+        fsaved = os.path.join(tmp, "fhp-saved.html"); dl.value.save_as(fsaved); q.close()
+        blk = json.loads(re.search(r'<script id="commandSaved" type="application/json">(.*?)</script>', open(fsaved, encoding="utf-8").read(), re.S).group(1))
+        check(len(blk["fuel"]["fhp"]["rows"]) == 4 and len(blk["fuel"]["akey"]["rows"]) == 3 and blk["fuel"]["over"] == {"aircraftdelta": "South Field"}, "Save with data embeds FHP, Aircraft Key and mapping")
+        ctx3 = b.new_context(viewport={"width": 1440, "height": 900}); q3 = ctx3.new_page(); q3.on("request", lambda r: net.append(r.url) if not r.url.startswith(("file:", "data:", "blob:")) else None)
+        q3.goto("file://" + fsaved); q3.wait_for_timeout(1300); go(q3, "fuel")
+        check(q3.evaluate("CMD.mods.fuel.fhpStats().list.map(function(x){return [x.name,x.pace.t]})") == [["North Field", "Over pace"], ["South Field", "Under pace"]] and q3.is_visible("#fuFhp"), "saved file reopens with FHP pace and mapping in a fresh browser")
+        ctx3.close()
+        # variant layouts (unit checks through the same reader)
+        q = page2(); q.goto("file://" + SINGLE); q.wait_for_timeout(800)
+        q.set_input_files("#fileInput", [fhp_shift_x]); q.wait_for_timeout(1500)
+        V = q.evaluate("(function(){var f=CMD.mods.fuel._state.fhp;return {kind:f.kind,fy:f.fy,rep:f.rep,rows:f.rows.map(function(r){return [r.row,r.label,r.annualHours,r.cph,r.costCell,r.costBy]})}})()")
+        check(V["kind"] == "fhp" and V["rep"]["headerRow"] == 6 and V["rep"]["months"] == "C6:N6" and V["rep"]["layout"] == "detected" and V["fy"] == str(fy), "shifted layout: month names found in C6:N6 (Total column ignored); FY from text " + str(V["rep"]))
+        check(V["rows"] == [[8, "1 \u00b7 Aircraft Bravo", 36, 900, "B18", "label"], [9, "2 \u00b7 Aircraft Alpha", 48, 1200.5, "B17", "label"], [10, "3 \u00b7 Aircraft Echo", 24, 700, "B16", "label"]] or V["rows"] == [[8, "Aircraft Bravo", 36, 900, "B18", "label"], [9, "Aircraft Alpha", 48, 1200.5, "B17", "label"], [10, "Aircraft Echo", 24, 700, "B16", "label"]], "shifted layout: cost block in column B matched by label despite a different order " + str(V["rows"]))
+        check("differs from the default" in (q.click("#btnInfo") or q.text_content("#fuReport")), "drawer flags a layout that differs from the default"); q.keyboard.press("Escape")
+        U = q.evaluate("""(function(){var P=CMD.FHP.parse,S=FundsLib.aoaSource,g=[],i,r;
+          for(i=0;i<14;i++)g.push([]);
+          g[2]=['Aircraft','','','$/hr'].concat([46296,46327,46357,46388,46419,46447,46478,46508,46539,46569,46600,46631]);
+          g[3]=['Ship 1','','',800].concat([1,1,1,1,1,1,1,1,1,1,1,1]);g[4]=['Ship 2','','','$950'].concat([2,2,2,2,2,2,2,2,2,2,2,2]);
+          var a=P(S(g),'x.xlsx','x');
+          var h=[[],[],['Hours','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep'],['Heli A',1,1,1,1,1,1,1,1,1,1,1,1],['Heli B',2,2,2,2,2,2,2,2,2,2,2,2],[],['Total',3,3,3,3,3,3,3,3,3,3,3,3]];
+          var b=P(S(h),'Flying Hour Program.xlsx','b');
+          var sp=[['Account','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep'],['Fuel',1,2,3,4,5,6,7,8,9,10,11,12]];
+          return {a:[a.fy,a.rows.map(function(r){return [r.label,r.cph,r.costBy]})],b:[b.fatal,b.rows.map(function(r){return [r.label,r.cph]}),b.fy],sp:CMD.FHP.classify(S(sp),'Spend Plan.xlsx'),miss:b.rep.warns}})()""")
+        check(U["a"] == ["2027", [["Ship 1", 800, "same row"], ["Ship 2", 950, "same row"]]] or U["a"][1] == [["Ship 1", 800, "same row"], ["Ship 2", 950, "same row"]], "variant: Excel-date month headers and an inline $/hr column " + str(U["a"]))
+        check(U["b"][0] is None and U["b"][1] == [["Heli A", None], ["Heli B", None]] and U["miss"] == 2, "variant: no cost block -> rows kept, $/hr flagged missing")
+        check(U["sp"] is None, "a spend plan (Account, Oct..Sep) is not taken for an FHP")
+        q.close(); ctx2.close()
         check(not net, "no network requests " + str(net[:3]))
         check(not errors, "no console errors " + str(errors[:3]))
         b.close()
