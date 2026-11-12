@@ -23,8 +23,27 @@
     ["fm", "Fiscal Month", ["fiscalmonth", "fiscalmonthno", "fiscalmonthnumber", "fiscalmo", "fiscalperiod", "fiscalper"], "fm", "Trend charts, filter (1 = Oct ... 12 = Sep)"],
     ["obl", "Obligation", [], "money", "Calculated: Total Expenditure \u2212 Disbursement"],
     ["com", "Total Expenditure", ["commitmentamtcum", "totalexpenditure", "commitments"], "money", "Obligation + Disbursement"],
-    ["disb", "Disbursement", ["disbursementamtcum", "disbursement", "disbursements"], "money", "KPI, charts, Balance"]
+    ["disb", "Disbursement", ["disbursementamtcum", "disbursement", "disbursements"], "money", "KPI, charts, Balance"],
+    ["mdepx", "MDEP", ["mdep"], "text", "Optional. MDEP on each line (any header such as mdep, MDEP, mdep_cd, Management Decision Package); used before the Account Key MDEP"]
   ];
+  var OPTIONAL = { obl: 1, mdepx: 1 };
+  // ---------- MDEP header detection (flexible; shared by the export, Account Key and funding readers) ----------
+  // Normalised header (lowercase, letters/digits only). Codes win over descriptions: "mdep" > "mdepcd"/"mdepcode"/"mdepid" > other mdep* names.
+  function mdepScore(h) {
+    var x = L.norm(h);
+    if (!x || /desc|name|title|text|long|short/.test(x)) return 0;
+    if (x === "mdep") return 5;
+    if (/^mdep(cd|code|id|key|no|nbr|number)$/.test(x) || x === "zzmdep") return 4;
+    if (/^(managementdecisionpackage|managementdecisionpkg|mgmtdecisionpackage|mgmtdecisionpkg)(mdep|code|cd)?$/.test(x) || /^mdep(managementdecisionpackage|mgmtdecisionpackage)$/.test(x)) return 3;
+    if (/^mdep/.test(x) || /mdep$/.test(x) || /managementdecisionpackage/.test(x)) return 2;
+    return 0;
+  }
+  function mdepCol(src, row) { var best = -1, bs = 0; for (var c = 0; c < src.cols; c++) { var sc = mdepScore(src.get(row, c)); if (sc > bs) { bs = sc; best = c; } } return best; }
+  // Present any MDEP-like header as plain "MDEP" so the shared Account Key / funding readers pick it up.
+  function mdepRename(src) {
+    var hit = {}; for (var r = 0; r < Math.min(src.rows, 20); r++) { var c = mdepCol(src, r); if (c >= 0) hit[r] = c; }
+    return { rows: src.rows, cols: src.cols, get: function (r, c) { if (hit[r] === c) return "MDEP"; return src.get(r, c); }, orig: function (r, c) { return src.get(r, c); }, hit: hit };
+  }
   var EXPORT_NAME = { doc: "contract_doc_no", ci: "commitment_item_fipex", fa: "functional_area_farea", appn: "appropriation_type", fy: "fiscal_year", fm: "fiscal_month", obl: "calculated", com: "commitment_amt_cum", disb: "disbursement_amt_cum" };
   var LABEL = {}; COLS.forEach(function (c) { LABEL[c[0]] = c[1]; });
   LABEL.acctL = "Account"; LABEL.ciL = "Commitment Item"; LABEL.sag = "Sag"; LABEL.mdep = "MDEP";
@@ -45,8 +64,11 @@
     var flip = FLIP_EXPORT_SIGN && !noFlip;
     var hm = L.mapHeaders(src, ALIAS), map = hm.map;
     if (!saved) delete map.obl;                                   // never read from a raw export
-    var rep = { kind: "export", headerRow: hm.hi + 1, matched: COLS.filter(function (c) { return c[0] !== "obl" && map[c[0]] != null; }).map(function (c) { return c[1]; }),
-      missing: COLS.filter(function (c) { return c[0] !== "obl" && map[c[0]] == null; }).map(function (c) { return EXPORT_NAME[c[0]] + " (" + c[1] + ")"; }), negObl: 0, negOblExamples: [],
+    var mdepHeader = "";
+    if (map.mdepx == null) { var mc = mdepCol(src, hm.hi); if (mc >= 0) { map.mdepx = mc; } }
+    if (map.mdepx != null) { mdepHeader = L.txt(src.get(hm.hi, map.mdepx)); hm.extra = hm.extra.filter(function (x) { return x !== mdepHeader; }); }
+    var rep = { kind: "export", headerRow: hm.hi + 1, mdepHeader: mdepHeader, matched: COLS.filter(function (c) { return !OPTIONAL[c[0]] && map[c[0]] != null; }).map(function (c) { return c[1]; }),
+      missing: COLS.filter(function (c) { return !OPTIONAL[c[0]] && map[c[0]] == null; }).map(function (c) { return EXPORT_NAME[c[0]] + " (" + c[1] + ")"; }), negObl: 0, negOblExamples: [],
       extra: hm.extra, dupes: hm.dupes, pii: hm.pii, rowsRead: 0, rowsLoaded: 0, blankRows: 0, allobj: 0, badNumber: 0, badNumberExamples: [], badMonth: 0, badMonthExamples: [], fatal: null };
     if (map.ci == null) { rep.fatal = "No Commitment Item column (commitment_item_fipex) was found. The file was not loaded."; return { records: [], report: rep }; }
     if (map.com == null || map.disb == null) {
@@ -61,7 +83,7 @@
       if (empty) { rep.blankRows++; continue; }
       rep.rowsRead++;
       if (L.isAllobj(raw.ci)) { rep.allobj++; continue; }
-      var rec = { _row: rr + 1, doc: idText(raw.doc), ci: idText(raw.ci), fa: idText(raw.fa), appn: idText(raw.appn), fy: L.fyText(raw.fy) };
+      var rec = { _row: rr + 1, doc: idText(raw.doc), ci: idText(raw.ci), fa: idText(raw.fa), appn: idText(raw.appn), fy: L.fyText(raw.fy), mdepx: "mdepx" in raw ? L.txt(raw.mdepx) : "" };
       var fmn = "fm" in raw ? L.fmNum(raw.fm) : null;
       if (fmn !== null && isNaN(fmn)) { rep.badMonth++; if (rep.badMonthExamples.length < 5) rep.badMonthExamples.push({ row: rr + 1, value: L.txt(raw.fm) }); fmn = null; }
       rec.fmn = fmn; rec.fm = L.fmLabel(fmn);
@@ -81,8 +103,23 @@
     return { records: out, report: rep };
   }
   // G1 dashboard: no Reservations. The funding file is Fiscal Year, Account, TDP, AFP; a Reservations column is ignored.
+  var FMALIAS = L.aliasMap([["fy", "Fiscal Year", ["fiscalyear", "fy"]], ["acct", "Account", ["account", "accountname", "acctname", "acct"]], ["fa", "Functional Area", ["functionalareafarea", "functionalarea", "farea"]], ["mdep", "MDEP", ["mdep"]], ["tdp", "TDP", ["tdp"]], ["afp", "AFP", ["afp"]]]);
   function parseFunding(src) {
-    var p = L.parseFunding(src), r = p.report;
+    var ren = mdepRename(src);
+    var p = L.parseFunding(ren), r = p.report;
+    var hm = L.mapHeaders(ren, FMALIAS), fm = hm.map;
+    if (fm.mdep != null && (fm.tdp != null || fm.afp != null) && (fm.acct != null || fm.fa != null)) {
+      r.mdepHeader = L.txt(src.get(hm.hi, fm.mdep)); r.extra = (r.extra || []).filter(function (x) { return x !== "MDEP" && x !== r.mdepHeader; });
+      p.mdepRows = [];
+      for (var rr = hm.hi + 1; rr < ren.rows; rr++) {
+        var g = function (k) { return fm[k] == null ? "" : ren.get(rr, fm[k]); };
+        var row = { fy: L.fyText(g("fy")), acct: L.txt(g("acct")).replace(/\s+/g, " "), fa: idText(g("fa")), mdep: L.txt(g("mdep")), tdp: L.parseAmt(g("tdp")), afp: L.parseAmt(g("afp")) };
+        if (!row.acct && !row.fa) continue;
+        if (!row.mdep || (row.tdp == null && row.afp == null)) continue;
+        if (row.tdp != null && isNaN(row.tdp)) row.tdp = null; if (row.afp != null && isNaN(row.afp)) row.afp = null;
+        p.mdepRows.push(row);
+      }
+    }
     p.rows.forEach(function (row) { delete row.res; });
     r.amts = (r.amts || []).filter(function (k) { return k !== "res"; });
     r.missing = (r.missing || []).filter(function (m) { return m !== "Reservations"; });
@@ -97,11 +134,14 @@
     if (k) res.report.fyAssigned = { n: k, fy: cur };
     return res;
   }
-  function parseAs(kind, src, noFlip) { return kind === "funding" ? parseFunding(src) : kind === "plan" ? parsePlanCur(src) : kind === "key" ? L.parseKey(src) : kind === "cikey" ? L.parseCiKey(src) : parseExport(src, noFlip); }
+  function parseAs(kind, src, noFlip) { return kind === "funding" ? parseFunding(src) : kind === "plan" ? parsePlanCur(src) : kind === "key" ? parseKeyG1(src) : kind === "cikey" ? L.parseCiKey(src) : parseExport(src, noFlip); }
+  function parseKeyG1(src) { var ren = mdepRename(src), p = L.parseKey(ren), hi = p.report.headerRow - 1; if (ren.hit[hi] != null) p.report.mdepHeader = L.txt(src.get(hi, ren.hit[hi])); return p; }
   function derive(recs) {
     var ciLoaded = L.ciInfo().size > 0;
     recs.forEach(function (r) {
-      var k = L.keyed(r.fa); r.acct = k.acct; r.acctL = k.acct || L.UNMAPPED; r.sag = k.sag; r.mdep = k.mdep;
+      var k = L.keyed(r.fa); r.acct = k.acct; r.acctL = k.acct || L.UNMAPPED; r.sag = k.sag;
+      // MDEP from the export line wins; otherwise the Account Key MDEP for the line's account.
+      if (r.mdepx) { r.mdep = r.mdepx; r.mdepFrom = "export"; } else { r.mdep = k.mdep; r.mdepFrom = k.mdep && k.mdep !== L.UNMAPPED ? "key" : ""; }
       var d = L.ciDesc(r.ci); r.ciDesc = d; r.ciUnm = ciLoaded && !!r.ci && !d;
       r.ciL = d || (r.ciUnm && L.ciIsDesc(r.ci) ? r.ci + " (Unmapped)" : r.ci);
     });
@@ -113,6 +153,7 @@
   function mkEntry(name, kind, res, extra) {
     var e = { name: name, kind: kind, kindLabel: KIND_LABEL[kind], rep: res.report, order: S.order++, fatal: res.report.fatal || null };
     if (kind !== "export") e.rows = res.rows; else { e.records = res.records; e.records.forEach(function (r) { r._src = name; }); }
+    if (res.mdepRows) e.mdepRows = res.mdepRows;
     for (var k in extra || {}) e[k] = extra[k];
     return e;
   }
@@ -122,7 +163,7 @@
       : e.kind === "plan" ? e.rows.map(function (r) { return [r.fy, r.fa, r.acct, r.fm, r.amt].join("|"); }).join("\n")
       : e.kind === "key" ? e.rows.map(function (r) { return [r.fa, r.acct, r.sag, r.mdep].join("|"); }).join("\n")
       : e.kind === "cikey" ? e.rows.map(function (r) { return [r.ci, r.desc].join("|"); }).join("\n")
-      : e.records.map(function (r) { return [r.doc, r.ci, r.fa, r.appn, r.fy, r.fm, r.obl, r.com, r.disb].join("|"); }).join("\n");
+      : e.records.map(function (r) { return [r.doc, r.ci, r.fa, r.appn, r.fy, r.fm, r.obl, r.com, r.disb, r.mdepx].join("|"); }).join("\n");
     return e.kind + ":" + C.sig(s);
   }
   // A new upload replaces earlier files of the kinds it brings (a new export keeps the funding file and the keys, and vice versa).
@@ -139,6 +180,8 @@
     S.allobj = ok.reduce(function (t, e) { return t + (e.kind === "export" ? e.rep.allobj : 0); }, 0);
     keysFrom(ok); derive(recs);
     recs.forEach(function (r, i) { r._i = i; });
+    S.fundMdep = [];
+    ok.filter(function (e) { return e.kind === "funding" && e.mdepRows; }).forEach(function (e) { e.mdepRows.forEach(function (r) { S.fundMdep.push({ fy: r.fy, acct: r.acct || L.acctOf(r.fa) || "", fa: r.fa, mdep: r.mdep, tdp: r.tdp, afp: r.afp }); }); });
     S.recs = recs; S.fund = L.buildFund(ok.filter(function (e) { return e.kind === "funding"; }), recs); S.plan = TR.buildPlan(ok.filter(function (e) { return e.kind === "plan"; }));
     S.showAll = false;
     S.files.forEach(function (e) { e.count = e.kind === "export" ? (e.records || []).length : (e.rows || []).length; var fl = fileLines(e); e.warns = fl.warns; });
@@ -150,7 +193,7 @@
   function demo() {
     var D = w.G1_FUNDS_DEMO; if (!D) return;
     S.files = [mkEntry("Demo funds export", "export", parseExport(aoa(D))), mkEntry("Demo funding file", "funding", parseFunding(aoa(D.funding))),
-      mkEntry("Demo spend plan", "plan", TR.parsePlan(aoa(D.plan))), mkEntry("Demo Account Key", "key", L.parseKey(aoa(D.key))), mkEntry("Demo Commitment Item Key", "cikey", L.parseCiKey(aoa(D.cikey)))];
+      mkEntry("Demo spend plan", "plan", TR.parsePlan(aoa(D.plan))), mkEntry("Demo Account Key", "key", parseKeyG1(aoa(D.key))), mkEntry("Demo Commitment Item Key", "cikey", L.parseCiKey(aoa(D.cikey)))];
     combine();
   }
   function clear() { S.files = []; combine(); }
@@ -165,6 +208,7 @@
       o.funding = { files: srcNames("funding"), headers: ["Fiscal Year", "Account", "Functional Area"].concat(am.map(function (k) { return L.FLABEL[k]; })),
         rows: S.fund.rows.map(function (r) { return [r.fy || "", r.unmapped ? "" : r.acct, r.unmapped ? r.fa : ""].concat(am.map(function (k) { return r[k] == null ? "" : r[k]; })); }) };
     }
+    if (S.fundMdep && S.fundMdep.length) o.fundingMdep = { headers: ["Fiscal Year", "Account", "Functional Area", "MDEP", "TDP", "AFP"], rows: S.fundMdep.map(function (r) { return [r.fy || "", r.acct || "", r.acct ? "" : r.fa || "", r.mdep, r.tdp == null ? "" : r.tdp, r.afp == null ? "" : r.afp]; }) };
     var kr = L.keyRows(), cr = L.ciRows();
     if (kr.length) o.key = { files: srcNames("key"), headers: ["Functional Area", "Account", "Sag", "MDEP"], rows: kr };
     if (cr.length) o.cikey = { files: srcNames("cikey"), headers: ["Commitment Item", "Description"], rows: cr };
@@ -178,9 +222,10 @@
       p.report.allobj = D.allobjRemoved || 0;
       S.files.push(mkEntry(nameOf(D.files, "Saved funds export"), "export", p, { srcNames: D.files }));
     }
-    [["funding", parseFunding, "Saved funding file"], ["plan", TR.parsePlan, "Saved spend plan"], ["key", L.parseKey, "Saved Account Key"], ["cikey", L.parseCiKey, "Saved Commitment Item Key"]].forEach(function (x) {
+    [["funding", parseFunding, "Saved funding file"], ["plan", TR.parsePlan, "Saved spend plan"], ["key", parseKeyG1, "Saved Account Key"], ["cikey", L.parseCiKey, "Saved Commitment Item Key"]].forEach(function (x) {
       var B = D[x[0]]; if (!B) return;
       S.files.push(mkEntry(nameOf(B.files, x[2]), x[0], x[1](aoa(B)), { srcNames: B.files }));
+      if (x[0] === "funding" && D.fundingMdep && D.fundingMdep.rows) S.files[S.files.length - 1].mdepRows = D.fundingMdep.rows.map(function (r) { return { fy: L.txt(r[0]), acct: L.txt(r[1]), fa: L.txt(r[2]), mdep: L.txt(r[3]), tdp: r[4] === "" ? null : +r[4], afp: r[5] === "" ? null : +r[5] }; });
     });
     combine();
   }
@@ -196,8 +241,9 @@
     else {
       h.push('<p class="' + (rep.rowsLoaded ? "ok" : "err") + '">Funds export: loaded ' + plural(rep.rowsLoaded, "line") + " of " + K.fmt(rep.rowsRead) + " read (header row " + rep.headerRow + ")." + (rep.blankRows ? ' <span class="muted">' + K.fmt(rep.blankRows) + " blank row(s) ignored.</span>" : "") + "</p>");
       h.push('<p class="' + (rep.flipped ? "ok" : "muted") + '">' + (rep.flipped ? "Amounts sign-flipped (&times; &minus;1): Total Expenditure (commitment_amt_cum) and Disbursement come through negative and are shown as positive. Obligation = Total Expenditure &minus; Disbursement; obligation_amt_cum is not read." : "Amounts used as saved (already sign-flipped and calculated; not flipped or recalculated again).") + "</p>");
-      var ok = rep.matched.length === COLS.length - 1;
-      h.push('<p class="' + (ok ? "ok" : "warn") + '">' + rep.matched.length + " of " + (COLS.length - 1) + " columns matched.</p>");
+      var need = COLS.filter(function (c) { return !OPTIONAL[c[0]]; }).length, ok = rep.matched.length === need;
+      h.push('<p class="' + (ok ? "ok" : "warn") + '">' + rep.matched.length + " of " + need + " columns matched.</p>");
+      h.push('<p class="muted">' + (rep.mdepHeader ? "MDEP read from column <code>" + esc(rep.mdepHeader) + "</code> on each line (used before the Account Key MDEP)." : "No MDEP column in this export; MDEP comes from the Account Key.") + "</p>");
       if (rep.negObl) { warns++; h.push('<p class="warn">' + plural(rep.negObl, "line") + " where Disbursement is larger than Total Expenditure, so the calculated Obligation is negative (kept as is). Rows: " + rep.negOblExamples.map(function (x) { return x.row + " (" + full(x.value) + ")"; }).join(", ") + (rep.negObl > rep.negOblExamples.length ? " &hellip;" : "") + "</p>"); }
       if (!ok) { warns++; h.push('<p class="warn">Missing: ' + codes(rep.missing) + "</p>"); }
       if (rep.badMonth) { warns++; h.push('<p class="warn">' + rep.badMonth + " fiscal month value(s) are not 1&ndash;12 or a month name and were treated as blank.</p>"); }

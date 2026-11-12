@@ -15,8 +15,12 @@ The one exception is the G1 PRSA Planner (`prsa.js`): its planning rows and sett
 localStorage key `g1-prsa-plan` in this browser only. The plan is also part of document state, so
 Save with data embeds it in `g1Saved`; on open, the embedded plan wins if it is newer than the
 browser copy. The fictional demo plan is never autosaved. Export plan / Import plan use xlsx.
-PRSA accounts are detected by `PROGRAM_ACCOUNT_MATCH.prsa = /PRSA/i` in `programs.js` (account
-name contains "PRSA", any case), next to the Funeral Honors and ESGR rules. G1 keys and funding templates are
+PRSA is an MDEP: lines are matched by `PROGRAM_MDEP_MATCH.prsa = /^PRSA/i` in `programs.js` (trimmed MDEP equal to
+or starting with PRSA, any case). MDEP comes from the SOF export line when it has an MDEP column (headers such as `mdep`,
+`MDEP`, `mdep_cd`, `mdep_code`, `Management Decision Package`), otherwise from the Account Key's optional MDEP column.
+Funding: a funding file with an MDEP column gives PRSA-only TDP/AFP (account x MDEP slices); without one, TDP/AFP are by
+account and accounts that also carry other MDEPs are flagged "mixed". `PROGRAM_ACCOUNT_MATCH.prsa` (name contains PRSA)
+is only a fallback when no line carries MDEP PRSA. G1 keys and funding templates are
 separate files under this directory and the `downloads/g1-*` prefix. The stateless vendor/parser
 source files under assets and finance are loaded into each document separately, not shared data.
 

@@ -1,5 +1,6 @@
 /* PRSA Planner (Status of Funds page). PRSA is one fund spread across several SOF accounts.
-   Accounts: G1.PROGRAM_ACCOUNT_MATCH.prsa (programs.js), ticked/unticked by the user.
+   Accounts: lines whose MDEP matches G1.PROGRAM_MDEP_MATCH.prsa (programs.js; export MDEP column first, then the
+   Account Key MDEP). G1.PROGRAM_ACCOUNT_MATCH.prsa (account name contains PRSA) is only a fallback. Ticked/unticked by the user.
    Persistence: the plan lives in document state (embedded by Save with data as g1Saved.prsa)
    and autosaves to this browser's localStorage under STORE_KEY so frequent edits survive reloads.
    Only the planning rows/settings are stored; SOF and report data are never written to storage.
@@ -59,12 +60,26 @@
   }
   // ---------- model ----------
   function fy() { var v = $("fFy") && $("fFy").value; return v || C.programs.defaultFy(C.programs.getYears()); }
-  function accounts() {
-    var list = C.programs.accountData("prsa", fy()).list.slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
-    return list.map(function (a) { var on = P.excluded.indexOf(a.name) < 0; return { name: a.name, tdp: a.tdp, afp: a.afp, te: a.te, obl: a.obl, disb: a.disb, funded: a.funded, bal: a.funded ? r2(a.tdp - a.te) : null, on: on }; });
+  function match() { return C.programs.mdepData("prsa", fy()); }
+  function accounts(md) {
+    md = md || match();
+    var list = md.list.slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
+    rekey(list.map(function (a) { return a.name; }));
+    return list.map(function (a) { var on = P.excluded.indexOf(a.name) < 0; return { name: a.name, account: a.account || a.name, mdeps: a.mdeps || [], mixed: !!a.mixed, other: a.other || [], tdp: a.tdp, afp: a.afp, te: a.te, obl: a.obl, disb: a.disb, funded: a.funded, bal: a.funded ? r2(a.tdp - a.te) : null, on: on }; });
+  }
+  // Saved plans keep working when account labels change (e.g. account -> "account · MDEP" slices, or back):
+  // a row or exclusion pointing at a name that is gone is moved to the one current name sharing its account part.
+  function base(nm) { return L.an(String(nm).split(" \u00b7 ")[0]); }
+  function rekey(names) {
+    if (!names.length) return;
+    var moved = 0;
+    function fix(v) { if (v === "Pooled" || names.indexOf(v) >= 0) return v; var c = names.filter(function (n) { return base(n) === base(v); }); if (c.length === 1) { moved++; return c[0]; } return v; }
+    P.rows.forEach(function (r) { r.account = fix(r.account); });
+    P.excluded = P.excluded.map(fix);
+    if (moved && !P.demo) { clearTimeout(saveTimer); saveTimer = setTimeout(writeLocal, 250); }
   }
   function calc() {
-    var acc = accounts(), on = acc.filter(function (a) { return a.on; });
+    var md = match(), acc = accounts(md), on = acc.filter(function (a) { return a.on; });
     var avail = r2(on.reduce(function (s, a) { return s + (a.bal || 0); }, 0)), adj = P.adjust || 0, start = r2(avail + adj);
     var inc = P.rows.filter(function (r) { return r.include; }), planned = r2(inc.reduce(function (s, r) { return s + r.amount; }, 0));
     var st = {}; STATUSES.forEach(function (s) { st[s] = { inc: 0, all: 0, n: 0 }; });
@@ -72,7 +87,7 @@
     var unsched = r2(inc.filter(function (r) { return !r.month; }).reduce(function (s, r) { return s + r.amount; }, 0)), run = start - unsched, months = FM.map(function (m, i) {
       run = r2(run - inc.filter(function (r) { return r.month === i + 1; }).reduce(function (s, r) { return s + r.amount; }, 0)); return run; });
     var byAcct = {}; inc.forEach(function (r) { byAcct[r.account] = r2((byAcct[r.account] || 0) + r.amount); });
-    return { accounts: acc, available: avail, adjust: adj, start: start, planned: planned, remaining: r2(start - planned), status: st, unscheduled: unsched, months: months, byAcct: byAcct, fy: fy() };
+    return { accounts: acc, available: avail, adjust: adj, start: start, planned: planned, remaining: r2(start - planned), status: st, unscheduled: unsched, months: months, byAcct: byAcct, fy: fy(), match: md };
   }
   // ---------- rendering ----------
   function kpi(l, v, sub, color, neg) { return '<div class="kpi' + (neg ? " neg" : "") + '" style="--st:' + color + '"><div class="lbl">' + l + '</div><div class="val">' + v + '</div><div class="sub">' + sub + "</div></div>"; }
@@ -82,18 +97,49 @@
       kpi("Adjust available", full(m.adjust), "Scenario offset", "#64748b") + kpi("Included projections", full(m.planned), P.rows.filter(function (r) { return r.include; }).length + " of " + P.rows.length + " rows", "#b45309") +
       kpi("Projected remaining", full(m.remaining), neg ? "Over-committed" : "Available + adjust \u2212 projections", neg ? "#b91c1c" : "#15803d", neg);
     $("prsaSummary").innerHTML = "Available <b>" + esc(full(m.start)) + "</b> \u00b7 Projected remaining <b class=\"" + (neg ? "neg" : "") + "\" id=\"prsaRemain\">" + esc(full(m.remaining)) + "</b>";
-    $("prsaFy").textContent = "FY" + m.fy + " \u00b7 name contains \u201cPRSA\u201d";
+    $("prsaFy").textContent = "FY" + m.fy + " \u00b7 " + ruleText(m.match);
+    $("prsaNote").innerHTML = noteHtml(m.match);
     var t = $("tPrsaAcct");
-    t.tHead.innerHTML = '<tr><th>Include</th><th>Account</th><th class="num">TDP</th><th class="num">AFP</th><th class="num">Total Expenditure</th><th class="num">Obligation</th><th class="num">Disbursement</th><th class="num">Balance</th><th class="num">Planned here</th><th class="num">After plan</th></tr>';
+    t.tHead.innerHTML = '<tr><th>Include</th><th>Account</th><th>MDEP</th><th class="num">TDP</th><th class="num">AFP</th><th class="num">Total Expenditure</th><th class="num">Obligation</th><th class="num">Disbursement</th><th class="num">Balance</th><th class="num">Planned here</th><th class="num">After plan</th></tr>';
     t.tBodies[0].innerHTML = m.accounts.map(function (a) {
       var pl = m.byAcct[a.name] || 0, after = a.bal == null ? null : r2(a.bal - pl);
-      return '<tr><td><input type="checkbox" data-acct="' + esc(a.name) + '"' + (a.on ? " checked" : "") + ' aria-label="Include ' + esc(a.name) + '"></td><td>' + esc(a.name) + '</td><td class="num">' + (a.funded ? full(a.tdp) : "\u2014") + '</td><td class="num">' + (a.funded ? full(a.afp) : "\u2014") + '</td><td class="num">' + full(a.te) + '</td><td class="num">' + full(a.obl) + '</td><td class="num">' + full(a.disb) + '</td><td class="num' + (a.bal < 0 ? " neg" : "") + '">' + (a.bal == null ? '<span class="hint">no funding</span>' : full(a.bal)) + '</td><td class="num">' + (pl ? full(pl) : "\u2014") + '</td><td class="num' + (after < 0 ? " neg" : "") + '">' + (after == null ? "\u2014" : full(after)) + "</td></tr>";
-    }).join("") || '<tr><td colspan="10" class="muted">No PRSA accounts in the loaded Status of Funds data for FY' + esc(m.fy) + '. Pooled planning still works with Adjust available.</td></tr>';
+      return '<tr><td><input type="checkbox" data-acct="' + esc(a.name) + '"' + (a.on ? " checked" : "") + ' aria-label="Include ' + esc(a.name) + '"></td><td>' + esc(a.name) + '</td><td>' + esc(a.mdeps.join(", ") || "\u2014") + (a.mixed ? ' <span class="hint" title="Funding is by account; this account also has MDEP ' + esc(a.other.join(", ")) + '. TDP/AFP are the whole account.">mixed MDEPs \u00b7 account-level funding</span>' : "") + '</td><td class="num">' + (a.funded ? full(a.tdp) : "\u2014") + '</td><td class="num">' + (a.funded ? full(a.afp) : "\u2014") + '</td><td class="num">' + full(a.te) + '</td><td class="num">' + full(a.obl) + '</td><td class="num">' + full(a.disb) + '</td><td class="num' + (a.bal < 0 ? " neg" : "") + '">' + (a.bal == null ? '<span class="hint">no funding</span>' : full(a.bal)) + '</td><td class="num">' + (pl ? full(pl) : "\u2014") + '</td><td class="num' + (after < 0 ? " neg" : "") + '">' + (after == null ? "\u2014" : full(after)) + "</td></tr>";
+    }).join("") || '<tr><td colspan="11" class="muted">' + emptyText(m) + '</td></tr>';
     var pooled = m.byAcct.Pooled || 0;
-    t.tFoot.innerHTML = m.accounts.length ? '<tr><td></td><td>Pooled (ticked accounts)' + (pooled ? ' \u00b7 pooled rows ' + esc(full(pooled)) : "") + '</td><td class="num">' + full(sum(m.accounts, "tdp")) + '</td><td class="num">' + full(sum(m.accounts, "afp")) + '</td><td class="num">' + full(sum(m.accounts, "te")) + '</td><td class="num">' + full(sum(m.accounts, "obl")) + '</td><td class="num">' + full(sum(m.accounts, "disb")) + '</td><td class="num">' + full(m.available) + '</td><td class="num">' + full(m.planned) + '</td><td class="num' + (m.available - m.planned < 0 ? " neg" : "") + '">' + full(r2(m.available - m.planned)) + "</td></tr>" : "";
+    t.tFoot.innerHTML = m.accounts.length ? '<tr><td></td><td>Pooled (ticked accounts)' + (pooled ? ' \u00b7 pooled rows ' + esc(full(pooled)) : "") + '</td><td></td><td class="num">' + full(sum(m.accounts, "tdp")) + '</td><td class="num">' + full(sum(m.accounts, "afp")) + '</td><td class="num">' + full(sum(m.accounts, "te")) + '</td><td class="num">' + full(sum(m.accounts, "obl")) + '</td><td class="num">' + full(sum(m.accounts, "disb")) + '</td><td class="num">' + full(m.available) + '</td><td class="num">' + full(m.planned) + '</td><td class="num' + (m.available - m.planned < 0 ? " neg" : "") + '">' + full(r2(m.available - m.planned)) + "</td></tr>" : "";
     $("prsaStatus").innerHTML = STATUSES.map(function (s) { var o = m.status[s]; return '<div class="statuscount" style="--sc:' + SCOLOR[s] + '" data-status="' + s + '"><strong>' + esc(full(o.inc)) + "</strong><span>" + s + " \u00b7 " + o.n + " row" + (o.n === 1 ? "" : "s") + (o.all !== o.inc ? " \u00b7 " + esc(full(o.all)) + " incl. what-ifs" : "") + "</span></div>"; }).join("");
     var foot = $("tPrsaPlan").tFoot; foot.innerHTML = P.rows.length ? '<tr><td></td><td>Included total</td><td></td><td></td><td class="num">' + full(m.planned) + '</td><td colspan="5"></td></tr>' : "";
     charts(m);
+  }
+  var SRC = { "export": "SOF export MDEP column", key: "Account Key MDEP", funding: "funding file MDEP column" };
+  function ruleText(md) {
+    if (md.mode === "mdep") return "MDEP = PRSA (" + Object.keys(md.srcs).map(function (k) { return SRC[k] || k; }).join(" + ") + ")";
+    if (md.mode === "name") return "fallback: account name contains \u201cPRSA\u201d (no line has MDEP PRSA)";
+    return "MDEP = PRSA \u00b7 none found";
+  }
+  function detectedText(md) { return md.detected.length ? md.detected.slice(0, 25).map(function (d) { return esc(d[0]) + " (" + K.fmt(d[1]) + ")"; }).join(", ") + (md.detected.length > 25 ? ", \u2026" : "") : "none (no MDEP column in the SOF export and no MDEP in the Account Key)"; }
+  function emptyText(m) {
+    var md = m.match, recs = C.mods.sof._state.recs.length;
+    if (!recs) return "No Status of Funds data loaded. Pooled planning still works with Adjust available.";
+    return "No lines with MDEP PRSA in the FY" + esc(m.fy) + " Status of Funds data. MDEP values found: " + detectedText(md) + ". Pooled planning still works with Adjust available.";
+  }
+  function noteHtml(md) {
+    var t = "PRSA is an MDEP spread across several accounts. Lines are matched on MDEP (trimmed, any case, equal to or starting with \u201cPRSA\u201d); tick the accounts that make up the pool, then add planning factors to see what is left.";
+    if (md.mode === "mdep" && md.fundingLevel === "account") { var mx = md.list.filter(function (a) { return a.mixed; }); t += " TDP/AFP come from the funding file by account" + (mx.length ? "; " + mx.length + " account" + (mx.length === 1 ? " mixes" : "s mix") + " PRSA with other MDEPs, so its TDP/AFP cover the whole account (add an MDEP column to the funding file to split it)." : "."); }
+    if (md.mode === "mdep" && md.fundingLevel === "mdep") t += " TDP/AFP come from the funding file's MDEP column (PRSA rows only).";
+    if (md.mode === "name") t += " <b>No line has MDEP PRSA</b>, so accounts whose name contains \u201cPRSA\u201d are used instead. MDEP values found: " + detectedText(md) + ".";
+    return t;
+  }
+  function drawer() {
+    if (!C.mods.sof._state.recs.length && !(C.mods.sof._state.fund)) return "";
+    var md = match(), S = C.mods.sof._state, ex = S.files.filter(function (e) { return e.kind === "export" && e.rep && e.rep.mdepHeader; }).map(function (e) { return e.rep.mdepHeader; }),
+      ky = S.files.filter(function (e) { return e.kind === "key" && e.rep && e.rep.hasMdep; }).map(function (e) { return e.rep.mdepHeader || "MDEP"; }),
+      fd = S.files.filter(function (e) { return e.kind === "funding" && e.rep && e.rep.mdepHeader; }).map(function (e) { return e.rep.mdepHeader; });
+    var h = ['<h4>PRSA Planner</h4>', '<p class="muted">Rule: ' + esc(ruleText(md)) + '. Configured as <code>PROGRAM_MDEP_MATCH.prsa</code> in programs.js (fallback <code>PROGRAM_ACCOUNT_MATCH.prsa</code>).</p>',
+      '<p class="muted">MDEP columns read: SOF export ' + (ex.length ? "<code>" + K.uniq(ex).map(esc).join("</code>, <code>") + "</code>" : "none") + "; Account Key " + (ky.length ? "<code>" + K.uniq(ky).map(esc).join("</code>, <code>") + "</code>" : "none") + "; funding file " + (fd.length ? "<code>" + K.uniq(fd).map(esc).join("</code>, <code>") + "</code>" : "none") + ". The export line's MDEP is used first, then the Account Key MDEP for that line's account.</p>",
+      '<p class="muted">Funding: ' + (md.fundingLevel === "mdep" ? "TDP/AFP from the funding file's MDEP column, PRSA rows only; accounts with more than one PRSA-like MDEP are split into account \u00b7 MDEP rows." : "the funding file has no MDEP column, so TDP/AFP are attributed at the account level. Expenditure, Obligation and Disbursement count only lines with MDEP PRSA; an account that also carries other MDEPs is marked \u201cmixed\u201d and its whole TDP/AFP is shown (untick it, or add an MDEP column to the funding file).") + "</p>",
+      '<p class="muted">MDEP values in FY' + esc(md.fy) + " lines: " + detectedText(md) + ".</p>"];
+    return h.join("");
   }
   function sum(rows, k) { return r2(rows.filter(function (a) { return a.on; }).reduce(function (s, a) { return s + (a[k] || 0); }, 0)); }
   function charts(m) {
@@ -181,10 +227,10 @@
   function demoPlan() {
     var p = blank(); p.demo = true; p.updatedAt = new Date().toISOString(); p.adjust = 15000;
     p.rows = [
-      { desc: "Annual conference travel (example)", account: "PRSA Travel", category: "Travel", amount: 18500, month: 3, status: "Planned", include: true, notes: "Fictional demo row" },
-      { desc: "Office supplies restock (example)", account: "PRSA Supplies", category: "Supplies", amount: 6200, month: 5, status: "Committed", include: true, notes: "" },
+      { desc: "Annual conference travel (example)", account: "Outreach Travel", category: "Travel", amount: 18500, month: 3, status: "Planned", include: true, notes: "Fictional demo row" },
+      { desc: "Office supplies restock (example)", account: "Outreach Supplies", category: "Supplies", amount: 6200, month: 5, status: "Committed", include: true, notes: "" },
       { desc: "Facilitator contract (example)", account: "Pooled", category: "Contracts", amount: 42000, month: 7, status: "Idea", include: true, notes: "What-if: toggle Include" },
-      { desc: "Workshop training seats (example)", account: "PRSA Operations", category: "Training", amount: 9800, month: 9, status: "Planned", include: true, notes: "" },
+      { desc: "Workshop training seats (example)", account: "Outreach Operations", category: "Training", amount: 9800, month: 9, status: "Planned", include: true, notes: "" },
       { desc: "Year-end equipment buy (example)", account: "Pooled", category: "Other", amount: 25000, month: "", status: "Idea", include: false, notes: "Excluded scenario" }
     ].map(function (r) { r.id = id(); return r; });
     return p;
@@ -193,6 +239,7 @@
   function init() {
     var local = readLocal(); if (local) { P = local; lastSaved = local.updatedAt ? new Date(local.updatedAt) : null; }
     var sof = C.mods.sof, orig = sof.render; sof.render = function () { orig.apply(this, arguments); render(); };
+    var origRep = sof.report; sof.report = function () { var r = origRep.apply(this, arguments) || { html: "", warns: 0 }, d = ""; try { d = drawer(); } catch (e) { } return { html: (r.html || "") + d, warns: r.warns || 0 }; };
     $("prsaAdd").addEventListener("click", function () { P.rows.push({ id: id(), desc: "", account: "Pooled", category: "", amount: 0, month: "", status: "Idea", include: true, notes: "" }); changed(true); var ins = $("tPrsaPlan").querySelectorAll('input[data-f="desc"]'); if (ins.length) ins[ins.length - 1].focus(); });
     $("prsaExport").addEventListener("click", exportPlan);
     $("prsaImport").addEventListener("click", function () { $("prsaFile").click(); });
@@ -241,5 +288,5 @@
     render: render, report: function () { return { html: "", warns: 0 }; }, entries: function () { return []; },
     hasData: function () { return !P.demo && (P.rows.length > 0 || !!P.adjust || P.excluded.length > 0); }, init: init
   });
-  C.prsa = { STORE_KEY: STORE_KEY, state: function () { return P; }, calc: calc, accounts: accounts, parsePlan: parsePlan, render: render };
+  C.prsa = { STORE_KEY: STORE_KEY, match: match, rekey: rekey, state: function () { return P; }, calc: calc, accounts: accounts, parsePlan: parsePlan, render: render };
 })(window);

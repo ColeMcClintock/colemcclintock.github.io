@@ -6,6 +6,34 @@
  // PRSA: one fund spread across several SOF accounts; drives the PRSA Planner on the SOF page.
  var ACCOUNT_MATCH={fh:/Funeral Honors/i,esgr:/ESGR/i,prsa:/PRSA/i};
  C.PROGRAM_ACCOUNT_MATCH=ACCOUNT_MATCH;
+ // PRSA is an MDEP, not an account name. A line belongs to a program when its MDEP (trimmed, any case) equals or starts
+ // with the code below; MDEP comes from the SOF export line when the export has an MDEP column, otherwise from the Account Key.
+ // PROGRAM_ACCOUNT_MATCH.prsa (account name contains PRSA) is only a fallback when no line carries a matching MDEP.
+ var MDEP_MATCH={prsa:/^PRSA/i};
+ C.PROGRAM_MDEP_MATCH=MDEP_MATCH;
+ function mdepOk(page,m){m=L.txt(m).trim();return !!m&&MDEP_MATCH[page].test(m);}
+ // Accounts (or account x MDEP slices) for an MDEP program. Funding: MDEP-level rows from the funding file when it has an
+ // MDEP column; otherwise the account's TDP/AFP (account-level, flagged "mixed" when that account also has other MDEPs).
+ function mdepData(page,fy){
+  var s=C.mods.sof._state,fm=s.fundMdep||[],seen={},srcs={},acctAll={},hits={},keyMdep={},n=0;
+  L.keyRows().forEach(function(k){if(k[1]&&k[3])keyMdep[L.an(k[1])]=k[3];});
+  s.recs.forEach(function(r){if(r.fy!==fy)return;var m=L.txt(r.mdep).trim();if(m&&m!==L.UNMAPPED)seen[m]=(seen[m]||0)+1;(acctAll[r.acctL]||(acctAll[r.acctL]={}))[m||'(blank)']=1;if(mdepOk(page,m)){n++;srcs[r.mdepFrom||'key']=1;(hits[r.acctL]||(hits[r.acctL]={}))[m.toUpperCase()]=m;}});
+  var fundRows=fm.filter(function(r){return (!r.fy||r.fy===fy)&&mdepOk(page,r.mdep);}),byMdep=fm.length>0;
+  fundRows.forEach(function(r){var a=r.acct||r.fa;(hits[a]||(hits[a]={}))[L.txt(r.mdep).trim().toUpperCase()]=L.txt(r.mdep).trim();srcs.funding=1;});
+  // funded accounts whose Account Key MDEP matches, even with no lines yet this year
+  if(!byMdep&&s.fund)s.fund.rows.forEach(function(r){if(r.unmapped||s.fund.useFy&&r.fy!==fy)return;var km=keyMdep[L.an(r.acct)];if(mdepOk(page,km)&&!hits[r.acct]){(hits[r.acct]={})[km.toUpperCase()]=km;srcs.key=1;}});
+  var names=Object.keys(hits);
+  if(!names.length){var nm=accountData(page,fy).list;return {mode:nm.length?'name':'none',list:nm,detected:Object.keys(seen).sort().map(function(m){return [m,seen[m]];}),srcs:{},fundingLevel:'account',fy:fy};}
+  var acc={};
+  function slice(a,m){var split=byMdep&&Object.keys(hits[a]).length>1,k=split?a+' \u00b7 '+L.txt(m).trim().toUpperCase():a;return acc[k]||(acc[k]={name:k,account:a,mdeps:[],te:0,obl:0,disb:0,tdp:0,afp:0,funded:false,mixed:false,other:[]});}
+  s.recs.forEach(function(r){if(r.fy!==fy)return;var m=L.txt(r.mdep).trim();if(!mdepOk(page,m))return;var a=slice(r.acctL,m);if(a.mdeps.indexOf(m)<0)a.mdeps.push(m);a.te+=L.n(r.com);a.obl+=L.n(r.obl);a.disb+=L.n(r.disb);});
+  if(byMdep)fundRows.forEach(function(r){var m=L.txt(r.mdep).trim(),a=slice(r.acct||r.fa,m);if(a.mdeps.indexOf(m)<0)a.mdeps.push(m);a.tdp+=L.n(r.tdp);a.afp+=L.n(r.afp);a.funded=true;});
+  else if(s.fund)names.forEach(function(nm){var a=slice(nm,'');Object.keys(hits[nm]).forEach(function(k){if(a.mdeps.indexOf(hits[nm][k])<0)a.mdeps.push(hits[nm][k]);});
+   s.fund.rows.forEach(function(r){if(r.unmapped||s.fund.useFy&&r.fy!==fy||L.an(r.acct)!==L.an(nm))return;a.tdp+=L.n(r.tdp);a.afp+=L.n(r.afp);a.funded=true;});
+   a.other=Object.keys(acctAll[nm]||{}).filter(function(m){return !mdepOk(page,m)&&m!=='(blank)';});a.mixed=a.other.length>0;});
+  var list=Object.keys(acc).map(function(k){var a=acc[k];a.te=r2(a.te);a.obl=r2(a.obl);a.disb=r2(a.disb);a.tdp=r2(a.tdp);a.afp=r2(a.afp);return a;});
+  return {mode:'mdep',list:list,lines:n,detected:Object.keys(seen).sort().map(function(m){return [m,seen[m]];}),srcs:srcs,fundingLevel:byMdep?'mdep':'account',fy:fy};
+ }
  var FM=['Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep'];
  var STATUS={'not started':{label:'Not started',color:'#dc2626',cls:'red'},'calendar submitted':{label:'Calendar submitted',color:'#f59e0b',cls:'amber'},'pay submitted':{label:'Pay submitted',color:'#16a34a',cls:'green'}};
  var SCHEMAS={
@@ -126,5 +154,5 @@
   ['Fy','Acct','Mode'].forEach(function(suffix){$(page+suffix).addEventListener('change',function(){STATES[page][suffix.toLowerCase()]=this.value;render(page);});});
   Object.keys(SCHEMAS).filter(function(k){return SCHEMAS[k].page===page;}).forEach(function(k){$(k+'Search').addEventListener('input',function(){table(k,rowsFor(k));});$(k+'Status').addEventListener('change',function(){renderReport(k);});$('t'+k).tHead.addEventListener('click',function(e){var h=e.target.closest('th[data-k]');if(!h)return;var v=VIEW[k]||(VIEW[k]={}),key=h.getAttribute('data-k');v.dir=v.sort===key?-v.dir:1;v.sort=key;table(k,rowsFor(k));});});
  }};var own=null;Object.defineProperty(mod,'asOf',{get:function(){var s=C.mods.sof.asOf;return own&&(!s||own>s)?own:s;},set:function(v){own=v;},enumerable:true});C.register(page,mod);});
- C.programs={data:data,accountData:accountData,getYears:getYears,defaultFy:defaultFy,date:date,person:person};
+ C.programs={data:data,accountData:accountData,mdepData:mdepData,getYears:getYears,defaultFy:defaultFy,date:date,person:person};
 })(window);
